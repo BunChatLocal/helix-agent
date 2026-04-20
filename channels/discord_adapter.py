@@ -131,7 +131,7 @@ class DiscordAdapter(ChannelAdapter):
 
         # Audit log
         if self.audit_logger:
-            self.audit_logger.log_message_received("discord", sender_id, sender_name, content[:200])
+            self.audit_logger.log("message_received", channel="discord", sender_id=sender_id, sender_name=sender_name, content_preview=content[:200])
 
         # Debounce (collect messages within 1.5s window)
         debounce_key = f"discord:{sender_id}"
@@ -181,7 +181,7 @@ class DiscordAdapter(ChannelAdapter):
                 for part in parts[1:]:
                     await message.channel.send(part, suppress_embeds=True)
             if self.audit_logger:
-                self.audit_logger.log_message_sent("discord", sender_id, text[:200])
+                self.audit_logger.log("message_sent", channel="discord", sender_id=sender_id, content_preview=text[:200])
 
         if content.startswith("/"):
             handled = await handle_slash(
@@ -200,7 +200,7 @@ class DiscordAdapter(ChannelAdapter):
             for w in warnings:
                 logger.warning(f"[INJECTION] Discord {sender_id}: {w}")
                 if self.audit_logger:
-                    self.audit_logger.log_injection_detected("discord", sender_id, w, content[:200])
+                    self.audit_logger.log("injection_detected", channel="discord", sender_id=sender_id, warning=w, content_preview=content[:200])
             try:
                 await message.remove_reaction(V_EMOJI, self._client.user)
             except Exception:
@@ -292,7 +292,7 @@ class DiscordAdapter(ChannelAdapter):
             for part in parts[1:]:
                 await message.channel.send(part, suppress_embeds=True)
             if self.audit_logger:
-                self.audit_logger.log_message_sent("discord", sender_id, text[:200])
+                self.audit_logger.log("message_sent", channel="discord", sender_id=sender_id, content_preview=text[:200])
 
         try:
             response_parts = []

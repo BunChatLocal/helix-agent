@@ -148,7 +148,7 @@ class TelegramAdapter(ChannelAdapter):
 
         # Audit log
         if self.audit_logger:
-            self.audit_logger.log_message_received("telegram", str(user_id), sender_name, content[:200])
+            self.audit_logger.log("message_received", channel="telegram", sender_id=str(user_id), sender_name=sender_name, content_preview=content[:200])
 
         # Debounce
         debounce_key = f"telegram:{user_id}"
@@ -181,7 +181,7 @@ class TelegramAdapter(ChannelAdapter):
                 for part in self._split_message(text):
                     await update.message.reply_text(part)
                 if self.audit_logger:
-                    self.audit_logger.log_message_sent("telegram", str(user_id), text[:200])
+                    self.audit_logger.log("message_sent", channel="telegram", sender_id=str(user_id), content_preview=text[:200])
             except Exception as e:
                 logger.error(f"Telegram reply error: {e}")
 
@@ -202,7 +202,7 @@ class TelegramAdapter(ChannelAdapter):
             for w in warnings:
                 logger.warning(f"[INJECTION] Telegram {user_id}: {w}")
                 if self.audit_logger:
-                    self.audit_logger.log_injection_detected("telegram", str(user_id), w, content[:200])
+                    self.audit_logger.log("injection_detected", channel="telegram", sender_id=str(user_id), warning=w, content_preview=content[:200])
             await send_reply("⚠️ Message blocked: potential prompt injection detected.")
             return
 
