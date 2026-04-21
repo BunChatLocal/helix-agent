@@ -21,3 +21,6 @@ if [ -f "$PID_FILE" ]; then
 else
     echo "No PID file found — Helix may not be running"
 fi
+
+# Kill any orphaned Helix processes not tracked by the PID file
+pkill -f "Helix/.venv/bin/python main\.py" 2>/dev/null && echo "Killed orphaned Helix process(es)" || true

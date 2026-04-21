@@ -5,6 +5,9 @@ HELIX_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="$HOME/.helix/logs/helix.log"
 PID_FILE="$HOME/.helix/helix.pid"
 
+# Ensure user-local bin paths are in PATH (cron environments have a minimal PATH)
+export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/bin:$HOME/.volta/bin:$PATH"
+
 mkdir -p "$HOME/.helix/logs"
 
 # Don't start if already running

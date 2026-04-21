@@ -127,19 +127,23 @@ class HelixConfig(BaseModel):
 # ─── Load / Save ──────────────────────────────────────────────────────────────
 
 _config_cache: Optional[HelixConfig] = None
+_config_mtime: float = 0.0
 
 
 def load_config(path: Path = CONFIG_PATH, force_reload: bool = False) -> HelixConfig:
-    global _config_cache
-    if _config_cache is not None and not force_reload:
+    global _config_cache, _config_mtime
+    current_mtime = path.stat().st_mtime if path.exists() else 0.0
+    if _config_cache is not None and not force_reload and current_mtime == _config_mtime:
         return _config_cache
 
     if path.exists():
         raw = json.loads(path.read_text())
         _config_cache = HelixConfig.model_validate(raw)
+        _config_mtime = current_mtime
     else:
         _config_cache = HelixConfig()
         save_config(_config_cache, path)
+        _config_mtime = path.stat().st_mtime if path.exists() else 0.0
 
     return _config_cache
 
