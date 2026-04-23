@@ -223,8 +223,23 @@ async def handle_slash(
     commands_dir = Path(cfg.workspace_path) / "commands"
     if commands_dir.exists():
         # cmd is like "/mycmd" -> look for "mycmd.md"
+        # Strip the leading slash and reject names containing path separators to
+        # prevent directory traversal (e.g. "/../../../etc/passwd").
         cmd_name = cmd.lstrip("/")
+        if "/" in cmd_name or "\\" in cmd_name or ".." in cmd_name:
+            await send_fn(f"Unknown command: `{cmd}`. Try `/help`")
+            return True
         cmd_file = commands_dir / f"{cmd_name}.md"
+        # Canonicalize both paths and verify the command file is inside commands_dir
+        try:
+            resolved = cmd_file.resolve()
+            resolved_dir = commands_dir.resolve()
+            if not str(resolved).startswith(str(resolved_dir) + "/") and resolved != resolved_dir:
+                await send_fn(f"Unknown command: `{cmd}`. Try `/help`")
+                return True
+        except Exception:
+            await send_fn(f"Unknown command: `{cmd}`. Try `/help`")
+            return True
         if cmd_file.exists():
             cmd_content = cmd_file.read_text()
             injected = f"[Custom command /{cmd_name} triggered]\n\n{cmd_content}\n\nUser args: {args}"

@@ -5,8 +5,10 @@ JWT auth. REST endpoints for sessions, memory, config, logs, crons.
 """
 
 import asyncio
+import collections
 import json
 import logging
+import re
 import time
 import zoneinfo
 from datetime import datetime, timedelta, timezone
@@ -15,7 +17,7 @@ from typing import Optional
 
 import hmac
 import jwt
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +25,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from core.config import get_config, save_config
 from security.secrets import get_secret, set_secret
+from security.input_validator import sanitize_for_context
 from channels.slash_commands import handle_slash
 from main import VERSION
 
@@ -37,13 +40,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-security = HTTPBearer(auto_error=False)
-_WS_CONNECTIONS: list[WebSocket] = []
+_bearer = HTTPBearer(auto_error=False)
 
 # Global references set by main.py
 _session_manager = None
 _agent_loop = None
 _scheduler = None
+
+# ─── Login brute-force protection ─────────────────────────────────────────────
+# Maps client IP -> deque of failed-attempt timestamps.
+_LOGIN_FAILURES: dict[str, collections.deque] = collections.defaultdict(
+    lambda: collections.deque()
+)
+_LOGIN_MAX_FAILURES = 5          # attempts
+_LOGIN_WINDOW_SECONDS = 60       # rolling window
+_LOGIN_LOCKOUT_SECONDS = 300     # 5-minute lockout after max failures
+
+def _check_login_rate(ip: str) -> bool:
+    """Return True if the IP is allowed to attempt login, False if locked out."""
+    now = time.time()
+    dq = _LOGIN_FAILURES[ip]
+    # Purge entries outside the window
+    while dq and now - dq[0] > _LOGIN_WINDOW_SECONDS:
+        dq.popleft()
+    return len(dq) < _LOGIN_MAX_FAILURES
+
+def _record_login_failure(ip: str) -> None:
+    _LOGIN_FAILURES[ip].append(time.time())
+
+# ─── WebSocket per-connection rate limiting ────────────────────────────────────
+_WS_RATE_PER_MINUTE = 30        # max messages per rolling minute per connection
+_WS_RATE_PER_HOUR   = 200       # max messages per rolling hour per connection
+
+class _WSRateLimiter:
+    """Sliding-window rate limiter for a single WebSocket connection."""
+    def __init__(self):
+        self._minute: collections.deque = collections.deque()
+        self._hour:   collections.deque = collections.deque()
+
+    def check(self) -> Optional[str]:
+        now = time.time()
+        while self._minute and now - self._minute[0] > 60:
+            self._minute.popleft()
+        while self._hour and now - self._hour[0] > 3600:
+            self._hour.popleft()
+        if len(self._minute) >= _WS_RATE_PER_MINUTE:
+            return f"Rate limited: {_WS_RATE_PER_MINUTE} messages/minute exceeded"
+        if len(self._hour) >= _WS_RATE_PER_HOUR:
+            return f"Rate limited: {_WS_RATE_PER_HOUR} messages/hour exceeded"
+        self._minute.append(now)
+        self._hour.append(now)
+        return None
+
+# ─── Model ID allowlist pattern ───────────────────────────────────────────────
+_MODEL_ID_RE = re.compile(r'^[a-zA-Z0-9._:-]{1,100}$')
 
 
 def init_web(session_manager, agent_loop, scheduler=None):
@@ -86,7 +136,7 @@ def _verify_token(token: str) -> bool:
 
 
 async def require_auth(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> None:
     if not credentials or not _verify_token(credentials.credentials):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
@@ -95,13 +145,27 @@ async def require_auth(
 # ─── Auth endpoints ───────────────────────────────────────────────────────────
 
 @app.post("/api/auth/login")
-async def login(body: dict):
+async def login(request: Request, body: dict):
     """Login with web password to get JWT."""
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Brute-force protection: reject IPs that have failed too many times recently
+    if not _check_login_rate(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many failed attempts. Try again in {_LOGIN_LOCKOUT_SECONDS // 60} minutes.",
+        )
+
     password = get_secret("WEB_PASSWORD")
     if not password:
         raise HTTPException(400, "Web password not set. Run: helix secrets set WEB_PASSWORD <pass>")
-    if not hmac.compare_digest(body.get("password", ""), password):
+
+    provided = body.get("password", "")
+    # Constant-time comparison to prevent timing attacks
+    if not hmac.compare_digest(provided.encode(), password.encode()):
+        _record_login_failure(client_ip)
         raise HTTPException(401, "Invalid password")
+
     return {"token": _create_token(), "expires_in": get_config().web.jwt_expiry_hours * 3600}
 
 
@@ -109,7 +173,13 @@ async def login(body: dict):
 
 @app.get("/health")
 async def health():
-    """Lightweight health check."""
+    """Lightweight health check — returns minimal info to unauthenticated callers."""
+    return {"status": "ok"}
+
+
+@app.get("/api/status", dependencies=[Depends(require_auth)])
+async def api_status():
+    """Authenticated operational status — includes session count and active channels."""
     cfg = get_config()
     sessions = []
     if _session_manager:
@@ -169,9 +239,11 @@ async def set_session_model(channel: str, peer: str, body: dict):
 async def get_transcript(session_id: str):
     if not _session_manager:
         raise HTTPException(404, "Session manager not running")
-    # Validate session_id is a UUID to prevent path traversal
-    import re
-    if not re.match(r'^[a-f0-9\-]{36}$', session_id):
+    # Validate session_id is a well-formed UUID4 to prevent path traversal
+    import uuid as _uuid
+    try:
+        _uuid.UUID(session_id, version=4)
+    except ValueError:
         raise HTTPException(400, "Invalid session ID format")
     messages = await _session_manager.async_read_transcript(session_id)
     return {"session_id": session_id, "messages": messages}
@@ -211,11 +283,18 @@ async def get_long_term_memory():
     return {"content": path.read_text(), "exists": True}
 
 
+_MEMORY_MAX_BYTES = 64 * 1024  # 64 KB hard cap
+
 @app.put("/api/memory/long-term", dependencies=[Depends(require_auth)])
 async def update_long_term_memory(body: dict):
     cfg = get_config()
     path = Path(cfg.workspace_path) / "MEMORY.md"
     content = body.get("content", "")
+    if len(content.encode("utf-8")) > _MEMORY_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Content exceeds {_MEMORY_MAX_BYTES // 1024} KB limit.",
+        )
     path.write_text(content, encoding="utf-8")
     return {"status": "saved"}
 
@@ -257,9 +336,15 @@ async def update_telegram_config(body: dict):
 async def add_model(body: dict):
     from core.config import ModelEntry
     cfg = get_config()
+    model_id = body.get("id", "")
+    model_alias = body.get("alias", "")
+    if not _MODEL_ID_RE.match(model_id):
+        raise HTTPException(422, "Invalid model id: must match [a-zA-Z0-9._:-]{1,100}")
+    if not _MODEL_ID_RE.match(model_alias):
+        raise HTTPException(422, "Invalid model alias: must match [a-zA-Z0-9._:-]{1,100}")
     entry = ModelEntry(
-        id=body["id"],
-        alias=body["alias"],
+        id=model_id,
+        alias=model_alias,
         tier=body.get("tier", "balanced"),
         description=body.get("description", ""),
     )
@@ -517,7 +602,6 @@ async def get_op_logs(lines: int = 100):
 async def ws_chat(websocket: WebSocket):
     """Real-time chat via WebSocket."""
     await websocket.accept()
-    _WS_CONNECTIONS.append(websocket)
 
     # Auth via first message
     try:
@@ -529,6 +613,9 @@ async def ws_chat(websocket: WebSocket):
     except Exception:
         await websocket.close()
         return
+
+    # Per-connection rate limiter
+    ws_rate = _WSRateLimiter()
 
     # Replay the last 30 messages from the web/admin session transcript so the
     # client can repopulate the chat history after a reconnect.
@@ -551,6 +638,12 @@ async def ws_chat(websocket: WebSocket):
             if not message:
                 continue
 
+            # Rate limit check
+            rate_err = ws_rate.check()
+            if rate_err:
+                await websocket.send_json({"error": rate_err})
+                continue
+
             # Handle slash commands before passing to agent loop
             if message.startswith("/"):
                 responses = []
@@ -563,8 +656,19 @@ async def ws_chat(websocket: WebSocket):
                     await websocket.send_json({"done": True, "full_response": full})
                     continue
 
+            # Injection check — mirrors Discord/Telegram adapter behaviour
+            clean_message, warnings = sanitize_for_context(message)
+            if warnings:
+                for w in warnings:
+                    logger.warning(f"[INJECTION] WebSocket web/admin: {w}")
+                await websocket.send_json({
+                    "error": "⚠️ Message blocked: potential prompt injection detected.",
+                    "done": True,
+                })
+                continue
+
             response_parts = []
-            async for chunk in _agent_loop.run("web", "admin", message):
+            async for chunk in _agent_loop.run("web", "admin", clean_message):
                 response_parts.append(chunk)
                 await websocket.send_json({"chunk": chunk})
 
@@ -576,9 +680,6 @@ async def ws_chat(websocket: WebSocket):
     except Exception as e:
         import traceback
         logger.error(f"WebSocket error: {e}\n{traceback.format_exc()}")
-    finally:
-        if websocket in _WS_CONNECTIONS:
-            _WS_CONNECTIONS.remove(websocket)
 
 
 # ─── Static files ─────────────────────────────────────────────────────────────

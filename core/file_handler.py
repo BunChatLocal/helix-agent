@@ -5,6 +5,7 @@ Files are downloaded by their respective adapters and passed here as bytes.
 """
 
 import logging
+import os
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -13,10 +14,26 @@ logger = logging.getLogger("helix.file_handler")
 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
-# Blacklisted extensions — large disk images and VM formats with no useful text content
-BLACKLISTED_EXTENSIONS = {
-    ".iso", ".dmg", ".vmdk", ".img", ".vhd", ".vdi",
-    ".ova", ".ovf", ".qcow", ".qcow2", ".vbox",
+# Allowlist of extensions the agent can legitimately read and act on.
+# Anything not in this set is rejected with a clear error.  This is
+# intentionally narrow — add extensions here only when there is a clear
+# use-case and the format is safe to pass to the agent as text or binary.
+ALLOWED_EXTENSIONS = {
+    # Plain text / markup
+    ".txt", ".md", ".rst", ".csv", ".tsv", ".log",
+    # Code
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".sh", ".bash",
+    ".rb", ".go", ".rs", ".c", ".cpp", ".h", ".hpp",
+    ".java", ".kt", ".swift", ".cs", ".php",
+    ".html", ".htm", ".css", ".scss", ".sass",
+    ".sql", ".r",
+    # Config / data
+    ".json", ".yaml", ".yml", ".toml", ".ini", ".env",
+    ".xml", ".conf",
+    # Documents
+    ".pdf",
+    # Images (for vision)
+    ".png", ".jpg", ".jpeg", ".gif", ".webp",
 }
 
 UPLOAD_DIR = Path("/tmp/helix_uploads")
@@ -53,8 +70,13 @@ def validate_file(filename: str, size: int) -> Optional[str]:
         size_mb = size / (1024 * 1024)
         return f"File too large ({size_mb:.1f}MB). Maximum is 5MB."
     ext = Path(filename).suffix.lower()
-    if ext in BLACKLISTED_EXTENSIONS:
-        return f"File type `{ext}` is not supported."
+    if not ext:
+        return "File has no extension. Only known file types are accepted."
+    if ext not in ALLOWED_EXTENSIONS:
+        return (
+            f"File type `{ext}` is not supported. "
+            f"Accepted types: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        )
     return None
 
 
@@ -70,6 +92,8 @@ def save_file(filename: str, data: bytes) -> Optional[Path]:
         safe_name = _sanitize_filename(filename)
         dest = _resolve_collision(UPLOAD_DIR / safe_name)
         dest.write_bytes(data)
+        # Restrict to owner-only: prevents other local users from reading uploads
+        os.chmod(dest, 0o600)
         return dest
     except Exception as e:
         logger.error(f"Failed to save file {filename}: {e}")

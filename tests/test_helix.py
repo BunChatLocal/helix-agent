@@ -155,6 +155,13 @@ if "security.secrets" not in sys.modules:
     sec_secrets.get_secret = MagicMock(return_value=None)
     sec_secrets.set_secret = MagicMock()
 
+if "security.input_validator" not in sys.modules:
+    sec_iv = _stub_module("security.input_validator")
+    # Stub: all messages pass through clean (no warnings) in the test environment.
+    sec_iv.sanitize_for_context = lambda msg: (msg, [])
+    sec_iv.check_injection = lambda msg: None
+    sec_iv.wrap_external_content = lambda content, source: content
+
 
 # ---------------------------------------------------------------------------
 # FastAPI stub (for the snapshot route test — fastapi may not be installed)

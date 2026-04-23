@@ -6,6 +6,8 @@ Session routing: per-channel-peer (channel + sender_id = session key).
 
 import asyncio
 import json
+import logging
+import sqlite3
 import uuid
 import zoneinfo
 from datetime import datetime, timedelta
@@ -13,6 +15,8 @@ from pathlib import Path
 from typing import Optional
 
 import aiosqlite
+
+logger = logging.getLogger("helix.session")
 
 from core.config import get_config
 
@@ -112,13 +116,18 @@ class SessionManager:
         self._db.row_factory = aiosqlite.Row
         await self._db.execute(CREATE_SESSIONS)
         await self._db.execute(CREATE_IDX)
-        # Migrations — add columns if they don't exist yet
+        # Migrations — add columns if they don't exist yet.
+        # Catch only OperationalError (SQLite's "duplicate column" signal) and
+        # log everything else so real schema problems are not silently swallowed.
         for migration in (MIGRATE_ADD_CLAUDE_SESSION_ID, MIGRATE_ADD_PENDING_CONTEXT,
                           MIGRATE_ADD_CONTEXT_WINDOW, MIGRATE_ADD_MAX_OUTPUT_TOKENS):
             try:
                 await self._db.execute(migration)
-            except Exception:
-                pass  # column already exists
+            except sqlite3.OperationalError:
+                pass  # Column already exists — expected on subsequent starts
+            except Exception as exc:
+                logger.error(f"Unexpected migration error: {exc}", exc_info=True)
+                raise
         await self._db.commit()
 
     async def stop(self) -> None:
@@ -213,9 +222,13 @@ class SessionManager:
                 )
             await self._db.commit()
 
-    def _build_context_block(self, session_id: str) -> Optional[str]:
-        """Format the last CONTEXT_EXCHANGES user/assistant pairs as a context block."""
-        messages = self.read_transcript(session_id)
+    async def _build_context_block(self, session_id: str) -> Optional[str]:
+        """Format the last CONTEXT_EXCHANGES user/assistant pairs as a context block.
+
+        Uses async_read_transcript so the file read is offloaded to a thread
+        executor and does not block the event loop while the session lock is held.
+        """
+        messages = await self.async_read_transcript(session_id)
         if not messages:
             return None
         # Take last N exchange pairs (user + assistant = 2 messages per exchange)
@@ -244,17 +257,19 @@ class SessionManager:
         If pending_context is already set (e.g. from a prior /compact), it is
         preserved as-is rather than overwritten with a transcript-derived block.
         """
+        # Build the context block BEFORE acquiring the lock: the async file read
+        # must not block the event loop while we hold the session lock.
+        async with self._db.execute(
+            "SELECT pending_context FROM sessions WHERE session_id=?",
+            (session_id,),
+        ) as cur:
+            row = await cur.fetchone()
+
+        existing = row["pending_context"] if row else None
+        # Build context outside the lock (async-safe file read)
+        context_block = existing if existing else await self._build_context_block(session_id)
+
         async with self._lock:
-            # Check for existing pending_context (e.g. set by /compact)
-            async with self._db.execute(
-                "SELECT pending_context FROM sessions WHERE session_id=?",
-                (session_id,),
-            ) as cur:
-                row = await cur.fetchone()
-
-            existing = row["pending_context"] if row else None
-            context_block = existing if existing else self._build_context_block(session_id)
-
             await self._db.execute(
                 "UPDATE sessions SET model=?, claude_session_id=NULL, pending_context=? WHERE session_id=?",
                 (model_id, context_block, session_id),
