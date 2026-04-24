@@ -676,6 +676,173 @@ async def get_op_logs(lines: int = 100):
     return {"lines": all_lines[-lines:]}
 
 
+# ─── File Browser API ─────────────────────────────────────────────────────────
+
+_FILE_MAX_BYTES = 512 * 1024  # 512 KB cap for reads/writes
+_TREE_MAX_NODES = 500         # cap total nodes in tree response
+
+
+def _resolve_workspace_path(cfg, rel_path: str) -> Path:
+    """Resolve *rel_path* relative to workspace_path. Raises 400 on traversal."""
+    workspace = Path(cfg.workspace_path).resolve()
+    if not rel_path or not rel_path.strip("/"):
+        return workspace
+    if "\x00" in rel_path:
+        raise HTTPException(400, "Invalid path")
+    resolved = (workspace / rel_path).resolve()
+    try:
+        resolved.relative_to(workspace)
+    except ValueError:
+        raise HTTPException(400, "Path outside workspace")
+    return resolved
+
+
+def _build_tree(workspace: Path) -> dict:
+    """Return a nested dict representing the workspace file tree."""
+    counter = [0]
+
+    def _walk(path: Path) -> Optional[dict]:
+        if counter[0] >= _TREE_MAX_NODES:
+            return None
+        counter[0] += 1
+        rel = path.relative_to(workspace)
+        rel_str = "" if str(rel) == "." else str(rel)
+
+        if path.is_symlink():
+            return None  # skip symlinks to prevent potential workspace escape
+
+        if path.is_dir():
+            children = []
+            try:
+                entries = sorted(
+                    path.iterdir(),
+                    key=lambda p: (p.is_file(), p.name.lower()),
+                )
+                for entry in entries:
+                    if counter[0] >= _TREE_MAX_NODES:
+                        break
+                    child = _walk(entry)
+                    if child:
+                        children.append(child)
+            except PermissionError:
+                pass
+            return {"name": path.name, "type": "dir", "path": rel_str, "children": children}
+        else:
+            try:
+                size = path.stat().st_size
+            except OSError:
+                size = 0
+            return {"name": path.name, "type": "file", "path": rel_str, "size": size}
+
+    workspace.mkdir(parents=True, exist_ok=True)
+    return _walk(workspace) or {"name": workspace.name, "type": "dir", "path": "", "children": []}
+
+
+@app.get("/api/files/tree", dependencies=[Depends(require_auth)])
+async def files_tree():
+    """Return the workspace file tree."""
+    cfg = get_config()
+    return _build_tree(Path(cfg.workspace_path).resolve())
+
+
+@app.get("/api/files/read", dependencies=[Depends(require_auth)])
+async def files_read(path: str = ""):
+    """Read a text file from the workspace."""
+    if not path:
+        raise HTTPException(400, "path is required")
+    cfg = get_config()
+    resolved = _resolve_workspace_path(cfg, path)
+    if not resolved.exists():
+        raise HTTPException(404, "File not found")
+    if not resolved.is_file():
+        raise HTTPException(400, "Path is not a file")
+    size = resolved.stat().st_size
+    if size > _FILE_MAX_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"File too large ({size // 1024} KB, max {_FILE_MAX_BYTES // 1024} KB)",
+        )
+    try:
+        content = resolved.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(415, "File appears to be binary and cannot be displayed")
+    return {"path": path, "content": content, "size": size}
+
+
+@app.put("/api/files/write", dependencies=[Depends(require_auth)])
+async def files_write(body: dict):
+    """Overwrite an existing workspace file."""
+    path = (body.get("path") or "").strip()
+    content = body.get("content", "")
+    if not path:
+        raise HTTPException(400, "path is required")
+    if len(content.encode("utf-8")) > _FILE_MAX_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"Content too large (max {_FILE_MAX_BYTES // 1024} KB)",
+        )
+    cfg = get_config()
+    resolved = _resolve_workspace_path(cfg, path)
+    if not resolved.exists():
+        raise HTTPException(404, "File not found — use POST /api/files/create to create new files")
+    if not resolved.is_file():
+        raise HTTPException(400, "Path is not a file")
+    resolved.write_text(content, encoding="utf-8")
+    return {"status": "saved", "path": path}
+
+
+@app.post("/api/files/create", dependencies=[Depends(require_auth)])
+async def files_create(body: dict):
+    """Create a new file in the workspace."""
+    import os as _os
+    path = (body.get("path") or "").strip()
+    content = body.get("content", "")
+    if not path:
+        raise HTTPException(400, "path is required")
+    cfg = get_config()
+    resolved = _resolve_workspace_path(cfg, path)
+    if resolved.exists():
+        raise HTTPException(409, "File already exists")
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.write_text(content, encoding="utf-8")
+    _os.chmod(resolved, 0o600)
+    return {"status": "created", "path": path}
+
+
+@app.delete("/api/files/delete", dependencies=[Depends(require_auth)])
+async def files_delete(path: str = ""):
+    """Delete a file or directory from the workspace."""
+    if not path:
+        raise HTTPException(400, "path is required")
+    cfg = get_config()
+    resolved = _resolve_workspace_path(cfg, path)
+    if not resolved.exists():
+        raise HTTPException(404, "Path not found")
+    workspace = Path(cfg.workspace_path).resolve()
+    if resolved == workspace:
+        raise HTTPException(400, "Cannot delete the workspace root")
+    if resolved.is_dir():
+        import shutil as _shutil
+        _shutil.rmtree(resolved)
+    else:
+        resolved.unlink()
+    return {"status": "deleted", "path": path}
+
+
+@app.post("/api/files/mkdir", dependencies=[Depends(require_auth)])
+async def files_mkdir(body: dict):
+    """Create a new directory in the workspace."""
+    path = (body.get("path") or "").strip()
+    if not path:
+        raise HTTPException(400, "path is required")
+    cfg = get_config()
+    resolved = _resolve_workspace_path(cfg, path)
+    if resolved.exists():
+        raise HTTPException(409, "Path already exists")
+    resolved.mkdir(parents=True, exist_ok=True)
+    return {"status": "created", "path": path}
+
+
 # ─── WebSocket chat ───────────────────────────────────────────────────────────
 
 @app.websocket("/ws/chat")
