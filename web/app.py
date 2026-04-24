@@ -46,6 +46,7 @@ _bearer = HTTPBearer(auto_error=False)
 _session_manager = None
 _agent_loop = None
 _scheduler = None
+_queue_manager = None
 
 # ─── Login brute-force protection ─────────────────────────────────────────────
 # Maps client IP -> deque of failed-attempt timestamps.
@@ -96,11 +97,12 @@ class _WSRateLimiter:
 _MODEL_ID_RE = re.compile(r'^[a-zA-Z0-9._:-]{1,100}$')
 
 
-def init_web(session_manager, agent_loop, scheduler=None):
-    global _session_manager, _agent_loop, _scheduler
+def init_web(session_manager, agent_loop, scheduler=None, queue_manager=None):
+    global _session_manager, _agent_loop, _scheduler, _queue_manager
     _session_manager = session_manager
     _agent_loop = agent_loop
     _scheduler = scheduler
+    _queue_manager = queue_manager
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -353,6 +355,84 @@ async def add_model(body: dict):
     cfg.models.roster.append(entry)
     save_config(cfg)
     return {"status": "added", "model": entry.model_dump()}
+
+
+# ─── Task Queue API ───────────────────────────────────────────────────────────
+
+@app.get("/api/queue", dependencies=[Depends(require_auth)])
+async def list_queue(limit: int = 30):
+    if not _queue_manager:
+        raise HTTPException(503, "Task queue not running")
+    limit = min(max(limit, 1), 100)
+    tasks = await _queue_manager.list_tasks(limit=limit)
+    depth = await _queue_manager.queue_depth()
+    return {"tasks": tasks, "depth": depth}
+
+
+@app.post("/api/queue", dependencies=[Depends(require_auth)])
+async def enqueue_task(body: dict):
+    if not _queue_manager:
+        raise HTTPException(503, "Task queue not running")
+    prompt = (body.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(400, "prompt is required")
+    model = body.get("model") or None
+    task = await _queue_manager.add_task(prompt, "web", "admin", model)
+    if task is None:
+        raise HTTPException(429, "Queue is full (max 50 pending tasks)")
+    return task
+
+
+@app.delete("/api/queue/done", dependencies=[Depends(require_auth)])
+async def clear_queue_done():
+    if not _queue_manager:
+        raise HTTPException(503, "Task queue not running")
+    n = await _queue_manager.clear_done()
+    return {"cleared": n}
+
+
+@app.delete("/api/queue/{task_id}", dependencies=[Depends(require_auth)])
+async def cancel_queue_task(task_id: str):
+    if not _queue_manager:
+        raise HTTPException(503, "Task queue not running")
+    ok = await _queue_manager.cancel_task(task_id)
+    if not ok:
+        raise HTTPException(404, "Task not found or not cancellable (may be running/done)")
+    return {"status": "cancelled"}
+
+
+@app.get("/api/queue/{task_id}", dependencies=[Depends(require_auth)])
+async def get_queue_task(task_id: str):
+    if not _queue_manager:
+        raise HTTPException(503, "Task queue not running")
+    task = await _queue_manager.get_task(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    return task
+
+
+# ─── Notifications Config API ─────────────────────────────────────────────────
+
+@app.get("/api/config/notifications", dependencies=[Depends(require_auth)])
+async def get_notifications_config():
+    cfg = get_config()
+    return cfg.notifications.model_dump()
+
+
+@app.put("/api/config/notifications", dependencies=[Depends(require_auth)])
+async def update_notifications_config(body: dict):
+    cfg = get_config()
+    if "enabled" in body:
+        cfg.notifications.enabled = bool(body["enabled"])
+    if "discord_user_id" in body:
+        cfg.notifications.discord_user_id = str(body["discord_user_id"]).strip()
+    if "telegram_user_id" in body:
+        try:
+            cfg.notifications.telegram_user_id = int(body["telegram_user_id"])
+        except (ValueError, TypeError):
+            raise HTTPException(400, "telegram_user_id must be an integer")
+    save_config(cfg)
+    return {"status": "saved"}
 
 
 # ─── Crons API ────────────────────────────────────────────────────────────────

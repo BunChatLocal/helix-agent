@@ -92,6 +92,12 @@ class WebConfig(BaseModel):
     jwt_expiry_hours: int = 24
 
 
+class NotificationsConfig(BaseModel):
+    enabled: bool = False
+    discord_user_id: str = ""   # Snowflake ID to DM on task completion
+    telegram_user_id: int = 0   # Telegram user ID to DM on task completion
+
+
 class CronJob(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
     name: str
@@ -113,6 +119,7 @@ class HelixConfig(BaseModel):
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     web: WebConfig = Field(default_factory=WebConfig)
+    notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
     crons: list[CronJob] = Field(default_factory=list)
     log_level: str = "INFO"
     heartbeat_interval_minutes: int = 30

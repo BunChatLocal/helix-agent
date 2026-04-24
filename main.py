@@ -126,13 +126,27 @@ async def main():
 
     logger.info(f"Agent loop initialized (default model: {cfg.models.default_id})")
 
+    # ── Notification service ────────────────────────────────────────────────
+    from core.notification_service import NotificationService
+    notification_svc = NotificationService()
+
+    # ── Task queue ──────────────────────────────────────────────────────────
+    from core.queue_manager import QueueManager
+    from channels.slash_commands import set_queue_manager
+    queue_manager = QueueManager()
+    queue_manager.set_agent_loop(agent_loop)
+    queue_manager.set_notification_service(notification_svc)
+    await queue_manager.start()
+    set_queue_manager(queue_manager)
+    logger.info("Task queue started")
+
     # ── Web Admin UI ────────────────────────────────────────────────────────
     from web.app import app as fastapi_app, init_web, _execute_cron
     import uvicorn
 
     # Scheduler created before init_web so the web API has a reference
     scheduler = AsyncIOScheduler(timezone=cfg.timezone)
-    init_web(session_manager, agent_loop, scheduler)
+    init_web(session_manager, agent_loop, scheduler, queue_manager=queue_manager)
 
     web_config = uvicorn.Config(
         fastapi_app,
@@ -168,6 +182,7 @@ async def main():
         )
         await discord_adapter.start()
         adapters.append(discord_adapter)
+        notification_svc.register_discord(discord_adapter)
         logger.info("Discord adapter started")
     else:
         logger.info("Discord disabled (set discord.enabled=true in config to enable)")
@@ -183,6 +198,7 @@ async def main():
         )
         await telegram_adapter.start()
         adapters.append(telegram_adapter)
+        notification_svc.register_telegram(telegram_adapter)
         logger.info("Telegram adapter started")
     else:
         logger.info("Telegram disabled (set telegram.enabled=true in config to enable)")
@@ -233,6 +249,10 @@ async def main():
     logger.info("Shutting down...")
     scheduler.shutdown(wait=False)
     web_server.should_exit = True
+    try:
+        await queue_manager.stop()
+    except Exception as e:
+        logger.warning(f"Error stopping queue manager: {e}")
     for adapter in adapters:
         try:
             await adapter.stop()

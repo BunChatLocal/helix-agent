@@ -18,7 +18,15 @@ HARNESS_COMMANDS = {
     "/new", "/reset", "/stop", "/model", "/status", "/help",
     "/clear", "/session", "/tasks", "/compact",
     "/memory", "/heartbeat", "/agent",
+    "/queue",
 }
+
+# Module-level reference to the queue manager — set by main.py after startup
+_queue_manager = None
+
+def set_queue_manager(qm) -> None:
+    global _queue_manager
+    _queue_manager = qm
 
 # Agent-handled: injected with special framing
 AGENT_COMMANDS = {
@@ -60,6 +68,10 @@ async def handle_slash(
             "`/forget <text>` — Remove from memory\n"
             "`/session` — Show session details\n"
             "`/heartbeat` — Trigger a heartbeat check\n"
+            "`/queue <prompt>` — Add a task to the background queue\n"
+            "`/tasks` — Show task queue status\n"
+            "`/tasks clear` — Remove completed/errored tasks\n"
+            "`/tasks cancel <id>` — Cancel a pending task\n"
         )
         return True
 
@@ -217,6 +229,95 @@ async def handle_slash(
             await send_fn(result)
         else:
             await send_fn("HEARTBEAT_OK — nothing needs attention.")
+        return True
+
+    # ── /queue ─────────────────────────────────────────────────────────────
+    if cmd == "/queue":
+        if not _queue_manager:
+            await send_fn("Task queue not available.")
+            return True
+        if not args.strip():
+            await send_fn("Usage: `/queue <prompt>` — adds a background task.\nExample: `/queue summarize all my notes from this week`")
+            return True
+        task = await _queue_manager.add_task(args.strip(), channel, peer)
+        if task is None:
+            await send_fn("⚠️ Queue is full (max 50 pending tasks). Use `/tasks clear` to free up space.")
+        else:
+            depth = await _queue_manager.queue_depth()
+            pending = depth.get("pending", 0)
+            position = pending  # this task is now the last pending
+            await send_fn(
+                f"✅ Task queued — ID `{task['id']}`\n"
+                f"**Prompt:** {args.strip()[:120]}{'…' if len(args.strip()) > 120 else ''}\n"
+                f"Position in queue: {position}"
+            )
+        return True
+
+    # ── /tasks ─────────────────────────────────────────────────────────────
+    if cmd == "/tasks":
+        if not _queue_manager:
+            await send_fn("Task queue not available.")
+            return True
+
+        sub = args.strip().lower() if args else ""
+
+        if sub == "clear":
+            n = await _queue_manager.clear_done()
+            await send_fn(f"🗑️ Cleared {n} completed/errored task(s).")
+            return True
+
+        if sub.startswith("cancel"):
+            cancel_parts = sub.split(None, 1)
+            if len(cancel_parts) < 2:
+                await send_fn("Usage: `/tasks cancel <id>`")
+                return True
+            task_id = cancel_parts[1].strip()
+            ok = await _queue_manager.cancel_task(task_id)
+            if ok:
+                await send_fn(f"✅ Task `{task_id}` cancelled.")
+            else:
+                await send_fn(f"Task `{task_id}` not found or already running/done.")
+            return True
+
+        # Default: show queue status
+        tasks = await _queue_manager.list_tasks(limit=15)
+        depth = await _queue_manager.queue_depth()
+        if not tasks:
+            await send_fn("Task queue is empty. Use `/queue <prompt>` to add tasks.")
+            return True
+
+        # Summary line
+        parts = []
+        for s, label in [("pending", "⏳ pending"), ("running", "⚙️ running"),
+                         ("done", "✅ done"), ("error", "❌ error")]:
+            if depth.get(s, 0):
+                parts.append(f"{depth[s]} {label}")
+        header = " · ".join(parts) if parts else "empty"
+
+        lines = [f"**Task Queue** — {header}\n"]
+        from datetime import datetime as _dt
+        for t in tasks:
+            icon = {"pending": "⏳", "running": "⚙️", "done": "✅", "error": "❌"}.get(t["status"], "?")
+            prompt_preview = t["prompt"][:60].rstrip()
+            if len(t["prompt"]) > 60:
+                prompt_preview += "…"
+            age = ""
+            if t.get("completed_at"):
+                secs = int(_dt.utcnow().timestamp() - t["completed_at"])
+                if secs < 3600:
+                    age = f" · {secs // 60}m ago"
+                else:
+                    age = f" · {secs // 3600}h ago"
+            lines.append(f"{icon} `{t['id']}` {prompt_preview}{age}")
+            if t["status"] == "done" and t.get("summary"):
+                # Show first line of summary
+                first_line = t["summary"].split("\n")[0][:100]
+                lines.append(f"   ↳ {first_line}")
+            elif t["status"] == "error" and t.get("error"):
+                lines.append(f"   ↳ ❌ {t['error'][:80]}")
+
+        lines.append("\nUse `/tasks clear` to remove finished tasks.")
+        await send_fn("\n".join(lines))
         return True
 
     # ── Check custom commands ──────────────────────────────────────────────
