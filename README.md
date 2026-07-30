@@ -202,6 +202,12 @@ Or manually edit `~/.claude/settings.json`.
 - **Prompt injection detection** flags suspicious patterns in messages
 - If you expose the web UI externally, use an HTTPS reverse proxy. **Do so at your own risk — Helix is designed for personal local use and external exposure is not officially supported.**
 
+## Privacy Notes
+
+- `MEMORY.md` is user-controlled long-term memory. Helix may load it globally so your agent can keep context across sessions and channels.
+- If you use Helix in shared or group chats, be aware that context from `MEMORY.md` may influence those conversations too.
+- If you want stricter separation, keep sensitive material out of `MEMORY.md` or explicitly instruct your agent how to handle shared-context conversations.
+
 ## Known Limitations
 
 - **Web UI chat clears on page refresh** — if you refresh the browser, the chat window will appear empty. This is a display-only issue. The session context is fully preserved on disk and by Claude Code, so your agent picks up right where it left off on your next message. No context is lost.

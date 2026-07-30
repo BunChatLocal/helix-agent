@@ -37,6 +37,13 @@ class DiscordAdapter(ChannelAdapter):
         self._client: Optional[discord.Client] = None
         self._debounce_tasks: dict[str, asyncio.Task] = {}
 
+    def _debounce_key(self, message: Message, sender_id: str, is_dm: bool) -> str:
+        """Scope debounce by chat context so different conversations do not collide."""
+        if is_dm:
+            return f"discord:dm:{sender_id}:{sender_id}"
+        channel_id = getattr(message.channel, "id", "unknown")
+        return f"discord:guild:{channel_id}:{sender_id}"
+
     async def start(self) -> None:
         token = get_secret("DISCORD_TOKEN")
         if not token:
@@ -134,7 +141,7 @@ class DiscordAdapter(ChannelAdapter):
             self.audit_logger.log("message_received", channel="discord", sender_id=sender_id, sender_name=sender_name, content_preview=content[:200])
 
         # Debounce (collect messages within 1.5s window)
-        debounce_key = f"discord:{sender_id}"
+        debounce_key = self._debounce_key(message, sender_id, is_dm)
         if debounce_key in self._debounce_tasks:
             self._debounce_tasks[debounce_key].cancel()
 

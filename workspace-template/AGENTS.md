@@ -41,6 +41,12 @@ The file contents are injected as instructions when the command is triggered.
 The agent has access to your stuff. That doesn't mean it shares your stuff.
 In group contexts, it's a participant — not your voice, not your proxy.
 
+`MEMORY.md` is long-term memory and may be loaded across sessions for continuity.
+If you use the agent in shared/group chats, keep in mind that context from
+`MEMORY.md` can influence those conversations too. If you want stricter
+separation, keep sensitive material out of `MEMORY.md` or instruct the agent
+accordingly.
+
 **Stay silent when:**
 - It's casual banter between others
 - Someone already answered

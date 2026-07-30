@@ -37,6 +37,11 @@ class TelegramAdapter(ChannelAdapter):
         self._app = None
         self._debounce_tasks: dict[str, asyncio.Task] = {}
 
+    def _debounce_key(self, update: Update, user_id: int) -> str:
+        """Scope debounce by Telegram chat so different chats do not collide."""
+        chat_id = getattr(getattr(update, "effective_chat", None), "id", "unknown")
+        return f"telegram:{chat_id}:{user_id}"
+
     async def start(self) -> None:
         token = get_secret("TELEGRAM_TOKEN")
         if not token:
@@ -151,7 +156,7 @@ class TelegramAdapter(ChannelAdapter):
             self.audit_logger.log("message_received", channel="telegram", sender_id=str(user_id), sender_name=sender_name, content_preview=content[:200])
 
         # Debounce
-        debounce_key = f"telegram:{user_id}"
+        debounce_key = self._debounce_key(update, user_id)
         if debounce_key in self._debounce_tasks:
             self._debounce_tasks[debounce_key].cancel()
 

@@ -155,6 +155,17 @@ if "security.secrets" not in sys.modules:
     sec_secrets.get_secret = MagicMock(return_value=None)
     sec_secrets.set_secret = MagicMock()
 
+if "security.auth" not in sys.modules:
+    sec_auth = _stub_module("security.auth")
+    sec_auth.AuthManager = MagicMock
+
+if "core.file_handler" not in sys.modules:
+    file_handler = _stub_module("core.file_handler")
+    file_handler.validate_file = MagicMock(return_value=None)
+    file_handler.save_file = MagicMock(return_value=None)
+    file_handler.cleanup_file = MagicMock()
+    file_handler.build_file_context = MagicMock(side_effect=lambda path, msg: msg)
+
 if "security.input_validator" not in sys.modules:
     sec_iv = _stub_module("security.input_validator")
     # Stub: all messages pass through clean (no warnings) in the test environment.
@@ -243,6 +254,28 @@ for _name in [
 for _name in ["discord", "discord.ext", "discord.ext.commands", "telegram", "telegram.ext"]:
     if _name not in sys.modules:
         _stub_module(_name)
+
+if "discord" in sys.modules:
+    discord_mod = sys.modules["discord"]
+    discord_mod.Message = MagicMock
+    discord_mod.DMChannel = MagicMock
+    discord_mod.Client = MagicMock
+    discord_mod.Intents = MagicMock()
+
+if "telegram" in sys.modules:
+    telegram_mod = sys.modules["telegram"]
+    telegram_mod.Update = MagicMock
+
+if "telegram.ext" in sys.modules:
+    telegram_ext_mod = sys.modules["telegram.ext"]
+    telegram_ext_mod.ApplicationBuilder = MagicMock
+    telegram_ext_mod.MessageHandler = MagicMock
+    telegram_ext_mod.filters = MagicMock()
+    telegram_ext_mod.ContextTypes = types.SimpleNamespace(DEFAULT_TYPE=object)
+
+if "telegram.constants" not in sys.modules:
+    telegram_constants_mod = _stub_module("telegram.constants")
+    telegram_constants_mod.ChatAction = MagicMock()
 
 # jwt stub
 if "jwt" not in sys.modules:
@@ -861,6 +894,147 @@ class TestSlashCommandAdapterBoundary:
 
         # Agent-handled commands return False so the adapter routes them onward
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — debounce key scoping
+# ---------------------------------------------------------------------------
+
+class TestDebounceKeyScoping:
+    def test_discord_debounce_key_is_chat_scoped(self):
+        from channels.discord_adapter import DiscordAdapter
+
+        adapter = DiscordAdapter(handler=None, auth=None, agent_loop=None, session_manager=None)
+
+        guild_message_a = MagicMock()
+        guild_message_a.channel.id = 111
+        guild_message_b = MagicMock()
+        guild_message_b.channel.id = 222
+
+        key_a = adapter._debounce_key(guild_message_a, "user42", is_dm=False)
+        key_b = adapter._debounce_key(guild_message_b, "user42", is_dm=False)
+        dm_key = adapter._debounce_key(guild_message_a, "user42", is_dm=True)
+
+        assert key_a != key_b
+        assert key_a != dm_key
+        assert key_b != dm_key
+
+    def test_telegram_debounce_key_is_chat_scoped(self):
+        from channels.telegram_adapter import TelegramAdapter
+
+        adapter = TelegramAdapter(handler=None, auth=None, agent_loop=None, session_manager=None)
+
+        update_a = MagicMock()
+        update_a.effective_chat.id = 1001
+        update_b = MagicMock()
+        update_b.effective_chat.id = 2002
+
+        key_a = adapter._debounce_key(update_a, 12345)
+        key_b = adapter._debounce_key(update_b, 12345)
+
+        assert key_a != key_b
+
+
+# ---------------------------------------------------------------------------
+# Integration tests — queue and workspace file APIs
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not _HAS_REAL_FASTAPI, reason="fastapi not installed")
+class TestAdminApiIntegration:
+    def _make_client(self, tmp_path, monkeypatch, queue_manager=None):
+        import importlib
+        import web.app as app_mod
+
+        importlib.reload(app_mod)
+
+        TestClient = _RealTestClient
+        cfg = _make_temp_config(tmp_path)
+
+        monkeypatch.setattr(app_mod, "get_config", lambda: cfg)
+        monkeypatch.setattr(app_mod, "_verify_token", lambda token: True)
+        monkeypatch.setattr(app_mod, "_session_manager", MagicMock())
+        monkeypatch.setattr(app_mod, "_agent_loop", MagicMock())
+        monkeypatch.setattr(app_mod, "_queue_manager", queue_manager)
+
+        return TestClient(app_mod.app, raise_server_exceptions=False)
+
+    def test_queue_endpoints(self, tmp_path, monkeypatch):
+        queue_manager = MagicMock()
+        queue_manager.list_tasks = AsyncMock(return_value=[{"id": "abc123", "status": "pending"}])
+        queue_manager.queue_depth = AsyncMock(return_value={"pending": 1})
+        queue_manager.add_task = AsyncMock(return_value={"id": "abc123", "status": "pending", "prompt": "do thing"})
+        queue_manager.clear_done = AsyncMock(return_value=2)
+        queue_manager.cancel_task = AsyncMock(return_value=True)
+        queue_manager.get_task = AsyncMock(return_value={"id": "abc123", "status": "pending"})
+
+        client = self._make_client(tmp_path, monkeypatch, queue_manager=queue_manager)
+        headers = {"Authorization": "Bearer validtoken"}
+
+        list_resp = client.get("/api/queue", headers=headers)
+        assert list_resp.status_code == 200
+        assert list_resp.json()["depth"] == {"pending": 1}
+
+        create_resp = client.post("/api/queue", json={"prompt": "do thing"}, headers=headers)
+        assert create_resp.status_code == 200
+        queue_manager.add_task.assert_awaited_once_with("do thing", "web", "admin", None)
+
+        get_resp = client.get("/api/queue/abc123", headers=headers)
+        assert get_resp.status_code == 200
+        assert get_resp.json()["id"] == "abc123"
+
+        cancel_resp = client.delete("/api/queue/abc123", headers=headers)
+        assert cancel_resp.status_code == 200
+        assert cancel_resp.json()["status"] == "cancelled"
+
+        clear_resp = client.delete("/api/queue/done", headers=headers)
+        assert clear_resp.status_code == 200
+        assert clear_resp.json()["cleared"] == 2
+
+    def test_workspace_file_crud_endpoints(self, tmp_path, monkeypatch):
+        client = self._make_client(tmp_path, monkeypatch, queue_manager=MagicMock())
+        headers = {"Authorization": "Bearer validtoken"}
+
+        create_resp = client.post(
+            "/api/files/create",
+            json={"path": "notes/test.md", "content": "hello"},
+            headers=headers,
+        )
+        assert create_resp.status_code == 200
+        created_path = tmp_path / "notes" / "test.md"
+        assert created_path.exists()
+        assert created_path.read_text() == "hello"
+
+        read_resp = client.get("/api/files/read?path=notes%2Ftest.md", headers=headers)
+        assert read_resp.status_code == 200
+        assert read_resp.json()["content"] == "hello"
+
+        write_resp = client.put(
+            "/api/files/write",
+            json={"path": "notes/test.md", "content": "updated"},
+            headers=headers,
+        )
+        assert write_resp.status_code == 200
+        assert created_path.read_text() == "updated"
+
+        mkdir_resp = client.post(
+            "/api/files/mkdir",
+            json={"path": "notes/subdir"},
+            headers=headers,
+        )
+        assert mkdir_resp.status_code == 200
+        assert (tmp_path / "notes" / "subdir").is_dir()
+
+        tree_resp = client.get("/api/files/tree", headers=headers)
+        assert tree_resp.status_code == 200
+        assert tree_resp.json()["type"] == "dir"
+
+        delete_file_resp = client.delete("/api/files/delete?path=notes%2Ftest.md", headers=headers)
+        assert delete_file_resp.status_code == 200
+        assert not created_path.exists()
+
+        delete_dir_resp = client.delete("/api/files/delete?path=notes%2Fsubdir", headers=headers)
+        assert delete_dir_resp.status_code == 200
+        assert not (tmp_path / "notes" / "subdir").exists()
 
 
 # ---------------------------------------------------------------------------
