@@ -33,6 +33,7 @@ Helix ships with four built-in themes — each available in dark and light mode.
 - **Discord + Telegram Integration** — optional always-on messaging so you can talk to your agent from your phone
 - **Memory system** — daily logs + long-term memory files your agent reads and writes automatically
 - **Custom slash commands** — drop a `.md` file in the commands folder, it becomes a `/command`
+- **Skill factory** — create reusable `skills/<id>/SKILL.md` workflows from the UI, by hand, or through chat commands
 - **Scheduled tasks** — cron jobs that run your agent on a schedule (heartbeat checks, automated workflows)
 - **Encrypted secrets** — bot tokens and passwords stored with Fernet encryption, machine-bound keys
 
@@ -152,6 +153,7 @@ Your agent's workspace (`~/.helix/workspace/`) contains the files that define wh
 | `HEARTBEAT.md` | What to check on periodic heartbeats |
 | `memory/` | Daily logs (`YYYY-MM-DD.md`) |
 | `commands/` | Custom slash commands (`.md` files) |
+| `skills/` | Reusable workflow skills (`skills/<id>/SKILL.md`) |
 
 Edit these files anytime. The more accurate they are, the better your agent performs. Your agent can also edit them — that's how it learns and remembers.
 
@@ -175,6 +177,9 @@ Available in Discord, Telegram, and the web chat:
 | `/remember <text>` | Save something to memory |
 | `/forget <text>` | Remove something from memory |
 | `/heartbeat` | Trigger a manual heartbeat check |
+| `/skills` | List installed skills |
+| `/skill <name>` | Preview a skill |
+| `/skill new <name>` | Scaffold a new skill in the workspace |
 
 ### Switching Models Mid-Conversation
 

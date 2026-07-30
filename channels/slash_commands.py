@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Callable, Awaitable
 
 from core.config import get_config
+from core.skill_manager import create_skill, list_skills, read_skill
 
 
 # ─── Harness-handled commands ─────────────────────────────────────────────────
@@ -18,7 +19,7 @@ HARNESS_COMMANDS = {
     "/new", "/reset", "/stop", "/model", "/status", "/help",
     "/clear", "/session", "/tasks", "/compact",
     "/memory", "/heartbeat", "/agent",
-    "/queue",
+    "/queue", "/skills", "/skill",
 }
 
 # Module-level reference to the queue manager — set by main.py after startup
@@ -72,6 +73,9 @@ async def handle_slash(
             "`/tasks` — Show task queue status\n"
             "`/tasks clear` — Remove completed/errored tasks\n"
             "`/tasks cancel <id>` — Cancel a pending task\n"
+            "`/skills` — List installed skills\n"
+            "`/skill <name>` — View a skill preview\n"
+            "`/skill new <name>` — Scaffold a new skill in the workspace\n"
         )
         return True
 
@@ -229,6 +233,61 @@ async def handle_slash(
             await send_fn(result)
         else:
             await send_fn("HEARTBEAT_OK — nothing needs attention.")
+        return True
+
+    # ── /skills | /skill ──────────────────────────────────────────────────
+    if cmd in ("/skills", "/skill"):
+        skill_args = args.strip()
+        if cmd == "/skills" and not skill_args:
+            skills = list_skills(cfg.workspace_path)
+            if not skills:
+                await send_fn(
+                    "No skills installed yet.\n"
+                    "Use `/skill new <name>` or create `skills/<name>/SKILL.md` in the workspace."
+                )
+                return True
+            lines = [f"**Skills** ({len(skills)})"]
+            for skill in skills[:20]:
+                desc = f" — {skill['description']}" if skill["description"] else ""
+                lines.append(f"`{skill['id']}`{desc}")
+            await send_fn("\n".join(lines))
+            return True
+
+        if skill_args.lower().startswith("new "):
+            skill_name = skill_args[4:].strip()
+            if not skill_name:
+                await send_fn("Usage: `/skill new <name>`")
+                return True
+            try:
+                created = create_skill(cfg.workspace_path, skill_name)
+            except FileExistsError:
+                await send_fn(f"Skill `{skill_name}` already exists.")
+                return True
+            except ValueError as e:
+                await send_fn(str(e))
+                return True
+            await send_fn(
+                f"✅ Skill created: `{created['id']}`\n"
+                f"Path: `{created['path']}`\n"
+                "You can edit it in the Skills tab or tell your agent to refine it."
+            )
+            return True
+
+        if not skill_args:
+            await send_fn("Usage: `/skills`, `/skill <name>`, or `/skill new <name>`")
+            return True
+        try:
+            skill = read_skill(cfg.workspace_path, skill_args)
+        except FileNotFoundError:
+            await send_fn(f"Skill `{skill_args}` not found.")
+            return True
+        except ValueError as e:
+            await send_fn(str(e))
+            return True
+        preview = skill["content"][:1500]
+        if len(skill["content"]) > 1500:
+            preview += f"\n\n[...{len(skill['content']) - 1500} more chars in {skill['path']}]"
+        await send_fn(f"**{skill['name']}**\n`{skill['path']}`\n\n{preview}")
         return True
 
     # ── /queue ─────────────────────────────────────────────────────────────

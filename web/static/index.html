@@ -1103,6 +1103,93 @@
       </div>
     </div>
 
+    <!-- ================================ SKILLS =============================== -->
+    <div x-show="currentPage === 'skills'" class="flex-1 flex overflow-hidden">
+
+      <!-- ── Skill list / create panel ── -->
+      <div class="flex flex-col flex-shrink-0" style="width:320px; border-right:1px solid rgba(255,255,255,0.05); background:rgba(0,0,0,0.18);">
+        <div class="px-4 py-4" style="border-bottom:1px solid rgba(255,255,255,0.05);">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="section-title !text-lg">Skills</h2>
+              <p class="text-slate-600 text-xs mt-0.5">Reusable workflows in `skills/&lt;id&gt;/SKILL.md`</p>
+            </div>
+            <button @click="loadSkills()" class="text-slate-600 hover:text-slate-300 transition-colors px-2 py-1 rounded text-xs"
+              style="border:1px solid rgba(255,255,255,0.06);">↺</button>
+          </div>
+
+          <div class="space-y-2.5">
+            <input x-model="newSkill.name" type="text" placeholder="Skill name"
+              class="input-base w-full px-3 py-2 text-sm">
+            <textarea x-model="newSkill.description" rows="3" placeholder="What this skill is for..."
+              class="input-base w-full px-3 py-2 text-sm resize-none"></textarea>
+            <button @click="createSkill()" class="btn-primary w-full px-3 py-2 text-sm">Create Skill</button>
+            <div x-show="skillCreateMessage" class="text-xs text-emerald-400" x-text="skillCreateMessage"></div>
+            <div class="text-[11px] text-slate-700 leading-relaxed">
+              You can also ask your agent to create skills for you. Helix saves them in the same workspace directory.
+            </div>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-2">
+          <template x-for="skill in skillsList" :key="skill.id">
+            <button
+              @click="openSkill(skill.id)"
+              class="w-full text-left rounded-xl px-3 py-2.5 mb-2 transition-colors"
+              :class="selectedSkillId === skill.id ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'"
+            >
+              <div class="flex items-center gap-2">
+                <span class="text-base">🧠</span>
+                <span class="font-medium text-slate-300" x-text="skill.name"></span>
+              </div>
+              <div class="text-xs font-mono text-slate-700 mt-1" x-text="skill.id"></div>
+              <div x-show="skill.description" class="text-xs text-slate-500 mt-1.5 leading-relaxed" x-text="skill.description"></div>
+            </button>
+          </template>
+          <div x-show="skillsList.length === 0 && !skillsLoading" class="text-slate-700 text-xs px-3 py-3 italic">
+            No skills yet. Create your first one above.
+          </div>
+          <div x-show="skillsLoading" class="text-slate-700 text-xs px-3 py-3">Loading…</div>
+        </div>
+      </div>
+
+      <!-- ── Skill editor panel ── -->
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <div x-show="!selectedSkillId" class="flex-1 flex flex-col items-center justify-center gap-3 text-slate-700">
+          <div class="text-4xl opacity-30">🧠</div>
+          <p class="text-sm">Select a skill to read or edit it</p>
+          <p class="text-xs opacity-60">Or create a new skill from the left panel</p>
+        </div>
+
+        <div x-show="selectedSkillId" class="flex-1 flex flex-col overflow-hidden">
+          <div class="flex items-center gap-2 px-4 py-2.5 flex-shrink-0"
+            style="border-bottom:1px solid rgba(255,255,255,0.05); background:rgba(0,0,0,0.12);">
+            <span class="text-xs font-mono text-slate-500 flex-1 truncate" x-text="selectedSkillPath || selectedSkillId"></span>
+            <span x-show="skillUnsaved" class="text-xs text-amber-500 flex-shrink-0">● unsaved</span>
+            <span x-show="skillSaved" class="text-xs text-emerald-400 flex-shrink-0">✓ saved</span>
+            <button @click="saveSkill()" :disabled="skillSaving || !skillUnsaved"
+              class="btn-primary px-3 py-1.5 text-xs flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+              x-text="skillSaving ? 'Saving…' : 'Save'"></button>
+          </div>
+
+          <div x-show="skillError" class="px-4 py-3 text-xs text-red-400 bg-red-500/5 border-b border-red-500/10 flex-shrink-0"
+            x-text="skillError"></div>
+
+          <textarea
+            x-model="skillContent"
+            @input="skillUnsaved = true; skillSaved = false"
+            @keydown.ctrl.s.prevent="saveSkill()"
+            @keydown.meta.s.prevent="saveSkill()"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="Skill content…"
+            class="flex-1 resize-none outline-none font-mono text-xs text-slate-300 leading-relaxed p-4"
+            style="background:rgba(0,0,0,0.25); border:none; tab-size:2;"
+          ></textarea>
+        </div>
+      </div>
+    </div>
+
     <!-- ================================ FILES ================================ -->
     <div x-show="currentPage === 'files'" class="flex-1 flex overflow-hidden">
 
@@ -1226,6 +1313,7 @@ function helixApp() {
       { id: 'config',   label: 'Config',   icon: '◉' },
       { id: 'crons',    label: 'Crons',    icon: '◷' },
       { id: 'logs',     label: 'Logs',     icon: '≡' },
+      { id: 'skills',   label: 'Skills',   icon: '🧠' },
       { id: 'files',    label: 'Files',    icon: '⊞' },
     ],
     health: {},
@@ -1257,6 +1345,19 @@ function helixApp() {
     newCron: { name: '', schedule: '', prompt: '', model: '', enabled: true },
     cronAdded: false,
     cronAddError: '',
+    // Skills
+    skillsList: [],
+    skillsLoading: false,
+    selectedSkillId: '',
+    selectedSkillPath: '',
+    skillContent: '',
+    skillOriginalContent: '',
+    skillSaving: false,
+    skillSaved: false,
+    skillUnsaved: false,
+    skillError: '',
+    skillCreateMessage: '',
+    newSkill: { name: '', description: '' },
     // Files
     fileTree: null,
     fileTreeFlat: [],
@@ -1328,6 +1429,7 @@ function helixApp() {
 
     onPageChange(pageId) {
       if (pageId === 'crons') this.loadCrons();
+      if (pageId === 'skills') this.loadSkills();
       if (pageId === 'files') this.loadFileTree();
     },
 
@@ -1567,6 +1669,92 @@ function helixApp() {
     refreshLogs() {
       if (this.logTab === 'audit') this.loadAuditLogs();
       else this.loadOpLogs();
+    },
+
+    // ── Skill methods ────────────────────────────────────────────────────────
+
+    async loadSkills() {
+      this.skillsLoading = true;
+      try {
+        const r = await this.api('/api/skills');
+        if (r.ok) {
+          const data = await r.json();
+          this.skillsList = data.skills || [];
+        }
+      } catch {}
+      finally { this.skillsLoading = false; }
+    },
+
+    async openSkill(skillId) {
+      this.selectedSkillId = skillId;
+      this.skillContent = '';
+      this.skillOriginalContent = '';
+      this.skillUnsaved = false;
+      this.skillSaved = false;
+      this.skillError = '';
+      this.selectedSkillPath = '';
+      try {
+        const r = await this.api(`/api/skills/${encodeURIComponent(skillId)}`);
+        if (r.ok) {
+          const data = await r.json();
+          this.selectedSkillPath = data.path;
+          this.skillContent = data.content;
+          this.skillOriginalContent = data.content;
+        } else {
+          const data = await r.json().catch(() => ({}));
+          this.skillError = data.detail || 'Failed to load skill';
+        }
+      } catch (e) {
+        this.skillError = e.message;
+      }
+    },
+
+    async createSkill() {
+      if (!this.newSkill.name.trim()) return;
+      this.skillCreateMessage = '';
+      const r = await this.api('/api/skills', {
+        method: 'POST',
+        body: JSON.stringify(this.newSkill),
+      });
+      if (r.ok) {
+        const data = await r.json();
+        this.skillCreateMessage = `Created ${data.id}`;
+        this.newSkill = { name: '', description: '' };
+        await this.loadSkills();
+        await this.openSkill(data.id);
+        setTimeout(() => this.skillCreateMessage = '', 2500);
+      } else {
+        const data = await r.json().catch(() => ({}));
+        alert(`Failed to create skill: ${data.detail || 'Unknown error'}`);
+      }
+    },
+
+    async saveSkill() {
+      if (!this.selectedSkillId || this.skillSaving) return;
+      this.skillSaving = true;
+      this.skillSaved = false;
+      try {
+        const r = await this.api(`/api/skills/${encodeURIComponent(this.selectedSkillId)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ content: this.skillContent }),
+        });
+        if (r.ok) {
+          const data = await r.json();
+          this.selectedSkillPath = data.path;
+          this.skillOriginalContent = this.skillContent;
+          this.skillUnsaved = false;
+          this.skillSaved = true;
+          await this.loadSkills();
+          setTimeout(() => this.skillSaved = false, 2000);
+        } else {
+          const data = await r.json().catch(() => ({}));
+          alert(`Save failed: ${data.detail || 'Unknown error'}`);
+        }
+      } catch (e) {
+        alert(`Save error: ${e.message}`);
+      } finally {
+        this.skillSaving = false;
+      }
     },
 
     connectWS() {

@@ -30,6 +30,14 @@ Drop `.md` files in `commands/` to create custom slash commands.
 For example, `commands/standup.md` becomes `/standup` in Discord/Telegram.
 The file contents are injected as instructions when the command is triggered.
 
+## Skills
+
+Store reusable skills in `skills/<skill-id>/SKILL.md`.
+
+Skills are longer-lived workflow files that the agent can create, update, and
+reuse across tasks. Users can manage them manually, through the Helix Skills
+UI, or by asking the agent to create them.
+
 ## Red Lines
 
 - Don't send emails, tweets, or public posts without asking first.

@@ -895,6 +895,42 @@ class TestSlashCommandAdapterBoundary:
         # Agent-handled commands return False so the adapter routes them onward
         assert result is False
 
+    @pytest.mark.anyio
+    async def test_skill_new_creates_workspace_skill(self, tmp_path):
+        sent = []
+
+        async def send(text):
+            sent.append(text)
+
+        cfg = _make_temp_config(tmp_path)
+        with patch("channels.slash_commands.get_config", return_value=cfg):
+            from channels.slash_commands import handle_slash
+            result = await handle_slash("/skill new triage flow", "discord", "user42",
+                                        self._make_sm(), self._make_loop(), send)
+
+        assert result is True
+        assert (tmp_path / "skills" / "triage-flow" / "SKILL.md").exists()
+        assert any("Skill created" in s for s in sent)
+
+    @pytest.mark.anyio
+    async def test_skills_lists_installed_skills(self, tmp_path):
+        sent = []
+
+        async def send(text):
+            sent.append(text)
+
+        from core.skill_manager import create_skill
+        create_skill(str(tmp_path), "incident triage", description="triage incidents")
+
+        cfg = _make_temp_config(tmp_path)
+        with patch("channels.slash_commands.get_config", return_value=cfg):
+            from channels.slash_commands import handle_slash
+            result = await handle_slash("/skills", "discord", "user42",
+                                        self._make_sm(), self._make_loop(), send)
+
+        assert result is True
+        assert any("incident-triage" in s for s in sent)
+
 
 # ---------------------------------------------------------------------------
 # Unit tests — debounce key scoping
@@ -933,6 +969,35 @@ class TestDebounceKeyScoping:
         key_b = adapter._debounce_key(update_b, 12345)
 
         assert key_a != key_b
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — skill manager
+# ---------------------------------------------------------------------------
+
+class TestSkillManager:
+    def test_create_list_read_write_skill(self, tmp_path):
+        from core.skill_manager import create_skill, list_skills, read_skill, write_skill
+
+        created = create_skill(str(tmp_path), "Weekly Review", description="Summarize the week")
+        assert created["id"] == "weekly-review"
+        assert created["path"] == "skills/weekly-review/SKILL.md"
+
+        skills = list_skills(str(tmp_path))
+        assert len(skills) == 1
+        assert skills[0]["id"] == "weekly-review"
+
+        loaded = read_skill(str(tmp_path), "weekly-review")
+        assert "Weekly Review" in loaded["content"]
+
+        saved = write_skill(str(tmp_path), "weekly-review", "# Weekly Review\n\nUpdated")
+        assert saved["description"] == "Updated"
+
+    def test_invalid_skill_id_rejected(self, tmp_path):
+        from core.skill_manager import read_skill
+
+        with pytest.raises(ValueError):
+            read_skill(str(tmp_path), "../bad")
 
 
 # ---------------------------------------------------------------------------
@@ -1035,6 +1100,40 @@ class TestAdminApiIntegration:
         delete_dir_resp = client.delete("/api/files/delete?path=notes%2Fsubdir", headers=headers)
         assert delete_dir_resp.status_code == 200
         assert not (tmp_path / "notes" / "subdir").exists()
+
+    def test_skills_api_endpoints(self, tmp_path, monkeypatch):
+        client = self._make_client(tmp_path, monkeypatch, queue_manager=MagicMock())
+        headers = {"Authorization": "Bearer validtoken"}
+
+        list_resp = client.get("/api/skills", headers=headers)
+        assert list_resp.status_code == 200
+        assert list_resp.json()["skills"] == []
+
+        create_resp = client.post(
+            "/api/skills",
+            json={"name": "Triage Flow", "description": "Help with ticket triage"},
+            headers=headers,
+        )
+        assert create_resp.status_code == 200
+        created = create_resp.json()
+        assert created["id"] == "triage-flow"
+        assert (tmp_path / "skills" / "triage-flow" / "SKILL.md").exists()
+
+        get_resp = client.get("/api/skills/triage-flow", headers=headers)
+        assert get_resp.status_code == 200
+        assert "Triage Flow" in get_resp.json()["content"]
+
+        save_resp = client.put(
+            "/api/skills/triage-flow",
+            json={"content": "# Triage Flow\n\nUpdated"},
+            headers=headers,
+        )
+        assert save_resp.status_code == 200
+        assert (tmp_path / "skills" / "triage-flow" / "SKILL.md").read_text() == "# Triage Flow\n\nUpdated"
+
+        list_resp_2 = client.get("/api/skills", headers=headers)
+        assert list_resp_2.status_code == 200
+        assert len(list_resp_2.json()["skills"]) == 1
 
 
 # ---------------------------------------------------------------------------

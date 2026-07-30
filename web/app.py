@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from core.config import get_config, save_config
+from core.skill_manager import create_skill, list_skills, read_skill, write_skill
 from security.secrets import get_secret, set_secret
 from security.input_validator import sanitize_for_context
 from channels.slash_commands import handle_slash
@@ -674,6 +675,52 @@ async def get_op_logs(lines: int = 100):
     with open(op_path, "r") as f:
         all_lines = f.readlines()
     return {"lines": all_lines[-lines:]}
+
+
+# ─── Skills API ───────────────────────────────────────────────────────────────
+
+@app.get("/api/skills", dependencies=[Depends(require_auth)])
+async def skills_list_api():
+    cfg = get_config()
+    return {"skills": list_skills(cfg.workspace_path)}
+
+
+@app.get("/api/skills/{skill_id}", dependencies=[Depends(require_auth)])
+async def skills_get_api(skill_id: str):
+    cfg = get_config()
+    try:
+        return read_skill(cfg.workspace_path, skill_id)
+    except FileNotFoundError:
+        raise HTTPException(404, "Skill not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.post("/api/skills", dependencies=[Depends(require_auth)])
+async def skills_create_api(body: dict):
+    cfg = get_config()
+    name = (body.get("name") or "").strip()
+    description = (body.get("description") or "").strip()
+    content = body.get("content", "")
+    if not name:
+        raise HTTPException(400, "name is required")
+    try:
+        return create_skill(cfg.workspace_path, name=name, description=description, content=content)
+    except FileExistsError:
+        raise HTTPException(409, "Skill already exists")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.put("/api/skills/{skill_id}", dependencies=[Depends(require_auth)])
+async def skills_save_api(skill_id: str, body: dict):
+    cfg = get_config()
+    try:
+        return write_skill(cfg.workspace_path, skill_id, body.get("content", ""))
+    except FileNotFoundError:
+        raise HTTPException(404, "Skill not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
 # ─── File Browser API ─────────────────────────────────────────────────────────
