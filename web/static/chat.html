@@ -1,0 +1,1131 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IT-hjelp</title>
+<style>
+  :root{
+    --bg:#faf9f7; --panel:#f2efea; --panel-2:#e9e5df; --line:#e0dbd3;
+    --text:#1f1e1c; --muted:#6f6a63; --accent:#c86442; --accent-ink:#fff;
+    --bubble-user:#ece7e0; --danger:#a13a2a;
+    --radius:14px; --sidebar:270px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#1f1e1d; --panel:#262523; --panel-2:#2f2e2b; --line:#3a3835;
+      --text:#f0eee9; --muted:#a29c93; --accent:#d97757; --accent-ink:#1f1e1d;
+      --bubble-user:#333230;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  button{font:inherit;color:inherit}
+
+  /* ---------- Sign-in ---------- */
+  #signin{
+    position:fixed;inset:0;display:grid;place-items:center;padding:24px;
+    background:var(--bg);z-index:50;
+  }
+  .card{
+    width:100%;max-width:400px;background:var(--panel);border:1px solid var(--line);
+    border-radius:20px;padding:40px 32px;text-align:center;
+  }
+  .logo{
+    width:52px;height:52px;border-radius:15px;background:var(--accent);
+    display:grid;place-items:center;margin:0 auto 20px;
+    font-size:26px;line-height:1;
+  }
+  .card h1{margin:0 0 8px;font-size:22px;letter-spacing:-.01em}
+  .card p{margin:0 0 28px;color:var(--muted);font-size:15px}
+  .ms-btn{
+    width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+    padding:13px 18px;border-radius:11px;border:1px solid var(--line);
+    background:var(--bg);cursor:pointer;font-size:15px;font-weight:500;
+    transition:background .15s;
+  }
+  .ms-btn:hover{background:var(--panel-2)}
+  .err{
+    margin-top:18px;padding:11px 14px;border-radius:10px;font-size:14px;
+    background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger);
+  }
+
+  /* ---------- Shell ---------- */
+  #app{display:none;height:100%}
+  #app.on{display:flex}
+
+  aside{
+    width:var(--sidebar);flex:none;background:var(--panel);
+    border-right:1px solid var(--line);display:flex;flex-direction:column;
+  }
+  .side-top{padding:14px;border-bottom:1px solid var(--line)}
+  .newchat{
+    width:100%;display:flex;align-items:center;gap:9px;padding:11px 13px;
+    border-radius:11px;border:1px solid var(--line);background:var(--bg);
+    cursor:pointer;font-size:14.5px;font-weight:500;transition:background .15s;
+  }
+  .newchat:hover{background:var(--panel-2)}
+  .convs{flex:1;overflow-y:auto;padding:10px 8px}
+  .conv-label{
+    padding:8px 8px 6px;font-size:11.5px;font-weight:600;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.06em;
+  }
+  .conv{
+    display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+    padding:9px 11px;border-radius:9px;border:0;background:transparent;
+    cursor:pointer;font-size:14px;color:var(--text);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .conv:hover{background:var(--panel-2)}
+  .conv.sel{background:var(--panel-2);font-weight:500}
+  .conv span{overflow:hidden;text-overflow:ellipsis}
+  .conv .del{
+    margin-left:auto;opacity:0;border:0;background:transparent;cursor:pointer;
+    color:var(--muted);padding:2px 4px;border-radius:5px;font-size:15px;line-height:1;
+  }
+  .conv:hover .del{opacity:.65}
+  .conv .del:hover{opacity:1;color:var(--danger)}
+  .side-foot{
+    padding:12px 14px;border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);
+  }
+  .avatar{
+    width:28px;height:28px;border-radius:50%;background:var(--accent);
+    color:var(--accent-ink);display:grid;place-items:center;
+    font-size:12px;font-weight:600;flex:none;
+  }
+  .lang{
+    margin-left:auto;border:1px solid var(--line);background:var(--bg);
+    border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px;color:var(--muted);
+  }
+  .lang:hover{color:var(--text)}
+
+  /* ---------- Main ---------- */
+  main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .top{
+    display:none;align-items:center;gap:12px;padding:11px 14px;
+    border-bottom:1px solid var(--line);background:var(--panel);
+  }
+  .burger{border:0;background:transparent;cursor:pointer;font-size:21px;line-height:1;padding:2px 6px}
+  .thread{flex:1;overflow-y:auto;scroll-behavior:smooth}
+  .thread-in{max-width:760px;margin:0 auto;padding:32px 24px 20px}
+
+  .empty{max-width:560px;margin:0 auto;padding:15vh 24px;text-align:center}
+  .empty h2{font-size:25px;margin:0 0 10px;letter-spacing:-.01em}
+  .empty p{color:var(--muted);margin:0 0 26px}
+  .chips{display:flex;flex-wrap:wrap;gap:9px;justify-content:center}
+  .chip{
+    padding:9px 14px;border-radius:20px;border:1px solid var(--line);
+    background:var(--panel);cursor:pointer;font-size:14px;transition:background .15s;
+  }
+  .chip:hover{background:var(--panel-2)}
+
+  .msg{margin-bottom:22px;display:flex}
+  .msg.u{justify-content:flex-end}
+  .bubble{
+    max-width:82%;padding:12px 16px;border-radius:var(--radius);
+    white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;
+  }
+  .msg.u .bubble{background:var(--bubble-user);border-bottom-right-radius:5px}
+  .msg.a .bubble{max-width:100%;padding:0;background:transparent}
+  .bubble code{
+    background:var(--panel-2);padding:1.5px 5px;border-radius:5px;
+    font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9em;
+  }
+  .bubble pre{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:13px 15px;overflow-x:auto;margin:12px 0;
+  }
+  .bubble pre code{background:none;padding:0;font-size:13.5px;line-height:1.55}
+  .copy{
+    display:block;margin:-6px 0 12px auto;border:1px solid var(--line);
+    background:var(--panel);border-radius:7px;padding:4px 10px;
+    font-size:12px;color:var(--muted);cursor:pointer;
+  }
+  .copy:hover{color:var(--text)}
+  .dots span{
+    display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:50%;
+    background:var(--muted);animation:b 1.3s infinite;
+  }
+  .dots span:nth-child(2){animation-delay:.18s}
+  .dots span:nth-child(3){animation-delay:.36s}
+  @keyframes b{0%,60%,100%{opacity:.25}30%{opacity:1}}
+
+  .composer{border-top:1px solid var(--line);background:var(--bg);padding:14px 24px 20px}
+  .composer-in{max-width:760px;margin:0 auto}
+  .box{
+    display:flex;align-items:flex-end;gap:10px;background:var(--panel);
+    border:1px solid var(--line);border-radius:var(--radius);padding:10px 10px 10px 15px;
+  }
+  .box:focus-within{border-color:var(--accent)}
+  textarea{
+    flex:1;border:0;outline:0;background:transparent;color:var(--text);
+    resize:none;font:inherit;max-height:190px;line-height:1.55;padding:3px 0;
+  }
+  .send{
+    width:34px;height:34px;flex:none;border-radius:9px;border:0;
+    background:var(--accent);color:var(--accent-ink);cursor:pointer;font-size:15px;
+  }
+  .send:disabled{opacity:.4;cursor:default}
+  .hint{margin:9px 2px 0;font-size:12px;color:var(--muted);text-align:center}
+  .offline{
+    display:none;margin:0 auto 10px;max-width:760px;padding:9px 13px;border-radius:9px;
+    font-size:13.5px;background:color-mix(in srgb,var(--danger) 12%,transparent);
+    color:var(--danger);
+  }
+  .offline.on{display:block}
+
+  .testbadge{
+    padding:7px 11px;border-radius:8px;font-size:12px;font-weight:600;
+    letter-spacing:.03em;text-align:center;
+    background:color-mix(in srgb,#c58a1a 22%,transparent);color:#8a5d00;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]) .testbadge{color:#f0c464}
+  }
+  #testBar{
+    display:none;padding:6px 14px;font-size:12px;font-weight:600;text-align:center;
+    background:color-mix(in srgb,#c58a1a 22%,transparent);color:#8a5d00;
+  }
+  #testBar.on{display:block}
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]) #testBar{color:#f0c464}
+  }
+
+  /* context meter */
+  .meter{max-width:760px;margin:0 auto 10px;display:none}
+  .meter.on{display:block}
+  .meter-row{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted)}
+  .meter-bar{
+    flex:1;height:5px;border-radius:3px;background:var(--panel-2);overflow:hidden;
+  }
+  .meter-fill{height:100%;background:var(--accent);width:0;transition:width .3s}
+  .meter.warn .meter-fill{background:#c58a1a}
+  .meter.full .meter-fill{background:var(--danger)}
+  .fullnotice{
+    max-width:760px;margin:0 auto 12px;padding:14px 16px;border-radius:12px;
+    border:1px solid var(--line);background:var(--panel);display:none;
+  }
+  .fullnotice.on{display:block}
+  .fullnotice p{margin:0 0 12px;font-size:14px}
+  .fullnotice .row{display:flex;gap:9px;flex-wrap:wrap}
+  .btn{
+    padding:9px 15px;border-radius:9px;border:1px solid var(--line);
+    background:var(--bg);cursor:pointer;font-size:14px;
+  }
+  .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+  .btn:disabled{opacity:.5;cursor:default}
+
+  /* expiry warning */
+  .short-mark{flex:none;color:var(--muted);opacity:.6;font-size:15px;line-height:1}
+  .warn-dot{
+    flex:none;border:0;background:transparent;cursor:pointer;padding:0 2px;
+    font-size:13px;line-height:1;
+  }
+  .conv.expiring{
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,#c58a1a 45%,transparent);
+  }
+  .conv.urgent{
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,#d4453a 55%,transparent),
+               0 0 9px color-mix(in srgb,#d4453a 32%,transparent);
+  }
+  #modal{
+    position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;
+    display:none;place-items:center;padding:24px;
+  }
+  #modal.on{display:grid}
+  .sheet{
+    width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);
+    border-radius:18px;padding:26px;
+  }
+  .sheet h3{margin:0 0 10px;font-size:18px}
+  .sheet p{margin:0 0 20px;color:var(--muted);font-size:14.5px;line-height:1.6}
+  .sheet .row{display:flex;gap:9px;flex-wrap:wrap}
+
+  /* attachments */
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+  .thumb{position:relative;width:62px;height:62px;border-radius:9px;overflow:hidden;border:1px solid var(--line)}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .thumb button{
+    position:absolute;top:2px;right:2px;width:17px;height:17px;border-radius:50%;
+    border:0;background:rgba(0,0,0,.62);color:#fff;cursor:pointer;
+    font-size:11px;line-height:17px;padding:0;
+  }
+  .thumb.busy{opacity:.5}
+  .msg-img{max-width:260px;border-radius:11px;margin:6px 0;display:block;border:1px solid var(--line)}
+  /* Documentation images are meant to be read, so give them more room. */
+  .msg.a .msg-img{max-width:min(560px,100%);margin:12px 0}
+  .img-missing{
+    padding:9px 13px;border-radius:9px;border:1px dashed var(--line);
+    color:var(--muted);font-size:13px;margin:10px 0;display:inline-block;
+  }
+
+  /* bottom notice */
+  #toast{
+    /* Anchored above the composer, never over it — covering the input box
+       would hide the very thing the user needs next. */
+    position:absolute;left:50%;transform:translate(-50%,14px);
+    bottom:calc(100% + 10px);z-index:20;max-width:min(560px,calc(100% - 32px));
+    padding:11px 16px;border-radius:11px;font-size:13.5px;line-height:1.5;
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    box-shadow:0 6px 22px rgba(0,0,0,.16);
+    opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;
+  }
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+  .composer{position:relative}
+  .attach{
+    width:32px;height:32px;flex:none;border-radius:8px;border:1px solid var(--line);
+    background:transparent;cursor:pointer;color:var(--muted);font-size:15px;
+  }
+  .attach:hover{color:var(--text)}
+
+  @media (max-width:860px){
+    aside{
+      position:fixed;inset:0 auto 0 0;z-index:30;transform:translateX(-100%);
+      transition:transform .22s ease;box-shadow:0 0 40px rgba(0,0,0,.18);
+    }
+    aside.open{transform:none}
+    .top{display:flex}
+    .thread-in{padding:22px 16px 16px}
+    .composer{padding:12px 16px 16px}
+    .bubble{max-width:90%}
+    #scrim{
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:29;
+    }
+    #scrim.on{display:block}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ Sign in ============ -->
+<div id="signin">
+  <div class="card">
+    <div class="logo">🛟</div>
+    <h1 data-t="title">IT-hjelp</h1>
+    <p data-t="sub">Logg inn med jobbkontoen din for å komme i gang.</p>
+    <button class="ms-btn" id="msBtn">
+      <svg width="17" height="17" viewBox="0 0 23 23" aria-hidden="true">
+        <path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/>
+        <path fill="#05a6f0" d="M1 12h10v10H1z"/><path fill="#ffba08" d="M12 12h10v10H12z"/>
+      </svg>
+      <span data-t="signin">Logg inn med Microsoft</span>
+    </button>
+    <div id="devWrap" style="display:none;margin-top:22px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="flex:1;height:1px;background:var(--line)"></div>
+        <span style="font-size:12px;color:var(--muted)" data-t="or">eller</span>
+        <div style="flex:1;height:1px;background:var(--line)"></div>
+      </div>
+      <div class="testbadge" data-t="testmode">TESTMODUS — ingen verifisering</div>
+      <input id="devEmail" type="email" autocomplete="email"
+             data-t-ph="emailph" placeholder="navn@frid.no"
+             style="width:100%;margin:10px 0;padding:12px 14px;border-radius:10px;
+                    border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit">
+      <button class="ms-btn" id="devBtn"><span data-t="testsignin">Logg inn for testing</span></button>
+    </div>
+    <div class="err" id="signinErr" style="display:none"></div>
+    <button class="lang" id="langA" style="margin:22px auto 0">English</button>
+  </div>
+</div>
+
+<!-- ============ App ============ -->
+<div id="modal">
+  <div class="sheet">
+    <h3 id="modalTitle">–</h3>
+    <p id="modalBody">–</p>
+    <div class="row">
+      <button class="btn primary" id="modalKeep" data-t="keep">Behold samtalen</button>
+      <button class="btn" id="modalIgnore" data-t="ignore">Ignorer</button>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <div id="scrim"></div>
+  <aside id="side">
+    <div class="side-top">
+      <button class="newchat" id="newBtn">
+        <span style="font-size:17px;line-height:1">＋</span>
+        <span data-t="new">Ny samtale</span>
+      </button>
+    </div>
+    <div class="convs">
+      <div class="conv-label" data-t="recent">Samtaler</div>
+      <div id="convList"></div>
+    </div>
+    <div class="side-foot">
+      <div class="avatar" id="ini">–</div>
+      <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="who">–</div>
+      <button class="lang" id="langB">EN</button>
+    </div>
+  </aside>
+
+  <main>
+    <div id="testBar" data-t="testbar">TESTMODUS — innlogging er ikke verifisert</div>
+    <div class="top">
+      <button class="burger" id="burger">☰</button>
+      <strong style="font-size:15px" data-t="title">IT-hjelp</strong>
+    </div>
+
+    <div class="thread" id="thread">
+      <div class="empty" id="empty">
+        <h2 data-t="greet">Hei! Hva kan jeg hjelpe deg med?</h2>
+        <p data-t="greetsub">Beskriv problemet med dine egne ord — du trenger ikke vite hva det heter.</p>
+        <div class="chips">
+          <button class="chip" data-t="ex1">Jeg får ikke opp e-posten min</button>
+          <button class="chip" data-t="ex2">PC-en er treg</button>
+          <button class="chip" data-t="ex3">Jeg får ikke logget inn</button>
+          <button class="chip" data-t="ex4">Skriveren virker ikke</button>
+        </div>
+      </div>
+      <div class="thread-in" id="msgs"></div>
+    </div>
+
+    <div class="composer">
+      <div id="toast"></div>
+      <div class="offline" id="offline" data-t="offline">Frakoblet — prøver å koble til igjen…</div>
+
+      <div class="fullnotice" id="fullNotice">
+        <p data-t="fulltext">Denne samtalen er blitt lang. Komprimer den for å fortsette — jeg lager et sammendrag og husker det viktigste.</p>
+        <div class="row">
+          <button class="btn primary" id="compactBtn" data-t="compact">Komprimer samtalen</button>
+          <button class="btn" id="newFromFull" data-t="newinstead">Start ny i stedet</button>
+        </div>
+      </div>
+
+      <div class="meter" id="meter">
+        <div class="meter-row">
+          <span data-t="ctx">Kontekst</span>
+          <div class="meter-bar"><div class="meter-fill" id="meterFill"></div></div>
+          <span id="meterPct">0%</span>
+        </div>
+      </div>
+
+      <div class="composer-in">
+        <div class="thumbs" id="thumbs"></div>
+        <div class="box">
+          <button class="attach" id="attachBtn" title="Legg ved bilde">🖼</button>
+          <input type="file" id="fileInput" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+          <textarea id="input" rows="1" data-t-ph="ph" placeholder="Skriv meldingen din…"></textarea>
+          <button class="send" id="send" disabled>↑</button>
+        </div>
+        <div class="hint" id="hint" data-t="hint">Enter sender · Shift+Enter gir ny linje</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* Server-injected flags. Replaced at serve time — see staff_chat() in web/app.py.
+   Deliberately not fetched: the test sign-in must appear even if a script error
+   or a slow request would otherwise stop the reveal from running. */
+window.HELIX_FLAGS = {"dev_login": false};
+</script>
+<script>
+"use strict";
+
+/* Surface script errors on the page. Without this a failure anywhere above
+   leaves a dead login screen with no clue why. */
+window.addEventListener("error", ev => {
+  const box = document.getElementById("signinErr");
+  if(box){
+    box.textContent = "Script error: " + (ev.message || "unknown");
+    box.style.display = "block";
+  }
+});
+
+/* ---------------- i18n ---------------- */
+const I18N = {
+  nb:{
+    title:"IT-hjelp",
+    sub:"Logg inn med jobbkontoen din for å komme i gang.",
+    signin:"Logg inn med Microsoft",
+    new:"Ny samtale", recent:"Samtaler",
+    greet:"Hei! Hva kan jeg hjelpe deg med?",
+    greetsub:"Beskriv problemet med dine egne ord — du trenger ikke vite hva det heter.",
+    ex1:"Jeg får ikke opp e-posten min", ex2:"PC-en er treg",
+    ex3:"Jeg får ikke logget inn", ex4:"Skriveren virker ikke",
+    ph:"Skriv meldingen din…",
+    hint:"Enter sender · Shift+Enter gir ny linje",
+    offline:"Frakoblet — prøver å koble til igjen…",
+    err_login:"Innloggingen mislyktes. Prøv igjen.",
+    err_group:"Du har ikke tilgang til denne tjenesten.",
+    err_cfg:"Microsoft-innlogging er ikke satt opp ennå.",
+    del:"Slette denne samtalen?",
+    copy:"Kopier", copied:"Kopiert",
+    untitled:"Ny samtale", other:"English",
+    or:"eller", testmode:"TESTMODUS — ingen verifisering",
+    testbar:"TESTMODUS — innlogging er ikke verifisert",
+    testsignin:"Logg inn for testing", emailph:"navn@frid.no",
+    err_email:"Skriv inn en gyldig e-postadresse.",
+    ctx:"Kontekst",
+    fulltext:"Denne samtalen er blitt lang. Komprimer den for å fortsette — jeg lager et sammendrag og husker det viktigste.",
+    compact:"Komprimer samtalen", compacting:"Komprimerer…",
+    newinstead:"Start ny i stedet",
+    compacted:"Samtalen er komprimert. Du kan fortsette.",
+    compactfail:"Klarte ikke komprimere. Prøv å starte en ny samtale.",
+    retention:d=>`Samtaler slettes automatisk etter ${d} dager.`,
+    expTitle:"Denne samtalen slettes snart",
+    expBody:d=>d<=0
+      ? "Denne samtalen slettes i dag. Vil du beholde den, må du komprimere den nå."
+      : `Denne samtalen slettes om ${d} ${d===1?"dag":"dager"}. Vil du hindre at den slettes automatisk, må du komprimere den — da beholdes innholdet som et sammendrag.`,
+    keep:"Behold samtalen", ignore:"Ignorer",
+    expTip:d=>`Slettes om ${d} ${d===1?"dag":"dager"}`,
+    kept:"Samtalen er komprimert og beholdes.",
+    attach:"Legg ved bilde", imgtoobig:"Bildet er for stort (maks 5 MB).",
+    imgbad:"Kun bilder (PNG, JPEG, GIF, WebP).", imgfail:"Kunne ikke laste opp bildet.",
+    imgsent:"[bilde]",
+    tooshort:d=>`Det er ikke noe konkret svar å ta vare på her ennå, så samtalen kan ikke beholdes. Den slettes automatisk etter ${d} dager uten aktivitet.`,
+    tooshortShort:"Ikke noe svar å ta vare på ennå — slettes automatisk senere.",
+    ratelimit:"Du har sendt mange meldinger på kort tid. Vent litt, så kan du sende igjen.",
+    imgmissing:"Bildet er ikke tilgjengelig"
+  },
+  en:{
+    title:"IT Support",
+    sub:"Sign in with your work account to get started.",
+    signin:"Sign in with Microsoft",
+    new:"New chat", recent:"Chats",
+    greet:"Hi! What can I help you with?",
+    greetsub:"Describe the problem in your own words — you don't need to know what it's called.",
+    ex1:"I can't open my email", ex2:"My PC is slow",
+    ex3:"I can't sign in", ex4:"The printer isn't working",
+    ph:"Type your message…",
+    hint:"Enter to send · Shift+Enter for a new line",
+    offline:"Disconnected — trying to reconnect…",
+    err_login:"Sign-in failed. Please try again.",
+    err_group:"You don't have access to this service.",
+    err_cfg:"Microsoft sign-in isn't configured yet.",
+    del:"Delete this conversation?",
+    copy:"Copy", copied:"Copied",
+    untitled:"New chat", other:"Norsk",
+    or:"or", testmode:"TEST MODE — no verification",
+    testbar:"TEST MODE — sign-in is not verified",
+    testsignin:"Sign in for testing", emailph:"name@frid.no",
+    err_email:"Enter a valid email address.",
+    ctx:"Context",
+    fulltext:"This conversation has grown long. Compact it to continue — I'll summarise and keep what matters.",
+    compact:"Compact conversation", compacting:"Compacting…",
+    newinstead:"Start a new one instead",
+    compacted:"Conversation compacted. You can continue.",
+    compactfail:"Couldn't compact. Try starting a new conversation.",
+    retention:d=>`Conversations are deleted automatically after ${d} days.`,
+    expTitle:"This chat will be deleted soon",
+    expBody:d=>d<=0
+      ? "This chat will be deleted today. To keep it, compact it now."
+      : `This chat will be deleted in ${d} ${d===1?"day":"days"}. To stop it being deleted automatically, compact it — the content is kept as a summary.`,
+    keep:"Keep this chat", ignore:"Ignore",
+    expTip:d=>`Deleted in ${d} ${d===1?"day":"days"}`,
+    kept:"Chat compacted and kept.",
+    attach:"Attach image", imgtoobig:"Image is too large (max 5 MB).",
+    imgbad:"Images only (PNG, JPEG, GIF, WebP).", imgfail:"Could not upload the image.",
+    imgsent:"[image]",
+    tooshort:d=>`There's no real answer to keep here yet, so this chat can't be kept. It's deleted automatically after ${d} days without activity.`,
+    tooshortShort:"No answer to keep yet — deleted automatically later.",
+    ratelimit:"You've sent a lot of messages in a short time. Wait a moment and try again.",
+    imgmissing:"Image unavailable"
+  }
+};
+/* Norwegian is the default; English only if saved or the browser asks for it.
+   Note the parentheses — `a || b ? x : y` would parse as `(a||b) ? x : y`,
+   which would flip every saved Norwegian preference to English. */
+const _saved = localStorage.getItem("helix_lang");
+let lang = _saved || ((navigator.language || "nb").toLowerCase().startsWith("en") ? "en" : "nb");
+if(!I18N[lang]) lang = "nb";
+const t = (k, ...a) => {
+  const v = I18N[lang][k];
+  return typeof v === "function" ? v(...a) : (v ?? k);
+};
+
+function applyLang(){
+  document.documentElement.lang = lang === "nb" ? "nb" : "en";
+  document.querySelectorAll("[data-t]").forEach(el => {
+    const v = I18N[lang][el.dataset.t];
+    if(typeof v === "string") el.textContent = v;
+  });
+  document.querySelectorAll("[data-t-ph]").forEach(el => el.placeholder = t(el.dataset.tPh));
+  langA.textContent = t("other");
+  langB.textContent = lang === "nb" ? "EN" : "NO";
+  localStorage.setItem("helix_lang", lang);
+  renderConvs();
+}
+function toggleLang(){ lang = lang === "nb" ? "en" : "nb"; applyLang(); }
+
+/* ---------------- helpers ---------------- */
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* Minimal, safe markdown: escape the whole string first, then re-introduce only
+   code blocks, inline code and bold. Everything the agent sends is treated as
+   text — no HTML from the model ever reaches the DOM.
+
+   The code-block placeholder is a private-use sentinel, not a bare number: a
+   numeric placeholder would also match ordinary prose ("you have 3 options")
+   and silently turn it into a code block. */
+const SENT = "";
+function render(text){
+  const blocks = [];
+  let s = esc(text).replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lg, code) => {
+    blocks.push(code.replace(/\n$/, ""));
+    return SENT + (blocks.length - 1) + SENT;
+  });
+  // ![alt](asset:name) -> a placeholder the auth-aware loader fills in.
+  // The name charset is restricted here too, so nothing else can be smuggled
+  // into the attribute.
+  s = s.replace(/!\[([^\]]*)\]\(asset:([A-Za-z0-9._-]{1,80})\)/g,
+    (_, alt, name) => `<img class="msg-img" data-asset="${name}" alt="${alt}">`);
+  // The model sometimes writes the real filesystem path it was given instead of
+  // the asset: form. Accept that too — otherwise the user sees a raw local path
+  // and no picture. Only the basename is kept, so nothing outside assets/ can
+  // be requested.
+  s = s.replace(/!\[([^\]]*)\]\([^)]*[\\/]assets[\\/]([A-Za-z0-9._-]{1,80})\)/g,
+    (_, alt, name) => `<img class="msg-img" data-asset="${name}" alt="${alt}">`);
+  // Any image markup left over refers to nothing real (e.g. "(bilde over)").
+  // Drop it rather than showing the user raw markdown.
+  s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, "");
+  s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>")
+       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  return s.replace(new RegExp(SENT + "(\\d+)" + SENT, "g"), (_, i) =>
+    `<pre><code>${blocks[i]}</code></pre><button class="copy" data-code="${i}">${t("copy")}</button>`
+  );
+}
+
+/* ---------------- state ---------------- */
+let token = null, ws = null, convId = null, convs = [], busy = false;
+let stream = null, retry = 0, codes = [];
+
+/* ---------------- sign-in ---------------- */
+(function boot(){
+  const frag = new URLSearchParams(location.hash.slice(1));
+  const stored = sessionStorage.getItem("helix_token");
+  const qs = new URLSearchParams(location.search);
+
+  if(qs.get("login_error")){
+    const e = $("signinErr");
+    e.textContent = qs.get("login_error") === "2" ? t("err_group") : t("err_login");
+    e.style.display = "block";
+    history.replaceState(null,"",location.pathname);
+  }
+  if(frag.get("token")){
+    token = frag.get("token");
+    sessionStorage.setItem("helix_token", token);
+    history.replaceState(null,"",location.pathname);
+  } else if(stored){
+    token = stored;
+  }
+  applyLang();
+  if(token) start(); else $("signin").style.display = "grid";
+})();
+
+/* Test sign-in — shown when the server injected the flag. Synchronous, so it
+   cannot be defeated by a failed or slow fetch. */
+if(window.HELIX_FLAGS && window.HELIX_FLAGS.dev_login){
+  $("devWrap").style.display = "block";
+}
+
+$("devBtn").onclick = async () => {
+  const email = $("devEmail").value.trim();
+  const err = $("signinErr");
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+    err.textContent = t("err_email"); err.style.display = "block"; return;
+  }
+  try{
+    const r = await fetch("/api/auth/dev-login", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ email })
+    });
+    if(!r.ok){
+      /* Show what the server said when it says something useful. A refused
+         domain needs to name the domains that work — "try again" sends you
+         round the same loop. */
+      let detail = "";
+      try{ detail = (await r.json()).detail || ""; }catch(_){}
+      err.textContent = (typeof detail === "string" && detail) ? detail : t("err_login");
+      err.style.display = "block";
+      return;
+    }
+    const j = await r.json();
+    token = j.token; sessionStorage.setItem("helix_token", token);
+    err.style.display = "none";
+    start();
+  }catch(e){
+    err.textContent = t("err_login"); err.style.display = "block";
+  }
+};
+$("devEmail").onkeydown = e => { if(e.key === "Enter") $("devBtn").click(); };
+
+$("msBtn").onclick = async () => {
+  try{
+    const r = await fetch("/api/auth/microsoft/enabled");
+    const j = await r.json();
+    if(!j.enabled){
+      const e = $("signinErr"); e.textContent = t("err_cfg"); e.style.display = "block";
+      return;
+    }
+  }catch(_){}
+  location.href = "/api/auth/microsoft/login";
+};
+$("langA").onclick = toggleLang;
+$("langB").onclick = toggleLang;
+
+/* ---------------- app ---------------- */
+async function start(){
+  $("signin").style.display = "none";
+  $("app").classList.add("on");
+  try{
+    const me = await api("/api/me");
+    $("who").textContent = me.name || "";
+    $("ini").textContent = (me.name||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
+    if(me.test_mode) $("testBar").classList.add("on");
+    if(me.retention_days){
+      retentionDays = me.retention_days;
+      $("hint").title = t("retention", me.retention_days);
+    }
+  }catch(_){}
+  await loadConvs();
+  convId = convs.length ? convs[0].id : await newId();
+  await openConv(convId);
+  connect();
+}
+
+async function api(path, opts={}){
+  const r = await fetch(path, {
+    ...opts,
+    headers:{ "Authorization":"Bearer "+token, "Content-Type":"application/json", ...(opts.headers||{}) }
+  });
+  if(r.status === 401){ signOut(); throw new Error("unauthorized"); }
+  if(!r.ok) throw new Error("http " + r.status);   // status is read by callers
+  return r.json();
+}
+function signOut(){
+  sessionStorage.removeItem("helix_token"); token = null;
+  $("app").classList.remove("on"); $("signin").style.display = "grid";
+}
+
+async function loadConvs(){
+  try{ convs = (await api("/api/me/conversations")).conversations || []; }
+  catch(_){ convs = []; }
+  renderConvs();
+}
+async function newId(){ return (await api("/api/me/conversations", {method:"POST"})).id; }
+
+function renderConvs(){
+  const box = $("convList");
+  box.innerHTML = "";
+  convs.forEach(c => {
+    const b = document.createElement("button");
+    const left = c.expires_in_days;
+    // Amber from a week out, red (with halo) in the last two days — but scaled to
+    // the window, because a pupil's is 5 days: a fixed 7-day amber would never
+    // fire for them and their first warning would be the red one.
+    const soon = left !== null && left !== undefined && left <= warnAt();
+    const urgent = left !== null && left !== undefined && left <= urgentAt();
+    b.className = "conv" + (c.id === convId ? " sel" : "") +
+                  (urgent ? " urgent" : soon ? " expiring" : "");
+    if(soon){
+      const w = document.createElement("button");
+      w.className = "warn-dot";
+      w.textContent = urgent ? "🔴" : "🟡";
+      w.title = t("expTip", left);
+      w.onclick = ev => { ev.stopPropagation(); openExpiry(c); };
+      b.appendChild(w);
+    }
+    // Persistent marker: the toast fades, this doesn't.
+    if(c.can_keep === false && c.message_count){
+      const m = document.createElement("span");
+      m.className = "short-mark";
+      m.textContent = "◦";
+      m.title = t("tooshortShort");
+      b.appendChild(m);
+    }
+    const s = document.createElement("span");
+    s.textContent = c.title || t("untitled");
+    b.appendChild(s);
+    const d = document.createElement("button");
+    d.className = "del"; d.textContent = "×"; d.title = t("del");
+    d.onclick = async ev => {
+      ev.stopPropagation();
+      if(!confirm(t("del"))) return;
+      try{ await api("/api/me/conversations/"+c.id, {method:"DELETE"}); }catch(_){}
+      await loadConvs();
+      if(c.id === convId){ convId = convs.length ? convs[0].id : await newId(); await openConv(convId); reconnect(); }
+    };
+    b.appendChild(d);
+    b.onclick = async () => {
+      if(c.id === convId) return;
+      const leaving = convId;
+      convId = c.id;
+      await openConv(convId); reconnect(); closeSide();
+      warnIfShort(leaving, {force:true});     // they're walking away from it
+    };
+    box.appendChild(b);
+  });
+}
+
+async function openConv(id){
+  $("msgs").innerHTML = ""; codes = [];
+  let msgs = [];
+  try{ msgs = (await api(`/api/me/conversations/${id}/messages`)).messages || []; }catch(_){}
+  msgs.forEach(m => add(m.role === "user" ? "u" : "a", m.content || ""));
+  $("empty").style.display = msgs.length ? "none" : "block";
+  renderConvs();
+  await refreshCtx();
+  scroll();
+
+  // Re-warn on open when deletion is actually close, even if already warned.
+  const c = convs.find(x => x.id === id);
+  if(c && c.can_keep === false && c.expires_in_days !== null &&
+     c.expires_in_days !== undefined && c.expires_in_days <= warnAt()){
+    warnIfShort(id, {force:true});
+  }
+}
+
+/* ---------------- messages ---------------- */
+function add(kind, text){
+  const wrap = document.createElement("div");
+  wrap.className = "msg " + kind;
+  const b = document.createElement("div");
+  b.className = "bubble";
+  if(kind === "a"){ b.innerHTML = render(text); hookCopy(b, text); hookAssets(b); }
+  else b.textContent = text;
+  wrap.appendChild(b);
+  $("msgs").appendChild(wrap);
+  return b;
+}
+/* Documentation images can't be loaded by <img src> alone — the endpoint needs
+   an Authorization header. Fetch each one and swap in an object URL. */
+const assetCache = new Map();
+async function hookAssets(el){
+  for(const img of el.querySelectorAll("img[data-asset]:not([src])")){
+    const name = img.dataset.asset;
+    try{
+      if(!assetCache.has(name)){
+        const r = await fetch("/api/assets/" + encodeURIComponent(name),
+                              {headers:{Authorization:"Bearer "+token}});
+        if(!r.ok) throw new Error("http " + r.status);
+        assetCache.set(name, URL.createObjectURL(await r.blob()));
+      }
+      img.src = assetCache.get(name);
+      img.onclick = () => window.open(img.src, "_blank");
+      img.style.cursor = "zoom-in";
+    }catch(_){
+      img.replaceWith(Object.assign(document.createElement("div"),
+        {className:"img-missing", textContent:"🖼 " + t("imgmissing")}));
+    }
+  }
+  scroll();
+}
+
+function hookCopy(el, source){
+  const blocks = [...source.matchAll(/```\w*\n?([\s\S]*?)```/g)].map(m => m[1].replace(/\n$/,""));
+  el.querySelectorAll(".copy").forEach(btn => {
+    btn.onclick = () => {
+      navigator.clipboard.writeText(blocks[+btn.dataset.code] || "");
+      btn.textContent = t("copied");
+      setTimeout(() => btn.textContent = t("copy"), 1400);
+    };
+  });
+}
+const scroll = () => { const th = $("thread"); th.scrollTop = th.scrollHeight; };
+
+/* ---------------- context meter ---------------- */
+let ctxBlocked = false;
+
+function showCtx(st){
+  const m = $("meter");
+  if(!st || !st.window || !st.percent){ m.classList.remove("on"); return; }
+  const p = Math.min(st.percent, 100);
+  m.classList.add("on");
+  m.classList.toggle("warn", p >= 55 && p < 75);
+  m.classList.toggle("full", p >= 75);
+  $("meterFill").style.width = p + "%";
+  $("meterPct").textContent = Math.round(p) + "%";
+
+  ctxBlocked = !!st.blocked;
+  $("fullNotice").classList.toggle("on", ctxBlocked);
+  input.disabled = ctxBlocked;
+  input.placeholder = ctxBlocked ? "" : t("ph");
+  $("send").disabled = ctxBlocked || busy || !input.value.trim();
+}
+
+async function refreshCtx(){
+  if(!convId) return;
+  try{ showCtx(await api(`/api/me/conversations/${convId}/context`)); }
+  catch(_){}
+}
+
+$("compactBtn").onclick = async () => {
+  const b = $("compactBtn");
+  b.disabled = true; b.textContent = t("compacting");
+  try{
+    await api(`/api/me/conversations/${convId}/compact`, {method:"POST"});
+    add("a", "✓ " + t("compacted"));
+    ctxBlocked = false;
+    $("fullNotice").classList.remove("on");
+    await refreshCtx();
+    reconnect();
+    scroll();
+  }catch(_){
+    add("a", "⚠️ " + t("compactfail"));
+    scroll();
+  }finally{
+    b.disabled = false; b.textContent = t("compact");
+  }
+};
+$("newFromFull").onclick = () => $("newBtn").click();
+
+/* ---------------- bottom notice ---------------- */
+let retentionDays = 30;
+/* Warning thresholds as a share of the retention window rather than fixed days,
+   so they land sensibly whether the window is 30 days or 5. Declared as
+   functions, not consts: renderConvs sits above this line and calls them. */
+function warnAt(){   return Math.max(2, Math.min(7, Math.ceil(retentionDays * 0.4))); }
+function urgentAt(){ return Math.max(1, Math.ceil(retentionDays * 0.15)); }
+const warnedShort = new Set();   // warn once per conversation per session
+
+/** Tell the user a conversation can't be pinned, at the moment it matters:
+ *  right after they get an answer, or when they navigate away from it. */
+function warnIfShort(id, {force = false} = {}){
+  if(!id) return;
+  const c = convs.find(x => x.id === id);
+  if(!c || c.can_keep !== false) return;
+  if(!c.message_count) return;                 // empty chat — nothing to lose yet
+  if(!force && warnedShort.has(id)) return;
+  warnedShort.add(id);
+  toast(t("tooshort", retentionDays), 14000);
+}
+
+let toastTimer = null;
+function toast(msg, ms = 5200){
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.add("on");
+  el.style.pointerEvents = "auto";
+  el.onclick = () => { el.classList.remove("on"); clearTimeout(toastTimer); };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("on"), ms);
+}
+
+/* ---------------- expiry warning ---------------- */
+let expiringConv = null;
+
+function openExpiry(c){
+  // Too short to be worth keeping — say so plainly instead of offering a
+  // button that would fail.
+  if(c.can_keep === false){ toast(t("tooshort", retentionDays), 8000); return; }
+  expiringConv = c;
+  $("modalTitle").textContent = t("expTitle");
+  $("modalBody").textContent  = t("expBody", c.expires_in_days);
+  $("modalKeep").disabled = false;
+  $("modalKeep").textContent = t("keep");
+  $("modal").classList.add("on");
+}
+function closeModal(){ $("modal").classList.remove("on"); expiringConv = null; }
+
+$("modalIgnore").onclick = closeModal;          // does nothing; chat still expires
+$("modal").onclick = e => { if(e.target.id === "modal") closeModal(); };
+document.addEventListener("keydown", e => { if(e.key === "Escape") closeModal(); });
+
+$("modalKeep").onclick = async () => {
+  if(!expiringConv) return;
+  const btn = $("modalKeep");
+  btn.disabled = true; btn.textContent = t("compacting");
+  const id = expiringConv.id;
+  try{
+    const r = await api(`/api/me/conversations/${id}/compact`, {method:"POST"});
+    closeModal();
+    await loadConvs();
+    if(id === convId){
+      add("a", "✓ " + t("kept"));
+      // The server wrote the solution into this thread — show it now rather than
+      // waiting for the next time they open the conversation.
+      if(r && r.in_thread && r.summary) add("a", r.summary);
+      await refreshCtx(); reconnect(); scroll();
+    }
+  }catch(e){
+    closeModal();
+    toast(String(e).includes("409") ? t("tooshort", retentionDays) : t("compactfail"), 8000);
+  }
+};
+
+/* ---------------- websocket ---------------- */
+function connect(){
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws/chat`);
+  ws.onopen = () => {
+    retry = 0; $("offline").classList.remove("on");
+    ws.send(JSON.stringify({ token, conversation_id: convId }));
+  };
+  ws.onmessage = ev => {
+    const d = JSON.parse(ev.data);
+    if(d.type === "context_full"){
+      // Server refused the turn: window is full. Drop the pending bubble and
+      // surface the compact prompt instead.
+      if(stream && stream.parentElement) stream.parentElement.remove();
+      finish(); showCtx(d.context); scroll(); return;
+    }
+    if(d.error){
+      finish();
+      add("a", "⚠️ " + (d.code === "rate_limited" ? t("ratelimit") : d.error));
+      scroll(); return;
+    }
+    if(d.type === "history") return;               // we load history over REST
+    if(d.chunk){
+      if(!stream){ stream = add("a",""); stream.dataset.raw = ""; }
+      stream.dataset.raw += d.chunk;
+      stream.innerHTML = render(stream.dataset.raw);
+      scroll();
+    }
+    if(d.done){
+      if(stream){ hookCopy(stream, stream.dataset.raw || ""); hookAssets(stream); }
+      finish();
+      if(d.context) showCtx(d.context);
+      // Refresh titles, then warn if this chat still can't be kept — this is
+      // the moment the user has their answer and may close it.
+      loadConvs().then(() => warnIfShort(convId));
+    }
+  };
+  ws.onclose = () => {
+    $("offline").classList.add("on");
+    retry = Math.min(retry+1, 6);
+    setTimeout(connect, 600 * Math.pow(2, retry-1));
+  };
+  ws.onerror = () => {};
+}
+function reconnect(){ if(ws){ ws.onclose = null; ws.close(); } connect(); }
+function finish(){ busy = false; stream = null; $("send").disabled = !$("input").value.trim(); }
+
+/* ---------------- composer ---------------- */
+const input = $("input");
+input.oninput = () => {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 190) + "px";
+  $("send").disabled = ctxBlocked || busy || !input.value.trim();
+};
+input.onkeydown = e => {
+  if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(); }
+};
+$("send").onclick = send;
+
+function send(){
+  const text = input.value.trim();
+  const ready = pending.filter(p => p.id && !p.uploading);
+  if((!text && !ready.length) || busy || ctxBlocked) return;
+  if(!ws || ws.readyState !== 1){ $("offline").classList.add("on"); return; }
+  $("empty").style.display = "none";
+
+  // Echo the user's turn, images first
+  const wrap = document.createElement("div");
+  wrap.className = "msg u";
+  const bub = document.createElement("div");
+  bub.className = "bubble";
+  ready.forEach(p => {
+    const im = document.createElement("img");
+    im.className = "msg-img"; im.src = p.url; bub.appendChild(im);
+  });
+  if(text) bub.appendChild(document.createTextNode(text));
+  wrap.appendChild(bub); $("msgs").appendChild(wrap);
+
+  const ids = ready.map(p => p.id);
+  pending = []; renderThumbs();
+  input.value = ""; input.style.height = "auto";
+  busy = true; $("send").disabled = true;
+  const d = add("a", "");
+  d.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
+  stream = d; stream.dataset.raw = "";
+  ws.send(JSON.stringify({ message: text, attachments: ids }));
+  scroll();
+}
+
+/* ---------------- image attachments ---------------- */
+let pending = [];   // {id, url, uploading}
+
+function renderThumbs(){
+  const box = $("thumbs");
+  box.innerHTML = "";
+  pending.forEach((p, i) => {
+    const d = document.createElement("div");
+    d.className = "thumb" + (p.uploading ? " busy" : "");
+    const img = document.createElement("img");
+    img.src = p.url; d.appendChild(img);
+    const x = document.createElement("button");
+    x.textContent = "×";
+    x.onclick = () => { URL.revokeObjectURL(p.url); pending.splice(i,1); renderThumbs(); };
+    d.appendChild(x);
+    box.appendChild(d);
+  });
+  $("send").disabled = ctxBlocked || busy ||
+    (!input.value.trim() && !pending.some(p => !p.uploading));
+}
+
+function flash(msg){
+  const e = $("offline");
+  e.textContent = msg; e.classList.add("on");
+  setTimeout(() => { e.textContent = t("offline"); e.classList.remove("on"); }, 3500);
+}
+
+async function upload(file){
+  if(!/^image\//.test(file.type)) { flash(t("imgbad")); return; }
+  if(file.size > 5*1024*1024)     { flash(t("imgtoobig")); return; }
+  const entry = { id:null, url:URL.createObjectURL(file), uploading:true };
+  pending.push(entry); renderThumbs();
+  try{
+    const fd = new FormData(); fd.append("file", file, file.name || "paste.png");
+    const r = await fetch("/api/me/upload", {
+      method:"POST", headers:{ "Authorization":"Bearer "+token }, body: fd
+    });
+    if(!r.ok) throw new Error(await r.text());
+    entry.id = (await r.json()).id;
+    entry.uploading = false;
+  }catch(_){
+    const i = pending.indexOf(entry);
+    if(i >= 0) pending.splice(i,1);
+    flash(t("imgfail"));
+  }
+  renderThumbs();
+}
+
+input.addEventListener("paste", e => {
+  const items = [...(e.clipboardData?.items || [])].filter(i => i.type.startsWith("image/"));
+  if(!items.length) return;
+  e.preventDefault();
+  items.forEach(i => { const f = i.getAsFile(); if(f) upload(f); });
+});
+$("attachBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = e => { [...e.target.files].forEach(upload); e.target.value = ""; };
+
+["dragover","drop"].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));
+document.addEventListener("drop", e => {
+  const files = [...(e.dataTransfer?.files || [])].filter(f => f.type.startsWith("image/"));
+  files.forEach(upload);
+});
+
+document.querySelectorAll(".chip").forEach(c => c.onclick = () => {
+  input.value = c.textContent; input.oninput(); input.focus();
+});
+
+$("newBtn").onclick = async () => {
+  const leaving = convId;
+  convId = await newId();
+  $("msgs").innerHTML = ""; $("empty").style.display = "block";
+  showCtx(null); ctxBlocked = false;
+  $("fullNotice").classList.remove("on");
+  input.disabled = false; input.placeholder = t("ph");
+  renderConvs(); reconnect(); closeSide(); input.focus();
+  warnIfShort(leaving, {force:true});
+};
+
+/* ---------------- mobile ---------------- */
+const side = $("side"), scrim = $("scrim");
+const closeSide = () => { side.classList.remove("open"); scrim.classList.remove("on"); };
+$("burger").onclick = () => { side.classList.toggle("open"); scrim.classList.toggle("on"); };
+scrim.onclick = closeSide;
+</script>
+</body>
+</html>

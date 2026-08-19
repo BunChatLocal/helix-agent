@@ -18,7 +18,7 @@ import aiosqlite
 
 logger = logging.getLogger("helix.session")
 
-from core.config import get_config
+from core.config import TIER_STUDENT, get_config
 
 SESSIONS_DIR = Path.home() / ".helix" / "sessions"
 
@@ -57,6 +57,22 @@ ALTER TABLE sessions ADD COLUMN context_window INTEGER NOT NULL DEFAULT 0;
 
 MIGRATE_ADD_MAX_OUTPUT_TOKENS = """
 ALTER TABLE sessions ADD COLUMN max_output_tokens INTEGER NOT NULL DEFAULT 0;
+"""
+
+# How much context the MOST RECENT turn consumed. token_count is cumulative
+# across the session's lifetime, so it can't answer "how full is the window" —
+# this can.
+MIGRATE_ADD_LAST_CONTEXT_TOKENS = """
+ALTER TABLE sessions ADD COLUMN last_context_tokens INTEGER NOT NULL DEFAULT 0;
+"""
+
+# Permission tier of whoever owns this conversation — see ROLES.md. Held on the
+# session rather than derived from the peer key, so retention can treat a pupil's
+# conversation differently without changing the key format and orphaning every
+# conversation that already exists. NULL means "signed in before tiers existed";
+# it is filled in the next time they connect.
+MIGRATE_ADD_TIER = """
+ALTER TABLE sessions ADD COLUMN tier TEXT;
 """
 
 # Number of user/assistant exchange pairs to carry forward on model switch
@@ -111,7 +127,37 @@ class SessionManager:
         self._db: Optional[aiosqlite.Connection] = None
         self._lock = asyncio.Lock()
 
+    def _backup_db(self, keep: int = 7) -> None:
+        """Snapshot sessions.db before migrations run.
+
+        Conversations must survive code updates. The data already lives outside
+        the repo (~/.helix), so `git pull` can't touch it — the real risk is a
+        schema migration or a crash mid-write corrupting the file. This keeps
+        the last `keep` daily snapshots next to it.
+        """
+        src = _db_path(self.agent_id)
+        if not src.exists() or src.stat().st_size == 0:
+            return
+        try:
+            backup_dir = src.parent / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(_tz()).strftime("%Y%m%d")
+            dest = backup_dir / f"sessions-{stamp}.db"
+            if not dest.exists():
+                # sqlite3's backup API copies a consistent snapshot even if
+                # another connection is mid-write; a file copy would not.
+                with sqlite3.connect(src) as s, sqlite3.connect(dest) as d:
+                    s.backup(d)
+                logger.info(f"Session database backed up to {dest.name}")
+            snaps = sorted(backup_dir.glob("sessions-*.db"))
+            for old in snaps[:-keep]:
+                old.unlink(missing_ok=True)
+        except Exception as exc:
+            # Never let a backup problem stop the agent from starting.
+            logger.warning(f"Could not back up session database: {exc}")
+
     async def start(self) -> None:
+        self._backup_db()
         self._db = await aiosqlite.connect(_db_path(self.agent_id))
         self._db.row_factory = aiosqlite.Row
         await self._db.execute(CREATE_SESSIONS)
@@ -120,7 +166,8 @@ class SessionManager:
         # Catch only OperationalError (SQLite's "duplicate column" signal) and
         # log everything else so real schema problems are not silently swallowed.
         for migration in (MIGRATE_ADD_CLAUDE_SESSION_ID, MIGRATE_ADD_PENDING_CONTEXT,
-                          MIGRATE_ADD_CONTEXT_WINDOW, MIGRATE_ADD_MAX_OUTPUT_TOKENS):
+                          MIGRATE_ADD_CONTEXT_WINDOW, MIGRATE_ADD_MAX_OUTPUT_TOKENS,
+                          MIGRATE_ADD_LAST_CONTEXT_TOKENS, MIGRATE_ADD_TIER):
             try:
                 await self._db.execute(migration)
             except sqlite3.OperationalError:
@@ -139,7 +186,15 @@ class SessionManager:
         channel: str,
         peer: str,
         model: Optional[str] = None,
+        tier: Optional[str] = None,
     ) -> dict:
+        """Find or open the session for (channel, peer).
+
+        `tier` is the caller's permission tier, where the caller is a signed-in
+        person. Pass None from anywhere that has no notion of one — heartbeats,
+        cron jobs, the admin session endpoints — and the stored value is left
+        alone rather than cleared.
+        """
         cfg = get_config()
         if model is None:
             model = cfg.models.default_id
@@ -154,8 +209,15 @@ class SessionManager:
 
             if row:
                 session = dict(row)
-                # Check if daily reset is due
-                if _reset_due(session["last_active"], cfg):
+                # Daily reset exists so a single always-on personal session
+                # doesn't accumulate context forever. It must NOT apply to the
+                # staff web chat, where peers are "<user>|<conversation-id>":
+                # those are conversations the user creates, revisits and deletes
+                # deliberately, and are governed by retention_days instead.
+                # Without this guard, simply opening yesterday's conversation
+                # deletes it and archives the transcript.
+                explicit_conversation = "|" in str(session.get("peer", ""))
+                if not explicit_conversation and _reset_due(session["last_active"], cfg):
                     await self._db.execute(
                         "DELETE FROM sessions WHERE session_id=?",
                         (session["session_id"],),
@@ -176,9 +238,9 @@ class SessionManager:
                 now = _now_ts()
                 await self._db.execute(
                     """INSERT INTO sessions
-                       (session_id, agent_id, channel, peer, created_at, last_active, model, claude_session_id)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)""",
-                    (session_id, self.agent_id, channel, peer, now, now, model),
+                       (session_id, agent_id, channel, peer, created_at, last_active, model, claude_session_id, tier)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)""",
+                    (session_id, self.agent_id, channel, peer, now, now, model, tier),
                 )
                 await self._db.commit()
                 session = {
@@ -192,7 +254,20 @@ class SessionManager:
                     "compacted": 0,
                     "token_count": 0,
                     "claude_session_id": None,
+                    "tier": tier,
                 }
+
+            elif tier and session.get("tier") != tier:
+                # Labels conversations that predate the tier column, and follows
+                # anyone whose tier legitimately changes — a pupil who leaves and
+                # comes back as an employee keeps their conversations but not
+                # their old permissions.
+                await self._db.execute(
+                    "UPDATE sessions SET tier=? WHERE session_id=?",
+                    (tier, session["session_id"]),
+                )
+                await self._db.commit()
+                session["tier"] = tier
 
             return session
 
@@ -201,19 +276,29 @@ class SessionManager:
         token_delta = 0
         context_window = 0
         max_output_tokens = 0
+        last_context = 0
         if usage:
             token_delta = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
             context_window = usage.get("context_window", 0)
             max_output_tokens = usage.get("max_output_tokens", 0)
+            # Everything the model had to read this turn — fresh input plus what
+            # came back from cache. This is the session's current occupancy of
+            # the context window.
+            last_context = (
+                usage.get("input_tokens", 0)
+                + usage.get("cache_read_input_tokens", 0)
+            )
 
         async with self._lock:
             if context_window:
                 await self._db.execute(
                     """UPDATE sessions
                        SET last_active=?, token_count=token_count+?,
-                           context_window=?, max_output_tokens=?
+                           context_window=?, max_output_tokens=?,
+                           last_context_tokens=?
                        WHERE session_id=?""",
-                    (_now_ts(), token_delta, context_window, max_output_tokens, session_id),
+                    (_now_ts(), token_delta, context_window, max_output_tokens,
+                     last_context, session_id),
                 )
             else:
                 await self._db.execute(
@@ -302,11 +387,30 @@ class SessionManager:
             "[End of compacted context. Continue the conversation from here.]"
         )
         async with self._lock:
+            # last_active is bumped too: retention deletes by inactivity, and
+            # compacting is how a user says "keep this conversation". Without
+            # this the UI would offer to save a chat and then delete it anyway.
+            # last_context_tokens resets because the window starts fresh from
+            # the summary — otherwise the user stays blocked after compacting.
             await self._db.execute(
                 """UPDATE sessions
-                   SET pending_context=?, claude_session_id=NULL, compacted=compacted+1
+                   SET pending_context=?, claude_session_id=NULL,
+                       compacted=compacted+1, last_active=?, last_context_tokens=0
                    WHERE session_id=?""",
-                (context_block, session_id),
+                (context_block, _now_ts(), session_id),
+            )
+            await self._db.commit()
+
+    async def touch(self, session_id: str) -> None:
+        """Refresh last_active without changing anything else.
+
+        Used when a user asks to keep a conversation that is too short to be
+        worth compacting — the retention clock still needs resetting.
+        """
+        async with self._lock:
+            await self._db.execute(
+                "UPDATE sessions SET last_active=? WHERE session_id=?",
+                (_now_ts(), session_id),
             )
             await self._db.commit()
 
@@ -334,6 +438,98 @@ class SessionManager:
                 tp = _transcript_path(self.agent_id, sid)
                 if tp.exists():
                     tp.rename(tp.with_suffix(".jsonl.archived"))
+
+    async def purge_older_than(self, days: int, student_days: int = 0) -> int:
+        """Delete sessions untouched past their retention window.
+
+        Data-retention control: conversations hold staff and pupil details, so
+        they must not accumulate indefinitely. Pupils get the shorter
+        `student_days` window; everyone else, including sessions predating tiers,
+        gets `days`. Returns the number removed.
+
+        A pupil conversation is kept alive by being used, and `keep_summary`
+        rewrites one down to its solution and touches it — so the clock resets
+        rather than the record being exempted.
+        """
+        if days <= 0:
+            return 0
+        now = _now_ts()
+        if student_days and student_days > 0:
+            windows = [
+                ("pupil", student_days, "tier = ?", (TIER_STUDENT,)),
+                ("other", days, "IFNULL(tier,'') != ?", (TIER_STUDENT,)),
+            ]
+        else:
+            windows = [("all", days, "1=1", ())]
+
+        async with self._lock:
+            doomed: list[tuple[str, str]] = []
+            for label, window, clause, params in windows:
+                async with self._db.execute(
+                    f"SELECT session_id FROM sessions "
+                    f"WHERE agent_id=? AND last_active < ? AND {clause}",
+                    (self.agent_id, now - window * 86400, *params),
+                ) as cur:
+                    for row in await cur.fetchall():
+                        sid = row["session_id"] if not isinstance(row, tuple) else row[0]
+                        doomed.append((sid, label))
+
+            removed = 0
+            per_label: dict[str, int] = {}
+            for sid, label in doomed:
+                for path in (
+                    _transcript_path(self.agent_id, sid),
+                    _transcript_path(self.agent_id, sid).with_suffix(".jsonl.archived"),
+                ):
+                    try:
+                        if path.exists():
+                            path.unlink()
+                    except OSError as exc:
+                        logger.warning(f"Could not delete transcript {path}: {exc}")
+                await self._db.execute("DELETE FROM sessions WHERE session_id=?", (sid,))
+                removed += 1
+                per_label[label] = per_label.get(label, 0) + 1
+
+            await self._db.commit()
+
+        if removed:
+            detail = ", ".join(f"{n} {label}" for label, n in sorted(per_label.items()))
+            logger.info(f"Retention: purged {removed} session(s) — {detail}")
+        return removed
+
+    async def context_status(self, channel: str, peer: str, limit_pct: float) -> dict:
+        """How full this conversation's context window is.
+
+        Returns used/limit/percent and whether the user must compact before
+        sending again. Before the first reply there are no usage figures yet,
+        so nothing is ever blocked on an empty conversation.
+        """
+        async with self._db.execute(
+            "SELECT * FROM sessions WHERE agent_id=? AND channel=? AND peer=?",
+            (self.agent_id, channel, peer),
+        ) as cur:
+            row = await cur.fetchone()
+
+        if not row:
+            return {"used": 0, "window": 0, "percent": 0.0, "blocked": False}
+
+        s = dict(row)
+        window = s.get("context_window") or 0
+        used = s.get("last_context_tokens") or 0
+        if not window or not used:
+            return {"used": used, "window": window, "percent": 0.0, "blocked": False}
+
+        # Reserve room for the reply itself, so we block before a turn would
+        # overflow rather than after it already has.
+        headroom = s.get("max_output_tokens") or 0
+        usable = max(window - headroom, 1)
+        pct = min(used / usable, 1.0)
+        return {
+            "used": used,
+            "window": window,
+            "percent": round(pct * 100, 1),
+            "blocked": pct >= limit_pct,
+        }
 
     async def list_sessions(self) -> list[dict]:
         async with self._db.execute(

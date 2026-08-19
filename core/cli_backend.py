@@ -9,15 +9,25 @@ to assign a known UUID. Falls back to a fresh session if resume fails.
 """
 
 import asyncio
+import base64
 import json
 import logging
 import os
 import shutil
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Optional, Tuple
 
 logger = logging.getLogger("helix.cli_backend")
+
+
+class AuthExpiredError(RuntimeError):
+    """The shared Claude Code login is no longer valid.
+
+    Distinct from a transient failure: no amount of retrying helps, a human
+    must log in again on the Helix machine.
+    """
 
 def _find_claude_bin() -> str:
     """Locate the claude binary — checks PATH first, then common install locations."""
@@ -25,6 +35,9 @@ def _find_claude_bin() -> str:
     if found:
         return found
     fallbacks = [
+        Path.home() / ".local" / "bin" / "claude.exe",
+        Path.home() / ".local" / "bin" / "claude.cmd",
+        Path(os.environ.get("APPDATA", "")) / "npm" / "claude.cmd",
         Path.home() / ".local" / "bin" / "claude",
         Path("/usr/local/bin/claude"),
         Path("/usr/bin/claude"),
@@ -37,18 +50,194 @@ def _find_claude_bin() -> str:
     )
 
 CLAUDE_BIN = _find_claude_bin()
-HELIX_DIR = Path(__file__).parent.parent  # consistent cwd — required for --resume to work
+HELIX_DIR = Path(__file__).parent.parent
 DEFAULT_TIMEOUT = 3600  # seconds — long enough for nmap scans, brute force, etc.
+
+# Which tools the model is offered, per tier. Leaving a tool out here is the real
+# enforcement point: it is never presented to the model, so there is nothing to
+# jailbreak into. Bash is absent for everyone — this agent advises, it never
+# executes.
+#
+# A pupil gets NOTHING. Not even Read.
+#
+# Read was in this list, on the assumption that the subprocess cwd confined it to
+# the workspace. It does not: cwd only decides where the agent starts, and
+# `--add-dir` grants access to more directories rather than restricting anything.
+# Measured, as a pupil: `~/.helix/config.json`, the operator's `USER.md`, the
+# staff-only Azure procedures and files in the source tree outside the workspace
+# were all readable — and by extension every other pupil's saved conversation.
+#
+# Permission rules can block paths, but `deny` beats `allow`, so "deny everything,
+# permit one folder" cannot be expressed and any deny-list is one forgotten path
+# away from a hole. So the pupil tier keeps no file tools at all, and the two
+# things it actually needed them for are supplied directly instead: their guides
+# are inlined into the system prompt (see context_engine.PUPIL_KNOWLEDGE) and
+# pasted screenshots travel inside the message (see `images` below). Nothing left
+# to escape from. See ROLES.md.
+TIER_TOOLS = {
+    "staff":   "Edit Read Write Glob Grep WebFetch WebSearch",
+    "student": "",
+}
+
+IMAGE_MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+# Helix gets its own Claude Code config directory, fully separate from the
+# user's personal ~/.claude. This keeps the agent from inheriting their
+# settings, MCP servers, session history, projects, and global CLAUDE.md.
+# See README-WINDOWS.md.
+HELIX_CLAUDE_CONFIG = Path.home() / ".helix" / "claude"
+USER_CLAUDE_CONFIG = Path.home() / ".claude"
+
+
+def sync_credentials() -> bool:
+    """Share the user's existing Claude Code login instead of a second one.
+
+    Copies ONLY the credential file into Helix's isolated config dir, and only
+    when the user's copy is newer — so token refreshes in their normal CLI
+    propagate here. Settings, MCP servers, history and memory stay isolated.
+
+    Returns True if Helix has usable credentials afterwards.
+    """
+    src = USER_CLAUDE_CONFIG / ".credentials.json"
+    dst = HELIX_CLAUDE_CONFIG / ".credentials.json"
+    try:
+        if not src.exists():
+            return dst.exists()
+        # Never clobber a newer Helix token with a stale one — either side may
+        # have refreshed most recently.
+        if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+            return True
+        HELIX_CLAUDE_CONFIG.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        if os.name != "nt":
+            dst.chmod(0o600)
+        return True
+    except OSError as e:
+        logger.warning(f"Could not sync Claude credentials: {e}")
+        return dst.exists()
+
+
+def _agent_cwd() -> str:
+    """Working directory for the claude subprocess.
+
+    The agent's own workspace, NOT the Helix source tree — otherwise it reads
+    this repo instead of its memory files. Must stay consistent for --resume.
+    """
+    try:
+        from core.config import load_config
+        workspace = Path(load_config().workspace_path)
+    except Exception:
+        workspace = Path.home() / ".helix" / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    return str(workspace)
 
 
 def _build_env() -> dict:
     env = {**os.environ}
     env.setdefault("HOME", str(Path.home()))
+    # Point Claude Code at Helix's own config dir. Set unconditionally — an
+    # inherited CLAUDE_CONFIG_DIR would otherwise leak the user's config in.
+    HELIX_CLAUDE_CONFIG.mkdir(parents=True, exist_ok=True)
+    env["CLAUDE_CONFIG_DIR"] = str(HELIX_CLAUDE_CONFIG)
+    # Sharing the login also carries over claude.ai account connectors, which
+    # --strict-mcp-config does not block. Disable them for the agent.
+    env["ENABLE_CLAUDEAI_MCP_SERVERS"] = "false"
+    # Pick up any token refresh from the user's normal CLI before each call
+    sync_credentials()
     local_bin = str(Path.home() / ".local" / "bin")
-    path = env.get("PATH", "/usr/local/bin:/usr/bin:/bin")
+    # PATH is ';'-delimited on Windows, ':' elsewhere — joining with the wrong
+    # separator corrupts PATH for the spawned claude process.
+    default_path = "" if os.name == "nt" else "/usr/local/bin:/usr/bin:/bin"
+    path = env.get("PATH", default_path)
     if local_bin not in path:
-        env["PATH"] = f"{local_bin}:{path}"
+        env["PATH"] = f"{local_bin}{os.pathsep}{path}" if path else local_bin
     return env
+
+
+def _image_block(path: Path) -> Optional[dict]:
+    """An image as a base64 content block, or None if it isn't usable.
+
+    A screenshot that cannot be read is not worth failing the whole turn over —
+    the pupil still asked a question in words.
+    """
+    media_type = IMAGE_MEDIA_TYPES.get(path.suffix.lower())
+    if not media_type:
+        logger.warning(f"Not an image type we send inline, skipping: {path.name}")
+        return None
+    try:
+        data = base64.b64encode(path.read_bytes()).decode("ascii")
+    except OSError as e:
+        logger.warning(f"Could not read attached image {path.name}: {e}")
+        return None
+    return {
+        "type": "image",
+        "source": {"type": "base64", "media_type": media_type, "data": data},
+    }
+
+
+def _stream_payload(user_message: str, images: list[Path]) -> bytes:
+    """One stream-json user message, with any images ahead of the text.
+
+    Images first because the text usually refers to them ("here's the error").
+    """
+    content: list[dict] = []
+    for image in images:
+        block = _image_block(image)
+        if block:
+            content.append(block)
+    content.append({"type": "text", "text": user_message})
+    payload = {"type": "user", "message": {"role": "user", "content": content}}
+    return (json.dumps(payload) + "\n").encode("utf-8")
+
+
+def _usage_from(data: dict, model: str) -> dict:
+    """Pull token counts out of a CLI result object.
+
+    `modelUsage` is keyed by the *resolved* model name, which includes a date
+    suffix and can differ from the alias we asked for, so an exact lookup often
+    misses. Fall back to summing every entry rather than silently reporting zero.
+    """
+    usage_by_model = data.get("modelUsage", {}) or {}
+    entry = usage_by_model.get(model)
+    if entry is None:
+        entry = {}
+        for value in usage_by_model.values():
+            for key in ("inputTokens", "outputTokens", "cacheReadInputTokens"):
+                entry[key] = entry.get(key, 0) + value.get(key, 0)
+            # Window size is a property of the model, not something to add up.
+            for key in ("contextWindow", "maxOutputTokens"):
+                entry[key] = max(entry.get(key, 0), value.get(key, 0))
+    return {
+        "input_tokens": entry.get("inputTokens", 0),
+        "output_tokens": entry.get("outputTokens", 0),
+        "cache_read_input_tokens": entry.get("cacheReadInputTokens", 0),
+        "context_window": entry.get("contextWindow", 0),
+        "max_output_tokens": entry.get("maxOutputTokens", 0),
+    }
+
+
+def _result_object(raw: str, streaming: bool) -> dict:
+    """The CLI's final result object, from either output format."""
+    if not streaming:
+        return json.loads(raw)
+    # stream-json emits one object per line; the last `result` is the outcome.
+    for line in reversed(raw.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if obj.get("type") == "result" or "result" in obj:
+            return obj
+    raise RuntimeError("no result object in claude CLI stream output")
 
 
 async def _invoke(
@@ -57,61 +246,128 @@ async def _invoke(
     user_message: str,
     session_args: list[str],
     timeout: int,
-) -> Tuple[str, str]:
+    tier: str = "staff",
+    images: Optional[list[Path]] = None,
+) -> Tuple[str, str, dict]:
     """
     Run claude -p with the given session flags.
-    Returns (response_text, session_id_used).
+    Returns (response_text, session_id_used, usage).
     """
-    cmd = [
-        CLAUDE_BIN, "-p",
-        "--output-format", "json",
-        "--model", model,
-        "--system-prompt", system,
-        "--allowedTools", "Bash Edit Read Write Glob Grep WebFetch WebSearch",
-    ] + session_args
+    tools = TIER_TOOLS.get(tier, TIER_TOOLS["staff"])
+    images = images or []
 
-    logger.debug(f"CLI call: model={model}, session_args={session_args}, msg_len={len(user_message)}")
+    # No tools means no way to open an attached file, so the pupil path carries
+    # images in the message itself. That needs stream-json input, which the CLI
+    # only accepts alongside stream-json output, which in turn requires
+    # --verbose. Staff keep the plain text/json path.
+    streaming = not tools
 
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=str(HELIX_DIR),
-        env=_build_env(),
+    cmd = [CLAUDE_BIN, "-p"]
+    if streaming:
+        cmd += [
+            "--input-format", "stream-json",
+            "--output-format", "stream-json",
+            "--verbose",
+            # Empty string disables every built-in tool.
+            "--tools", "",
+        ]
+    else:
+        cmd += [
+            "--output-format", "json",
+            # NO Bash, for anyone. This agent advises; it never executes. It tells
+            # the user which command to run and they run it themselves. Removing a
+            # tool here is the real enforcement point — it is never offered to the
+            # model, so there is nothing to jailbreak into. Do not re-add it.
+            "--allowedTools", tools,
+        ]
+    # The prompt goes in a file, never on the command line. Windows caps a command
+    # line at 32767 characters, and a pupil's prompt is already past that now that
+    # their guides are inlined into it — passed as an argument it fails with
+    # WinError 206 and every pupil message dies. A file also keeps staff safe as
+    # their workspace grows: BOOTSTRAP_CHAR_LIMIT allows 150k.
+    prompt_file = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", suffix=".md", delete=False
     )
+    try:
+        prompt_file.write(system)
+        prompt_file.close()
 
-    stdout, stderr = await asyncio.wait_for(
-        proc.communicate(input=user_message.encode("utf-8")),
-        timeout=timeout,
-    )
+        cmd += [
+            "--model", model,
+            "--system-prompt-file", prompt_file.name,
+            # Ignore every MCP config source — the agent gets no MCP servers unless
+            # they're added to Helix's own config dir explicitly.
+            "--strict-mcp-config",
+        ] + session_args
+
+        logger.debug(
+            f"CLI call: model={model}, tier={tier}, streaming={streaming}, "
+            f"images={len(images)}, session_args={session_args}, "
+            f"sys_len={len(system)}, msg_len={len(user_message)}"
+        )
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=_agent_cwd(),
+            env=_build_env(),
+        )
+
+        stdin_bytes = (
+            _stream_payload(user_message, images)
+            if streaming
+            else user_message.encode("utf-8")
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=stdin_bytes),
+            timeout=timeout,
+        )
+    finally:
+        try:
+            os.unlink(prompt_file.name)
+        except OSError:
+            pass
 
     if proc.returncode != 0:
         err = stderr.decode("utf-8", errors="replace")
         out = stdout.decode("utf-8", errors="replace")
         logger.error(f"claude CLI failed (exit {proc.returncode})\nSTDERR: {err[:1000]}\nSTDOUT: {out[:500]}")
+
+        # The shared login expires periodically. When it does, every staff
+        # message fails and the generic error tells nobody what to do. Detect
+        # it, log it unmissably, and let the caller show a message that names
+        # the actual fix.
+        blob = (err + out).lower()
+        if any(s in blob for s in ("authentication", "unauthorized", "401",
+                                   "invalid api key", "please run /login",
+                                   "oauth", "credentials")):
+            logger.critical(
+                "CLAUDE LOGIN EXPIRED — every chat reply will fail until this is "
+                "fixed. On the Helix machine run:  claude  (log in, then /exit). "
+                "Helix picks the refreshed token up automatically."
+            )
+            raise AuthExpiredError("Claude Code login has expired")
+
         raise RuntimeError(f"claude CLI exit {proc.returncode}: {err[:500] or out[:500]}")
 
     raw = stdout.decode("utf-8", errors="replace").strip()
     if not raw:
         raise RuntimeError("claude CLI returned empty output")
 
-    data = json.loads(raw)
+    data = _result_object(raw, streaming)
 
     if data.get("is_error"):
         raise RuntimeError(f"Claude error: {data.get('result', data)}")
 
-    # Extract per-model usage stats for context window tracking
-    model_usage = data.get("modelUsage", {}).get(model, {})
-    usage = {
-        "input_tokens": model_usage.get("inputTokens", 0),
-        "output_tokens": model_usage.get("outputTokens", 0),
-        "cache_read_input_tokens": model_usage.get("cacheReadInputTokens", 0),
-        "context_window": model_usage.get("contextWindow", 0),
-        "max_output_tokens": model_usage.get("maxOutputTokens", 0),
-    }
+    # A pupil's agent has no tools, so a denial here means something asked for one
+    # anyway — worth seeing rather than swallowing.
+    denials = data.get("permission_denials") or []
+    if denials:
+        logger.warning(f"Tool permission denied ({tier}): {str(denials)[:200]}")
 
-    return data.get("result", ""), data.get("session_id", ""), usage
+    return data.get("result", ""), data.get("session_id", ""), _usage_from(data, model)
 
 
 async def call_claude(
@@ -121,6 +377,8 @@ async def call_claude(
     claude_session_id: Optional[str] = None,
     is_new_session: bool = False,
     timeout: int = DEFAULT_TIMEOUT,
+    tier: str = "staff",
+    images: Optional[list[Path]] = None,
 ) -> Tuple[str, str, dict]:
     """
     Call claude CLI. Returns (response_text, claude_session_id_used, usage_dict).
@@ -134,14 +392,14 @@ async def call_claude(
     """
     if is_new_session or not claude_session_id:
         new_id = str(uuid.uuid4())
-        logger.info(f"Starting new Claude session: {new_id}")
-        return await _invoke(model, system, user_message, ["--session-id", new_id], timeout)
+        logger.info(f"Starting new Claude session: {new_id} ({tier})")
+        return await _invoke(model, system, user_message, ["--session-id", new_id], timeout, tier, images)
 
     # Try resume
     try:
         logger.debug(f"Resuming Claude session: {claude_session_id}")
-        return await _invoke(model, system, user_message, ["--resume", claude_session_id], timeout)
+        return await _invoke(model, system, user_message, ["--resume", claude_session_id], timeout, tier, images)
     except Exception as e:
         logger.warning(f"Resume failed for session {claude_session_id}, falling back to new session: {e}")
         new_id = str(uuid.uuid4())
-        return await _invoke(model, system, user_message, ["--session-id", new_id], timeout)
+        return await _invoke(model, system, user_message, ["--session-id", new_id], timeout, tier, images)

@@ -1174,6 +1174,152 @@
       </div>
     </div>
 
+    <!-- =============================== INSIGHTS ============================== -->
+    <div x-show="currentPage === 'insights'" class="flex-1 flex flex-col overflow-hidden p-7">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h2 class="section-title">Insights</h2>
+          <p class="text-slate-600 text-sm mt-0.5">What people have been asking for help with</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <template x-for="d in [7, 30, 90]" :key="d">
+            <button @click="insightsDays = d; loadInsights()"
+              :class="insightsDays === d ? 'tab-active' : 'tab-inactive'"
+              class="px-4 py-2 rounded-lg text-sm font-medium"
+              x-text="d + ' days'"></button>
+          </template>
+          <button @click="loadInsights()" class="px-3 py-2 rounded-lg text-sm text-slate-600 border border-white/5 hover:border-white/10 hover:text-slate-400">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto space-y-5">
+        <!-- Totals -->
+        <div class="grid grid-cols-5 gap-4">
+          <div class="card p-5">
+            <div class="text-slate-600 text-xs uppercase tracking-wide">Conversations</div>
+            <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.conversations ?? '–'"></div>
+          </div>
+          <div class="card p-5">
+            <div class="text-slate-600 text-xs uppercase tracking-wide">People</div>
+            <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.people ?? '–'"></div>
+          </div>
+          <div class="card p-5">
+            <div class="text-slate-600 text-xs uppercase tracking-wide">Off-topic refusals</div>
+            <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.refusals ?? '–'"></div>
+          </div>
+          <div class="card p-5">
+            <div class="text-slate-600 text-xs uppercase tracking-wide">Blocked commands</div>
+            <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.blocked_commands ?? '–'"></div>
+          </div>
+          <div class="card p-5">
+            <div class="text-slate-600 text-xs uppercase tracking-wide">Hit rate limit</div>
+            <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.rate_limited ?? '–'"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-5">
+          <!-- Most common subjects -->
+          <div class="card p-5">
+            <h3 class="text-sm font-semibold text-slate-300 mb-3">Most common subjects</h3>
+            <p class="text-xs text-slate-600 mb-3">Words from the message that opened each conversation.</p>
+            <template x-if="!insights?.top_words?.length">
+              <p class="text-sm text-slate-600">Nothing recorded yet.</p>
+            </template>
+            <div class="space-y-1.5">
+              <template x-for="w in (insights?.top_words || [])" :key="w.key">
+                <div class="flex items-center gap-3">
+                  <span class="text-sm text-slate-400 w-40 truncate" x-text="w.key"></span>
+                  <div class="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
+                    <div class="h-full rounded-full" :style="'width:' + barPct(w.count, insights.top_words) + '%; background: var(--accent-light);'"></div>
+                  </div>
+                  <span class="text-xs text-slate-500 w-8 text-right" x-text="w.count"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="space-y-5">
+            <!-- Who is asking -->
+            <div class="card p-5">
+              <h3 class="text-sm font-semibold text-slate-300 mb-3">Who is asking</h3>
+              <div class="space-y-1.5">
+                <template x-for="d in (insights?.by_domain || [])" :key="d.key">
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-slate-400" x-text="d.key"></span>
+                    <span class="text-slate-500" x-text="d.count"></span>
+                  </div>
+                </template>
+                <template x-if="!insights?.by_domain?.length">
+                  <p class="text-sm text-slate-600">Nothing recorded yet.</p>
+                </template>
+              </div>
+              <div class="grad-sep my-3"></div>
+              <div class="space-y-1.5">
+                <template x-for="t in (insights?.by_tier || [])" :key="t.key">
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="text-slate-400" x-text="t.key"></span>
+                    <span class="text-slate-500" x-text="t.count"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Per day -->
+            <div class="card p-5">
+              <h3 class="text-sm font-semibold text-slate-300 mb-3">Per day</h3>
+              <template x-if="!insights?.by_day?.length">
+                <p class="text-sm text-slate-600">Nothing recorded yet.</p>
+              </template>
+              <div class="flex items-end gap-1 h-24">
+                <template x-for="d in (insights?.by_day || [])" :key="d.key">
+                  <div class="flex-1 rounded-t" :title="d.key + ': ' + d.count"
+                       :style="'height:' + Math.max(barPct(d.count, insights.by_day), 4) + '%; background: var(--accent-light);'"></div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent conversations -->
+        <div class="card p-5">
+          <h3 class="text-sm font-semibold text-slate-300 mb-3">Recent conversations</h3>
+          <template x-if="!insights?.recent?.length">
+            <p class="text-sm text-slate-600">Nothing recorded yet.</p>
+          </template>
+          <div class="space-y-0.5">
+            <template x-for="(c, i) in (insights?.recent || [])" :key="i">
+              <div class="log-line flex items-start gap-3 py-1.5 px-2 rounded text-sm">
+                <span class="text-slate-700 flex-shrink-0 w-32 text-xs" x-text="new Date((c.ts || 0) * 1000).toLocaleString()"></span>
+                <span class="text-slate-500 flex-shrink-0 w-56 truncate text-xs" x-text="c.email"></span>
+                <span class="flex-shrink-0 w-16 text-xs" :class="c.tier === 'student' ? 'text-blue-400' : 'text-emerald-400'" x-text="c.tier"></span>
+                <span class="text-slate-400" x-text="c.title"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Refusals -->
+        <div class="card p-5">
+          <h3 class="text-sm font-semibold text-slate-300 mb-3">Off-topic requests refused</h3>
+          <p class="text-xs text-slate-600 mb-3">Pupils asked for something outside IT. Repeats from one person are worth a look.</p>
+          <template x-if="!insights?.recent_refusals?.length">
+            <p class="text-sm text-slate-600">None.</p>
+          </template>
+          <div class="space-y-0.5">
+            <template x-for="(r, i) in (insights?.recent_refusals || [])" :key="i">
+              <div class="log-line flex items-start gap-3 py-1.5 px-2 rounded text-sm">
+                <span class="text-slate-700 flex-shrink-0 w-32 text-xs" x-text="new Date((r.ts || 0) * 1000).toLocaleString()"></span>
+                <span class="text-slate-500 flex-shrink-0 w-56 truncate text-xs" x-text="r.email"></span>
+                <span class="text-slate-400" x-text="r.asked"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ================================ SKILLS =============================== -->
     <div x-show="currentPage === 'skills'" class="flex-1 flex overflow-hidden">
 
@@ -1376,6 +1522,7 @@ function helixApp() {
       { id: 'memory',   label: 'Memory',   icon: '⬡' },
       { id: 'config',   label: 'Config',   icon: '◉' },
       { id: 'crons',    label: 'Crons',    icon: '◷' },
+      { id: 'insights', label: 'Insights', icon: '◔' },
       { id: 'logs',     label: 'Logs',     icon: '≡' },
       { id: 'skills',   label: 'Skills',   icon: '🧠' },
       { id: 'files',    label: 'Files',    icon: '⊞' },
@@ -1390,6 +1537,8 @@ function helixApp() {
     thinking: false,
     wsStatus: 'disconnected',
     ws: null,
+    insights: null,
+    insightsDays: 30,
     memoryQuery: '',
     memorySearchMode: 'vsearch',
     memoryResults: '',
@@ -1495,6 +1644,20 @@ function helixApp() {
       if (pageId === 'crons') this.loadCrons();
       if (pageId === 'skills') this.loadSkills();
       if (pageId === 'files') this.loadFileTree();
+      if (pageId === 'insights') this.loadInsights();
+    },
+
+    async loadInsights() {
+      try {
+        const r = await this.api('/api/insights?days=' + this.insightsDays);
+        if (r.ok) this.insights = await r.json();
+      } catch (e) { this.insights = null; }
+    },
+
+    // Longest bar in a series fills the row; everything else is relative to it.
+    barPct(count, series) {
+      const max = Math.max(...(series || []).map(s => s.count || 0), 1);
+      return Math.round((count / max) * 100);
     },
 
     async checkAuth() {

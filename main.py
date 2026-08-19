@@ -47,7 +47,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOG_PATH),
+        # Explicit utf-8: agent names and responses contain emoji, and the
+        # Windows default (cp1252) raises UnicodeEncodeError mid-log.
+        logging.FileHandler(LOG_PATH, encoding="utf-8"),
     ],
 )
 logger = logging.getLogger("helix.main")
@@ -87,6 +89,78 @@ def _cli_config():
 
 
 # ─── Scheduler helpers ────────────────────────────────────────────────────────
+
+async def _run_retention_job(session_manager, days: int, student_days: int = 0):
+    """Daily: delete conversations past the retention window, and prune images
+    that no skill file references.
+
+    Pupils have a shorter window than staff; assets are pruned on the longer one,
+    since an image is only reachable from a conversation that still exists.
+    """
+    try:
+        removed = await session_manager.purge_older_than(days, student_days)
+        if removed:
+            logger.info(f"Retention job removed {removed} session(s)")
+    except Exception as e:
+        logger.warning(f"Retention job error: {e}")
+
+    try:
+        _prune_unused_assets(days)
+    except Exception as e:
+        logger.warning(f"Asset prune error: {e}")
+
+    try:
+        _prune_stale_uploads()
+    except Exception as e:
+        logger.warning(f"Upload prune error: {e}")
+
+
+def _prune_stale_uploads() -> None:
+    """Sweep the temp upload directory, catching files orphaned by a restart."""
+    from core.file_handler import UPLOAD_TTL_SECONDS, prune_stale_uploads
+
+    removed = prune_stale_uploads(UPLOAD_TTL_SECONDS)
+    if removed:
+        logger.info(f"Removed {removed} stale upload(s)")
+
+
+def _prune_unused_assets(days: int) -> None:
+    """Delete images older than `days` that nothing references.
+
+    Every uploaded screenshot is saved so the agent can never write a dead
+    reference. Most are one-off chat attachments, so anything not cited by a
+    skill file or a workspace document is removed once it has aged out.
+    """
+    import re as _re
+    import time as _time
+    from core.config import get_config
+
+    ws = Path(get_config().workspace_path)
+    assets = ws / "assets"
+    if not assets.is_dir():
+        return
+
+    referenced = set()
+    for md in ws.rglob("*.md"):
+        try:
+            referenced.update(_re.findall(r"asset:([A-Za-z0-9._-]+)", md.read_text(encoding="utf-8")))
+        except OSError:
+            continue
+
+    cutoff = _time.time() - max(days, 1) * 86400
+    removed = 0
+    for f in assets.iterdir():
+        if not f.is_file() or f.name in referenced:
+            continue
+        try:
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+                removed += 1
+        except OSError:
+            continue
+    if removed:
+        logger.info(f"Removed {removed} unreferenced image(s) older than {days} days")
+
 
 async def _run_heartbeat_job(agent_loop, audit):
     """APScheduler job: run the agent's heartbeat check."""
@@ -146,7 +220,8 @@ async def main():
 
     # Scheduler created before init_web so the web API has a reference
     scheduler = AsyncIOScheduler(timezone=cfg.timezone)
-    init_web(session_manager, agent_loop, scheduler, queue_manager=queue_manager)
+    init_web(session_manager, agent_loop, scheduler, queue_manager=queue_manager,
+             audit_logger=audit)
 
     web_config = uvicorn.Config(
         fastapi_app,
@@ -213,6 +288,52 @@ async def main():
         args=[agent_loop, audit],
     )
 
+    # Surface dead image references at startup. A dangling reference renders as
+    # "Bildet er ikke tilgjengelig" to staff, which looks like a broken system.
+    try:
+        import re as _re
+        _ws = Path(cfg.workspace_path)
+        _have = {f.name for f in (_ws / "assets").iterdir()} if (_ws / "assets").is_dir() else set()
+        _dangling = {}
+        # Only knowledge files. AGENTS.md and commands/*.md contain example
+        # names that are deliberately not real.
+        for _md in (_ws / "skills").rglob("*.md"):
+            try:
+                for _n in _re.findall(r"asset:([A-Za-z0-9._-]+)", _md.read_text(encoding="utf-8")):
+                    if _n not in _have and not _n.startswith("<"):
+                        _dangling.setdefault(_md.name, set()).add(_n)
+            except OSError:
+                continue
+        if _dangling:
+            for _file, _names in _dangling.items():
+                logger.warning(
+                    f"BROKEN IMAGE REFS in {_file}: {', '.join(sorted(_names))} "
+                    f"— these show as 'Bildet er ikke tilgjengelig' to users"
+                )
+    except Exception as _e:
+        logger.debug(f"Asset reference check skipped: {_e}")
+
+    retention_days = getattr(cfg.session, "retention_days", 0)
+    student_days = getattr(cfg.session, "student_retention_days", 0)
+    if retention_days and retention_days > 0:
+        scheduler.add_job(
+            _run_retention_job,
+            CronTrigger(hour=3, minute=30, timezone=cfg.timezone),
+            id="retention",
+            args=[session_manager, retention_days, student_days],
+        )
+        logger.info(
+            f"Retention: conversations purged daily at 03:30 — "
+            f"{retention_days} days, pupils {student_days or retention_days}"
+        )
+        # Also sweep once at startup, so a long downtime doesn't leave expired
+        # data sitting around until the next scheduled run.
+        asyncio.create_task(
+            _run_retention_job(session_manager, retention_days, student_days)
+        )
+    else:
+        logger.warning("Retention disabled — conversations are kept indefinitely")
+
     for cron in cfg.crons:
         if cron.enabled:
             try:
@@ -241,7 +362,15 @@ async def main():
 
     loop = asyncio.get_event_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, _handle_signal, sig)
+        try:
+            loop.add_signal_handler(sig, _handle_signal, sig)
+        except NotImplementedError:
+            # Windows event loops don't support add_signal_handler. Fall back to
+            # signal.signal and hop back onto the loop thread to set the event.
+            signal.signal(
+                sig,
+                lambda s, _frame: loop.call_soon_threadsafe(_handle_signal, s),
+            )
 
     await stop_event.wait()
 
@@ -266,22 +395,42 @@ async def main():
     logger.info("Helix stopped.")
 
 
+def _venv_python(venv_dir: Path) -> Path:
+    """Path to the venv interpreter. Windows uses Scripts/, POSIX uses bin/."""
+    if sys.platform == "win32":
+        return venv_dir / "Scripts" / "python.exe"
+    return venv_dir / "bin" / "python"
+
+
+def _reexec(venv_python: Path):
+    """Re-enter the venv interpreter. os.execv is unreliable on Windows, so
+    spawn a child and forward its exit code there instead."""
+    import os
+    import subprocess
+    argv = [str(venv_python), *sys.argv]
+    if sys.platform == "win32":
+        sys.exit(subprocess.run(argv).returncode)
+    os.execv(str(venv_python), argv)
+
+
 def _ensure_venv():
-    """Bootstrap .venv if needed. Uses os.execv to re-exec inside the venv."""
+    """Bootstrap .venv if needed, then re-enter it."""
+    import os
     venv_dir = Path(__file__).parent / ".venv"
-    venv_python = venv_dir / "bin" / "python"
+    venv_python = _venv_python(venv_dir)
     requirements = Path(__file__).parent / "requirements.txt"
 
     if venv_python.exists():
-        if sys.prefix == str(venv_dir):
+        # Compare normalized paths — sys.prefix casing/separators vary on Windows
+        if os.path.normcase(os.path.normpath(sys.prefix)) == os.path.normcase(
+            os.path.normpath(str(venv_dir))
+        ):
             return  # Already inside the venv
         print("  Activating virtual environment...")
-        import os
-        os.execv(str(venv_python), [str(venv_python), *sys.argv])
+        _reexec(venv_python)
 
     # Create venv
     import subprocess
-    import os
     print("  Creating virtual environment...")
     result = subprocess.run(
         [sys.executable, "-m", "venv", str(venv_dir)],
@@ -291,12 +440,12 @@ def _ensure_venv():
         print(f"  Error creating venv: {result.stderr}")
         sys.exit(1)
 
-    # Install requirements
-    pip = venv_dir / "bin" / "pip"
+    # Install requirements. Invoke pip via `python -m pip` — the standalone pip
+    # shim is absent in some venvs and lives in Scripts/ on Windows.
     if requirements.exists():
         print("  Installing dependencies (this may take a minute)...")
         result = subprocess.run(
-            [str(pip), "install", "-q", "-r", str(requirements)],
+            [str(venv_python), "-m", "pip", "install", "-q", "-r", str(requirements)],
             capture_output=True, text=True,
         )
         if result.returncode != 0:
@@ -304,8 +453,8 @@ def _ensure_venv():
             sys.exit(1)
         print("  Dependencies installed.")
 
-    # Re-exec inside the venv so all imports work
-    os.execv(str(venv_python), [str(venv_python), *sys.argv])
+    # Re-enter the venv so all imports work
+    _reexec(venv_python)
 
 
 if __name__ == "__main__":
@@ -331,4 +480,12 @@ if __name__ == "__main__":
             print(__doc__)
             sys.exit(0)
 
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception:
+        logger.exception("Helix failed to start")
+        # Non-daemon threads (sqlite, task queue) keep the interpreter alive
+        # after a fatal error, leaving a process that looks healthy to the PID
+        # file while serving nothing. Force the exit so failures are visible.
+        import os as _os
+        _os._exit(1)

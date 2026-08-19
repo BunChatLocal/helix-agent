@@ -6,6 +6,7 @@ Files are downloaded by their respective adapters and passed here as bytes.
 
 import logging
 import os
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -36,7 +37,14 @@ ALLOWED_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp",
 }
 
-UPLOAD_DIR = Path("/tmp/helix_uploads")
+# On Windows "/tmp/..." resolves to C:\tmp, whose creation needs elevation —
+# use the platform temp dir instead.
+UPLOAD_DIR = Path(tempfile.gettempdir()) / "helix_uploads" if os.name == "nt" else Path("/tmp/helix_uploads")
+
+# How long a pasted screenshot stays on disk. Short on purpose: for a pupil this
+# directory is the only place the image ever exists, because nothing they send is
+# copied into the knowledge base. See ROLES.md.
+UPLOAD_TTL_SECONDS = 6 * 3600
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -107,6 +115,34 @@ def cleanup_file(path: Optional[Path]) -> None:
             path.unlink()
     except Exception as e:
         logger.warning(f"Failed to clean up {path}: {e}")
+
+
+def prune_stale_uploads(max_age_seconds: int) -> int:
+    """Delete uploads older than `max_age_seconds`, judged by age on disk.
+
+    The web app tracks its own uploads in memory and cleans those up, but that
+    map does not survive a restart — so every file uploaded before one would
+    otherwise stay on disk forever. Going by mtime instead catches them.
+
+    This matters beyond tidiness: a pupil's screenshot is deliberately never
+    copied into the knowledge base, so this directory is the only place it
+    exists, and this sweep is what makes "nothing a pupil sends is permanent"
+    true rather than aspirational. See ROLES.md.
+    """
+    import time
+
+    if not UPLOAD_DIR.is_dir():
+        return 0
+    cutoff = time.time() - max_age_seconds
+    removed = 0
+    for f in UPLOAD_DIR.iterdir():
+        try:
+            if f.is_file() and f.stat().st_mtime < cutoff:
+                f.unlink()
+                removed += 1
+        except OSError as exc:
+            logger.warning(f"Could not remove stale upload {f}: {exc}")
+    return removed
 
 
 def build_file_context(file_path: Path, user_message: str) -> str:

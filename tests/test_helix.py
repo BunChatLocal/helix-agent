@@ -1,4 +1,4 @@
-"""
+﻿"""
 Helix test suite.
 
 Covers:
@@ -9,8 +9,11 @@ Covers:
 - Context engine new vs resumed session behaviour (regression for Fix 4)
 """
 
+import json
+import logging
 import sqlite3
 import sys
+import time
 import types
 import uuid
 from pathlib import Path
@@ -149,15 +152,16 @@ if "cryptography" not in sys.modules:
 
 if "security" not in sys.modules:
     sec_mod = _stub_module("security")
+    # A __path__ makes the stub a package, so modules we have not stubbed below
+    # are imported for real from the repo. security.auth is one of them: it
+    # depends on nothing but the standard library and the config, and the rate
+    # limiter in it is a thing under test rather than a thing to fake.
+    sec_mod.__path__ = [str(Path(__file__).parent.parent / "security")]
 
 if "security.secrets" not in sys.modules:
     sec_secrets = _stub_module("security.secrets")
     sec_secrets.get_secret = MagicMock(return_value=None)
     sec_secrets.set_secret = MagicMock()
-
-if "security.auth" not in sys.modules:
-    sec_auth = _stub_module("security.auth")
-    sec_auth.AuthManager = MagicMock
 
 if "core.file_handler" not in sys.modules:
     file_handler = _stub_module("core.file_handler")
@@ -165,6 +169,8 @@ if "core.file_handler" not in sys.modules:
     file_handler.save_file = MagicMock(return_value=None)
     file_handler.cleanup_file = MagicMock()
     file_handler.build_file_context = MagicMock(side_effect=lambda path, msg: msg)
+    file_handler.UPLOAD_TTL_SECONDS = 6 * 3600
+    file_handler.prune_stale_uploads = MagicMock(return_value=0)
 
 if "security.input_validator" not in sys.modules:
     sec_iv = _stub_module("security.input_validator")
@@ -405,6 +411,379 @@ class TestContextEngine:
 
 
 # ---------------------------------------------------------------------------
+# Per-tier system prompt (see ROLES.md)
+# ---------------------------------------------------------------------------
+
+class TestTieredPrompt:
+    """Staff and students share a core and diverge after it."""
+
+    def _workspace(self, tmp_path):
+        for name in ("AGENTS.md", "SOUL.md", "IDENTITY.md", "USER.md",
+                     "HEARTBEAT.md", "MEMORY.md", "TOOLS.md", "STAFF.md",
+                     "STUDENT.md"):
+            (tmp_path / name).write_text(f"marker for {name}")
+        return _make_temp_config(tmp_path)
+
+    def _prompt(self, tmp_path, tier):
+        cfg = self._workspace(tmp_path)
+        with patch("core.context_engine.get_config", return_value=cfg):
+            from core.context_engine import build_system_prompt
+            return build_system_prompt(is_new_session=True, tier=tier)
+
+    def test_shared_core_reaches_both(self, tmp_path):
+        for tier in ("staff", "student"):
+            prompt = self._prompt(tmp_path, tier)
+            assert "marker for AGENTS.md" in prompt
+            assert "marker for SOUL.md" in prompt
+
+    def test_student_prompt_omits_operator_files(self, tmp_path):
+        prompt = self._prompt(tmp_path, "student")
+        assert "marker for STUDENT.md" in prompt
+        for excluded in ("USER.md", "TOOLS.md", "HEARTBEAT.md", "MEMORY.md",
+                         "IDENTITY.md", "STAFF.md"):
+            assert f"marker for {excluded}" not in prompt, (
+                f"{excluded} must not reach a pupil's prompt"
+            )
+
+    def test_staff_prompt_keeps_everything(self, tmp_path):
+        prompt = self._prompt(tmp_path, "staff")
+        assert "marker for STAFF.md" in prompt
+        assert "marker for TOOLS.md" in prompt
+        assert "marker for USER.md" in prompt
+        assert "marker for STUDENT.md" not in prompt
+
+    def test_unknown_tier_falls_back_to_staff(self, tmp_path):
+        """Internal channels pass no tier and must keep the full context."""
+        assert self._prompt(tmp_path, "nonsense") == self._prompt(tmp_path, "staff")
+
+    def test_missing_tier_file_is_logged_as_an_error(self, tmp_path, caplog):
+        """Losing STUDENT.md silently would drop the scope rules entirely."""
+        cfg = self._workspace(tmp_path)
+        (tmp_path / "STUDENT.md").unlink()
+        with patch("core.context_engine.get_config", return_value=cfg):
+            from core.context_engine import build_system_prompt
+            with caplog.at_level(logging.ERROR, logger="helix.context"):
+                build_system_prompt(is_new_session=True, tier="student")
+        assert any("STUDENT.md" in r.message for r in caplog.records)
+
+
+class TestTieredTools:
+    """A pupil's agent is offered no tools at all."""
+
+    def test_student_gets_no_tools_whatsoever(self):
+        from core.cli_backend import TIER_TOOLS
+        student = TIER_TOOLS["student"].split()
+        assert student == [], (
+            "A pupil gets no tools. Read was here once, on the assumption that the "
+            "subprocess cwd confined it to the workspace — it does not, and a pupil "
+            "could read config.json, the operator's notes, the staff-only Azure "
+            "procedures and other pupils' conversations. Their guides are inlined "
+            "into the prompt and their screenshots travel inside the message, so "
+            "there is nothing here to restore."
+        )
+
+    def test_staff_keeps_the_write_tools_but_never_bash(self):
+        from core.cli_backend import TIER_TOOLS
+        staff = TIER_TOOLS["staff"].split()
+        assert "Write" in staff and "Edit" in staff
+        assert "Bash" not in staff, "advice-only is not tier-dependent"
+
+    def test_unknown_tier_gets_the_staff_set(self):
+        from core.cli_backend import TIER_TOOLS
+        assert TIER_TOOLS.get("nonsense", TIER_TOOLS["staff"]) == TIER_TOOLS["staff"]
+
+
+class TestPupilKnowledgeIsInlined:
+    """With no file tools, anything a pupil needs must already be in the prompt."""
+
+    def test_pupil_prompt_includes_the_network_and_school_guides(self):
+        from core.context_engine import bootstrap_files, PUPIL_KNOWLEDGE
+        files = bootstrap_files("student")
+        for skill in PUPIL_KNOWLEDGE:
+            assert skill in files, f"{skill} must reach a pupil, who cannot read it"
+
+    def test_the_azure_material_is_never_inlined_for_a_pupil(self):
+        """It holds the cadm convention, BitLocker access and the PIM procedure."""
+        from core.context_engine import bootstrap_files
+        assert not any("entra-azure" in f for f in bootstrap_files("student"))
+
+    def test_staff_still_read_skills_from_disk(self):
+        """Staff keep file tools, so inlining their whole knowledge base would be waste."""
+        from core.context_engine import bootstrap_files
+        assert not any(f.startswith("skills/") for f in bootstrap_files("staff"))
+
+    def test_pupil_prompt_says_there_are_no_files(self):
+        """An agent that thinks it can look something up will promise to go and look."""
+        from core.context_engine import build_system_prompt
+        prompt = build_system_prompt(is_new_session=True, tier="student")
+        assert "no tools" in prompt.lower() or "no access to files" in prompt.lower()
+
+
+class TestSharedCoreIsActuallyShared:
+    """The two shared files must hold nothing a pupil has to be told to ignore.
+
+    STUDENT.md used to carry a section cancelling the operator material in
+    AGENTS.md — a session-startup list naming files a pupil cannot open, a routing
+    table pointing at staff-only guides, an instruction to write findings back to
+    the knowledge base. Negation loses to length, which is the same failure that
+    produced the maths answer. These tests assert absence rather than override.
+    """
+
+    # Each marker is a phrase that only makes sense to an agent with tools, files
+    # or a knowledge base, paired with why it must not reach a pupil.
+    OPERATOR_MARKERS = {
+        "Session startup": "names files a pupil's agent cannot open",
+        "skills/": "routes to a knowledge base a pupil cannot reach",
+        "entra-azure": "the staff-only Azure material, by name",
+        "windows-endpoint": "a routing target a pupil cannot read",
+        "capture what you learn": "invites writing pupil data into shared files",
+        "MEMORY.md": "memory machinery, not a pupil's business",
+        "commands/": "slash commands are staff-only",
+        "copyable block": "a pupil has no rights to run anything",
+        "assets/": "a pupil cannot list it, and may only see the images their "
+                   "own guides cite",
+    }
+
+    def _workspace(self):
+        from core.config import get_config
+        return Path(get_config().workspace_path)
+
+    def _shared_text(self):
+        ws = self._workspace()
+        return "\n".join(
+            (ws / name).read_text(encoding="utf-8")
+            for name in ("AGENTS.md", "SOUL.md")
+        )
+
+    def test_the_shared_files_assume_no_tools(self):
+        shared = self._shared_text().lower()
+        for marker, why in self.OPERATOR_MARKERS.items():
+            assert marker.lower() not in shared, (
+                f"{marker!r} is in the shared core but {why} — it belongs in "
+                f"OPERATIONS.md"
+            )
+
+    def test_the_rules_that_hold_for_everyone_survived_the_move(self):
+        """A shared core trimmed to nothing would pass the test above."""
+        shared = self._shared_text()
+        for kept in ("never report that a change has happened",
+                     "Never invent specifics",
+                     "one question at a time",
+                     "asset:",
+                     "Personal data"):
+            assert kept.lower() in shared.lower(), (
+                f"{kept!r} applies to every conversation and must stay shared"
+            )
+
+    def test_operations_reaches_staff_and_internal_work_only(self):
+        from core.context_engine import bootstrap_files
+        assert "OPERATIONS.md" in bootstrap_files("staff")
+        assert "OPERATIONS.md" not in bootstrap_files("student")
+        # Heartbeats and cron pass no tier and need the working method.
+        assert "OPERATIONS.md" in bootstrap_files("nonsense")
+
+    def test_the_operator_material_landed_somewhere(self):
+        """Guard against the split having been a deletion."""
+        operations = (self._workspace() / "OPERATIONS.md").read_text(
+            encoding="utf-8").lower()
+        for marker in self.OPERATOR_MARKERS:
+            assert marker.lower() in operations, (
+                f"{marker!r} left the shared core without arriving in OPERATIONS.md"
+            )
+
+    def test_the_pupil_file_no_longer_cancels_the_core(self):
+        student = (self._workspace() / "STUDENT.md").read_text(encoding="utf-8")
+        for negation in ("Ignore the session-startup list",
+                         "tells you to capture what you learn",
+                         "Things that do not apply here"):
+            assert negation not in student, (
+                f"{negation!r} is cancelling something that should now be absent"
+            )
+
+
+class TestPupilCliInvocation:
+    """A toolless tier needs the streaming input path, or images cannot arrive."""
+
+    def _cmd(self, tier, images=None):
+        import asyncio
+        from core import cli_backend
+
+        captured = {}
+
+        async def fake_exec(*cmd, **kwargs):
+            captured["cmd"] = list(cmd)
+
+            class Proc:
+                returncode = 0
+
+                async def communicate(self, input=None):
+                    captured["stdin"] = input
+                    payload = {
+                        "type": "result",
+                        "result": "ok",
+                        "session_id": "sid",
+                        "modelUsage": {},
+                    }
+                    return (json.dumps(payload).encode(), b"")
+
+            return Proc()
+
+        with patch("asyncio.create_subprocess_exec", fake_exec):
+            asyncio.get_event_loop_policy().new_event_loop().run_until_complete(
+                cli_backend._invoke(
+                    "m", "sys", "hei", ["--session-id", "x"], 30, tier, images
+                )
+            )
+        return captured
+
+    def test_pupil_call_offers_no_tools_and_streams(self):
+        captured = self._cmd("student")
+        cmd = captured["cmd"]
+        assert "--allowedTools" not in cmd, "a pupil gets --tools '' instead"
+        assert cmd[cmd.index("--tools") + 1] == ""
+        assert "stream-json" in cmd
+
+    def test_staff_call_keeps_the_plain_json_path(self):
+        cmd = self._cmd("staff")["cmd"]
+        assert "--allowedTools" in cmd
+        assert "--input-format" not in cmd
+
+    def test_pupil_image_is_base64_in_the_message(self, tmp_path):
+        png = tmp_path / "shot.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\nnot-a-real-png")
+        captured = self._cmd("student", [png])
+        payload = json.loads(captured["stdin"].decode())
+        blocks = payload["message"]["content"]
+        assert blocks[0]["type"] == "image"
+        assert blocks[0]["source"]["media_type"] == "image/png"
+        assert blocks[-1]["type"] == "text"
+
+    def test_an_unreadable_image_does_not_lose_the_question(self, tmp_path):
+        """A pupil who pastes something odd should still get an answer to their words."""
+        captured = self._cmd("student", [tmp_path / "gone.png"])
+        payload = json.loads(captured["stdin"].decode())
+        blocks = payload["message"]["content"]
+        assert [b["type"] for b in blocks] == ["text"]
+
+
+class TestAgentLoopTierWiring:
+    """The tier stored on the session must reach both the prompt and the CLI."""
+
+    async def _run(self, tier, channel="web", message="hei"):
+        from core.agent_loop import AgentLoop
+
+        sm = MagicMock()
+        sm.get_or_create = AsyncMock(return_value={
+            "session_id": str(uuid.uuid4()),
+            "channel": channel,
+            "peer": "dev:x|1",
+            "model": "claude-sonnet-4-6",
+            "claude_session_id": None,
+            "tier": tier,
+        })
+        sm.pop_pending_context = AsyncMock(return_value=None)
+        sm.append_message = AsyncMock()
+        sm.update_activity = AsyncMock()
+        sm.set_claude_session_id = AsyncMock()
+        self._sm = sm
+
+        seen = {}
+
+        async def fake_call(**kwargs):
+            seen.update(kwargs)
+            return "svar", "sid", {}
+
+        with patch("core.agent_loop.call_claude", fake_call), \
+             patch("core.agent_loop.build_system_prompt",
+                   lambda is_new_session, tier: f"SYS:{tier}"):
+            async for _chunk in AgentLoop(sm).run(channel, "dev:x|1", message):
+                pass
+        return seen
+
+    @pytest.mark.anyio
+    async def test_student_session_gets_student_prompt_and_tools(self):
+        seen = await self._run("student")
+        assert seen["tier"] == "student"
+        assert seen["system"] == "SYS:student"
+
+    @pytest.mark.anyio
+    async def test_staff_session_gets_staff_prompt_and_tools(self):
+        seen = await self._run("staff")
+        assert seen["tier"] == "staff"
+        assert seen["system"] == "SYS:staff"
+
+    @pytest.mark.anyio
+    async def test_untiered_web_session_falls_to_student(self):
+        """A row predating the tier column must not be handed the staff prompt."""
+        seen = await self._run(None)
+        assert seen["tier"] == "student"
+
+    @pytest.mark.anyio
+    async def test_internal_channels_keep_full_context(self):
+        """Heartbeats and cron jobs have no user behind them."""
+        for channel in ("cron", "discord", "queue"):
+            seen = await self._run(None, channel=channel)
+            assert seen["tier"] == "staff", channel
+
+    @pytest.mark.anyio
+    async def test_student_turn_carries_the_scope_marker(self):
+        """The rule has to travel with the message; the prompt alone did not hold."""
+        from core.context_engine import STUDENT_TURN_MARKER
+        seen = await self._run("student")
+        assert STUDENT_TURN_MARKER in seen["user_message"]
+        assert seen["user_message"].endswith("hei")
+
+    @pytest.mark.anyio
+    async def test_pupil_screenshot_is_sent_inline_not_as_a_path(self):
+        """A pupil has no Read tool, so a path marker would be a dead reference."""
+        message = (
+            "[Attached image: C:\\shots\\a.png]\n"
+            "[Attached image: C:\\shots\\b.png]\n"
+            "her er feilmeldingen"
+        )
+        seen = await self._run("student", message=message)
+        assert [p.name for p in seen["images"]] == ["a.png", "b.png"]
+        assert "Attached image" not in seen["user_message"]
+        assert "her er feilmeldingen" in seen["user_message"]
+
+    @pytest.mark.anyio
+    async def test_staff_screenshot_stays_a_path(self):
+        """Staff open the file themselves, which is how a screenshot becomes an asset."""
+        message = "[Attached image: C:\\shots\\a.png]\nse her"
+        seen = await self._run("staff", message=message)
+        assert seen["images"] == []
+        assert "Attached image" in seen["user_message"]
+
+    @pytest.mark.anyio
+    async def test_pupil_transcript_keeps_the_original_message(self):
+        """The chat bubble shows what the pupil wrote, markers and marker text included."""
+        message = "[Attached image: C:\\shots\\a.png]\nhjelp"
+        await self._run("student", message=message)
+        stored = [
+            call.args for call in self._sm.append_message.await_args_list
+            if call.args[1] == "user"
+        ]
+        assert stored and stored[0][2] == message
+
+    @pytest.mark.anyio
+    async def test_staff_turn_is_not_marked(self):
+        from core.context_engine import STUDENT_TURN_MARKER
+        seen = await self._run("staff")
+        assert STUDENT_TURN_MARKER not in seen["user_message"]
+        assert seen["user_message"] == "hei"
+
+    @pytest.mark.anyio
+    async def test_marker_is_not_stored_in_the_transcript(self):
+        """Otherwise our plumbing appears inside the pupil's own chat bubble."""
+        from core.context_engine import STUDENT_TURN_MARKER
+        await self._run("student")
+        stored = [c.args[2] for c in self._sm.append_message.await_args_list
+                  if c.args[1] == "user"]
+        assert stored == ["hei"]
+        assert all(STUDENT_TURN_MARKER not in s for s in stored)
+
+
+# ---------------------------------------------------------------------------
 # Fix 1 — Version constant
 # ---------------------------------------------------------------------------
 
@@ -539,6 +918,75 @@ class TestSessionFlows:
             sessions = await sm.list_sessions()
             await sm.stop()
         assert not any(s["peer"] == "resetme" for s in sessions)
+
+    @pytest.mark.anyio
+    async def test_pupils_are_purged_on_the_shorter_clock(self, tmp_path):
+        """A pupil's conversation goes at 5 days; staff keep theirs to 30."""
+        cfg = _make_temp_config(tmp_path)
+        sm = self._make_sm(tmp_path)
+        with patch("core.session_manager.get_config", return_value=cfg):
+            await sm.start()
+            pupil = await sm.get_or_create("web", "elev|a", tier="student")
+            staff = await sm.get_or_create("web", "ansatt|b", tier="staff")
+            legacy = await sm.get_or_create("web", "gammel|c")  # predates tiers
+            await self._age(sm, [pupil, staff, legacy], days=10)
+
+            removed = await sm.purge_older_than(30, student_days=5)
+            left = {s["peer"] for s in await sm.list_sessions()}
+            await sm.stop()
+
+        assert removed == 1
+        assert left == {"ansatt|b", "gammel|c"}
+
+    @pytest.mark.anyio
+    async def test_a_pupil_inside_the_window_is_left_alone(self, tmp_path):
+        cfg = _make_temp_config(tmp_path)
+        sm = self._make_sm(tmp_path)
+        with patch("core.session_manager.get_config", return_value=cfg):
+            await sm.start()
+            pupil = await sm.get_or_create("web", "elev|a", tier="student")
+            await self._age(sm, [pupil], days=3)
+            removed = await sm.purge_older_than(30, student_days=5)
+            await sm.stop()
+        assert removed == 0
+
+    @pytest.mark.anyio
+    async def test_everyone_is_purged_on_one_clock_when_no_pupil_window(self, tmp_path):
+        """student_days=0 must mean "same as everyone", not "never delete"."""
+        cfg = _make_temp_config(tmp_path)
+        sm = self._make_sm(tmp_path)
+        with patch("core.session_manager.get_config", return_value=cfg):
+            await sm.start()
+            pupil = await sm.get_or_create("web", "elev|a", tier="student")
+            staff = await sm.get_or_create("web", "ansatt|b", tier="staff")
+            await self._age(sm, [pupil, staff], days=40)
+            removed = await sm.purge_older_than(30, student_days=0)
+            await sm.stop()
+        assert removed == 2
+
+    @pytest.mark.anyio
+    async def test_keeping_a_pupil_conversation_resets_its_clock(self, tmp_path):
+        cfg = _make_temp_config(tmp_path)
+        sm = self._make_sm(tmp_path)
+        with patch("core.session_manager.get_config", return_value=cfg):
+            await sm.start()
+            pupil = await sm.get_or_create("web", "elev|a", tier="student")
+            await self._age(sm, [pupil], days=10)
+            await sm.touch(pupil["session_id"])
+            removed = await sm.purge_older_than(30, student_days=5)
+            await sm.stop()
+        assert removed == 0
+
+    async def _age(self, sm, sessions: list, days: int) -> None:
+        """Backdate last_active so the retention sweep sees an old conversation."""
+        from core.session_manager import _now_ts
+        stale = _now_ts() - days * 86400
+        for s in sessions:
+            await sm._db.execute(
+                "UPDATE sessions SET last_active=? WHERE session_id=?",
+                (stale, s["session_id"]),
+            )
+        await sm._db.commit()
 
     @pytest.mark.anyio
     async def test_compact_sets_pending_context(self, tmp_path):
@@ -729,7 +1177,7 @@ class TestSnapshotIntegration:
         monkeypatch.setattr("core.cli_backend.call_claude", fake_call_claude)
 
         # Patch _verify_token so requests are treated as authenticated
-        monkeypatch.setattr(app_mod, "_verify_token", lambda token: True)
+        monkeypatch.setattr(app_mod, "_decode_token", lambda token: {"sub": "admin", "role": "admin", "name": "Admin"})
 
         client = TestClient(app_mod.app, raise_server_exceptions=False)
         return client
@@ -771,7 +1219,7 @@ class TestSnapshotIntegration:
         monkeypatch.setattr(app_mod, "_session_manager", session_manager)
         monkeypatch.setattr(app_mod, "_agent_loop", agent_loop)
         monkeypatch.setattr(app_mod, "get_config", lambda: cfg)
-        monkeypatch.setattr(app_mod, "_verify_token", lambda token: True)
+        monkeypatch.setattr(app_mod, "_decode_token", lambda token: {"sub": "admin", "role": "admin", "name": "Admin"})
 
         client = TestClient(app_mod.app, raise_server_exceptions=False)
         resp = client.post(
@@ -1016,7 +1464,7 @@ class TestAdminApiIntegration:
         cfg = _make_temp_config(tmp_path)
 
         monkeypatch.setattr(app_mod, "get_config", lambda: cfg)
-        monkeypatch.setattr(app_mod, "_verify_token", lambda token: True)
+        monkeypatch.setattr(app_mod, "_decode_token", lambda token: {"sub": "admin", "role": "admin", "name": "Admin"})
         monkeypatch.setattr(app_mod, "_session_manager", MagicMock())
         monkeypatch.setattr(app_mod, "_agent_loop", MagicMock())
         monkeypatch.setattr(app_mod, "_queue_manager", queue_manager)
@@ -1155,11 +1603,14 @@ class TestWebSocketAuth:
 
         TestClient = _RealTestClient
 
-        # Patch _verify_token: accept only good_token
+        # Patch _decode_token: accept only good_token. ws_chat needs the claims
+        # (it derives the per-user session key from "sub"), so this is the
+        # auth gate rather than the old boolean _verify_token.
         monkeypatch.setattr(
             app_mod,
-            "_verify_token",
-            lambda token: token == good_token,
+            "_decode_token",
+            lambda token: ({"sub": "admin", "role": "admin", "name": "Admin"}
+                           if token == good_token else None),
         )
 
         agent_loop = MagicMock()
@@ -1214,3 +1665,820 @@ class TestWebSocketAuth:
         except Exception:
             rejected = True
         assert rejected, "Expected missing token to be rejected"
+
+
+# ---------------------------------------------------------------------------
+# Integration tests — commands are staff-only (see ROLES.md)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not _HAS_REAL_FASTAPI, reason="fastapi not installed")
+class TestCommandTierGate:
+    """Slash commands belong to staff.
+
+    A student's leading slash must carry no meaning: the message goes to the
+    agent as ordinary text, so a pupil typing "/hjelp" gets help rather than a
+    notice about a command surface they cannot use.
+    """
+
+    def _client(self, monkeypatch, claims: dict):
+        import importlib
+        import web.app as app_mod
+        importlib.reload(app_mod)
+
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: dict(claims) if token == "tok" else None,
+        )
+
+        seen = {"slash": [], "agent": []}
+
+        async def fake_slash(message, channel, peer, sm, al, send_fn):
+            seen["slash"].append(message)
+            await send_fn("kommando kjørt")
+            return True
+
+        async def fake_run(channel, peer, message):
+            seen["agent"].append(message)
+            yield "svar"
+
+        agent_loop = MagicMock()
+        agent_loop.run = fake_run
+        monkeypatch.setattr(app_mod, "handle_slash", fake_slash)
+        monkeypatch.setattr(app_mod, "_agent_loop", agent_loop)
+        monkeypatch.setattr(app_mod, "_session_manager", MagicMock())
+
+        return _RealTestClient(app_mod.app), seen
+
+    def _send(self, monkeypatch, claims: dict, message: str) -> dict:
+        client, seen = self._client(monkeypatch, claims)
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            assert ws.receive_json().get("status") == "connected"
+            ws.send_json({"message": message})
+            # Drain until the turn ends so the server has finished routing.
+            for _ in range(10):
+                if ws.receive_json().get("done"):
+                    break
+        return seen
+
+    def test_staff_slash_runs_the_command(self, monkeypatch):
+        seen = self._send(
+            monkeypatch,
+            {"sub": "dev:ansatt@frid.no", "role": "user", "tier": "staff"},
+            "/status",
+        )
+        assert seen["slash"] == ["/status"]
+        assert seen["agent"] == []
+
+    def test_student_slash_reaches_the_agent_as_text(self, monkeypatch):
+        seen = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "role": "user", "tier": "student"},
+            "/status",
+        )
+        assert seen["slash"] == []
+        assert seen["agent"] == ["/status"]
+
+    def test_student_cannot_reach_nettside(self, monkeypatch):
+        """The /nettside branch fetches a URL server-side — students must miss it."""
+        seen = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "role": "user", "tier": "student"},
+            "/nettside https://example.com",
+        )
+        assert seen["slash"] == []
+        assert seen["agent"] == ["/nettside https://example.com"]
+
+    def test_token_without_tier_is_treated_as_student(self, monkeypatch):
+        """Tokens minted before tiers existed must lose commands, not keep them."""
+        seen = self._send(
+            monkeypatch,
+            {"sub": "dev:gammel@frid.no", "role": "user"},
+            "/status",
+        )
+        assert seen["slash"] == []
+        assert seen["agent"] == ["/status"]
+
+    def test_operator_keeps_commands(self, monkeypatch):
+        seen = self._send(
+            monkeypatch,
+            {"sub": "admin", "role": "admin", "tier": "staff"},
+            "/status",
+        )
+        assert seen["slash"] == ["/status"]
+
+
+class TestChatAuditRecords:
+    """Every conversation leaves a record the IT desk can read later.
+
+    The point is the insight, not the surveillance: who asked, what it was
+    about, and whether they were pushing at the edges of what a pupil may ask.
+    """
+
+    def _client(self, monkeypatch, claims: dict, reply: str = "svar",
+                history: list = None):
+        import importlib
+        import web.app as app_mod
+        importlib.reload(app_mod)
+
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: dict(claims) if token == "tok" else None,
+        )
+
+        async def fake_run(channel, peer, message):
+            yield reply
+
+        agent_loop = MagicMock()
+        agent_loop.run = fake_run
+        monkeypatch.setattr(app_mod, "_agent_loop", agent_loop)
+
+        sm = MagicMock()
+        sm.get_or_create = AsyncMock(return_value={"session_id": "s1"})
+        sm.async_read_transcript = AsyncMock(return_value=history or [])
+        sm.context_status = AsyncMock(return_value={"blocked": False})
+        monkeypatch.setattr(app_mod, "_session_manager", sm)
+
+        recorded = []
+        audit = MagicMock()
+        audit.log = lambda event, **fields: recorded.append((event, fields))
+        monkeypatch.setattr(app_mod, "_audit", audit)
+
+        return _RealTestClient(app_mod.app), recorded
+
+    def _send(self, monkeypatch, claims, message, reply="svar",
+              history: list = None) -> list:
+        client, recorded = self._client(monkeypatch, claims, reply, history)
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            while ws.receive_json().get("status") != "connected":
+                pass
+            ws.send_json({"message": message})
+            for _ in range(10):
+                if ws.receive_json().get("done"):
+                    break
+        return recorded
+
+    def test_conversation_start_is_recorded_with_who_and_what(self, monkeypatch):
+        recorded = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "email": "elev@afk.no",
+             "name": "Elev Elevsen", "role": "user", "tier": "student"},
+            "Jeg får ikke koblet meg til wifi på skolen",
+        )
+        started = [f for e, f in recorded if e == "chat_started"]
+        assert len(started) == 1
+        rec = started[0]
+        assert rec["sender_id"] == "elev@afk.no"
+        assert rec["domain"] == "afk.no"
+        assert rec["tier"] == "student"
+        assert "wifi" in rec["content_preview"].lower()
+
+    def test_only_the_first_message_starts_a_conversation(self, monkeypatch):
+        client, recorded = self._client(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "email": "elev@afk.no",
+             "role": "user", "tier": "student"},
+        )
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            while ws.receive_json().get("status") != "connected":
+                pass
+            for text in ("wifi virker ikke", "og passordet også"):
+                ws.send_json({"message": text})
+                for _ in range(10):
+                    if ws.receive_json().get("done"):
+                        break
+        assert len([e for e, _ in recorded if e == "chat_started"]) == 1
+
+    def test_returning_to_an_existing_conversation_is_not_a_new_one(self, monkeypatch):
+        """A reconnect replays history — it must not double-count the question."""
+        recorded = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "email": "elev@afk.no",
+             "role": "user", "tier": "student"},
+            "og hva med telefonen?",
+            history=[{"role": "user", "content": "wifi virker ikke"}],
+        )
+        assert not [e for e, _ in recorded if e == "chat_started"]
+
+    def test_entra_sign_in_is_recorded_by_email_not_object_id(self, monkeypatch):
+        """The subject is an opaque Entra id — an audit record naming it is useless."""
+        recorded = self._send(
+            monkeypatch,
+            {"sub": "entra:3f2b1c00-0000-0000-0000-abcdef123456",
+             "email": "elev.elevsen@afk.no", "role": "user", "tier": "student"},
+            "wifi virker ikke",
+        )
+        rec = [f for e, f in recorded if e == "chat_started"][0]
+        assert rec["sender_id"] == "elev.elevsen@afk.no"
+        assert rec["domain"] == "afk.no"
+
+    def test_blocked_command_is_recorded(self, monkeypatch):
+        recorded = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "email": "elev@afk.no",
+             "role": "user", "tier": "student"},
+            "/nettside https://example.com",
+        )
+        blocked = [f for e, f in recorded if e == "chat_command_blocked"]
+        assert len(blocked) == 1
+        assert blocked[0]["command"] == "/nettside"
+
+    def test_refusal_is_recorded_with_what_they_asked(self, monkeypatch):
+        recorded = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "email": "elev@afk.no",
+             "role": "user", "tier": "student"},
+            "Kan du løse denne mattoppgaven for meg?",
+            reply="Jeg kan bare hjelpe med IT på skolen. Spør læreren din om matte.",
+        )
+        refusals = [f for e, f in recorded if e == "chat_scope_refusal"]
+        assert len(refusals) == 1
+        assert "mattoppgave" in refusals[0]["content_preview"].lower()
+
+    def test_staff_reply_that_mentions_the_phrase_is_not_a_refusal(self, monkeypatch):
+        """Staff have no scope to break, so the phrase means nothing for them."""
+        recorded = self._send(
+            monkeypatch,
+            {"sub": "dev:ansatt@frid.no", "email": "ansatt@frid.no",
+             "role": "user", "tier": "staff"},
+            "Hva svarer agenten elevene?",
+            reply="Den sier: Jeg kan bare hjelpe med IT på skolen.",
+        )
+        assert not [e for e, _ in recorded if e == "chat_scope_refusal"]
+
+
+class TestPupilRetentionWindow:
+    """A pupil is told the clock that will actually delete their conversation."""
+
+    def _app(self, monkeypatch, tier: str):
+        import importlib
+        import web.app as app_mod
+        importlib.reload(app_mod)
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: {"sub": f"dev:x@y.no", "role": "user", "tier": tier},
+        )
+        return app_mod
+
+    def _me(self, monkeypatch, tier: str) -> dict:
+        app_mod = self._app(monkeypatch, tier)
+        r = _RealTestClient(app_mod.app).get(
+            "/api/me", headers={"Authorization": "Bearer tok"}
+        )
+        assert r.status_code == 200
+        return r.json()
+
+    def test_pupil_is_quoted_the_short_window(self, monkeypatch):
+        assert self._me(monkeypatch, "student")["retention_days"] == 5
+
+    def test_staff_are_quoted_the_long_window(self, monkeypatch):
+        assert self._me(monkeypatch, "staff")["retention_days"] == 30
+
+    def test_pupil_window_falls_back_when_unset(self, monkeypatch):
+        """0 means "same as everyone else", not "keep pupil chats forever"."""
+        app_mod = self._app(monkeypatch, "student")
+        cfg = app_mod.get_config()
+        monkeypatch.setattr(cfg.session, "student_retention_days", 0)
+        assert app_mod._retention_days("student") == cfg.session.retention_days
+
+
+class TestPupilKeepsTheSolution:
+    """Keeping a conversation means something different for a pupil.
+
+    Staff get a handover briefing for the next technician. A pupil gets the fix
+    itself, in their own thread, and only pays for a model call when the thread
+    is long enough that summarising saves anything.
+    """
+
+    def _client(self, monkeypatch, tier: str, messages: list):
+        import importlib
+        import web.app as app_mod
+        importlib.reload(app_mod)
+
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: {"sub": "dev:elev@afk.no", "role": "user", "tier": tier},
+        )
+
+        calls = {"summarised": [], "touched": [], "appended": []}
+
+        sm = MagicMock()
+        sm.get_or_create = AsyncMock(return_value={"session_id": "s1"})
+        sm.async_read_transcript = AsyncMock(return_value=messages)
+        sm.compact_session = AsyncMock(
+            side_effect=lambda sid, summary: calls["summarised"].append(summary)
+        )
+        sm.touch = AsyncMock(side_effect=lambda sid: calls["touched"].append(sid))
+        sm.append_message = AsyncMock(
+            side_effect=lambda sid, role, content: calls["appended"].append(content)
+        )
+        monkeypatch.setattr(app_mod, "_session_manager", sm)
+        monkeypatch.setattr(app_mod, "_agent_loop", MagicMock())
+
+        prompts = []
+
+        async def fake_claude(*, model, system, user_message, **kw):
+            prompts.append(user_message)
+            return "Slik løste du det: 1) last ned sertifikatet 2) koble til FRID", "sid", {}
+
+        monkeypatch.setattr(app_mod, "_audit", None)
+        import core.cli_backend as cli
+        monkeypatch.setattr(cli, "call_claude", fake_claude)
+
+        client = _RealTestClient(app_mod.app)
+        cid = "11111111-2222-3333-4444-555555555555"
+        r = client.post(
+            f"/api/me/conversations/{cid}/compact",
+            headers={"Authorization": "Bearer tok"},
+        )
+        return r, calls, prompts
+
+    def _thread(self, turns: int, answer_len: int = 400) -> list:
+        answer = "Gjør dette: " + "steg. " * (answer_len // 6)
+        msgs = []
+        for i in range(turns):
+            msgs.append({"role": "user", "content": f"spørsmål {i}"})
+            msgs.append({"role": "assistant", "content": answer})
+        return msgs
+
+    def test_short_pupil_chat_is_kept_without_paying_for_a_summary(self, monkeypatch):
+        r, calls, prompts = self._client(monkeypatch, "student", self._thread(2))
+        assert r.status_code == 200
+        assert r.json()["kept"] == "as_is"
+        assert calls["touched"] == ["s1"]
+        assert prompts == []
+        assert calls["summarised"] == []
+
+    def test_long_pupil_chat_is_summarised_into_the_solution(self, monkeypatch):
+        r, calls, prompts = self._client(monkeypatch, "student", self._thread(6))
+        assert r.status_code == 200
+        body = r.json()
+        assert body["kept"] == "summary"
+        assert body["in_thread"] is True
+        # The pupil prompt asks for the fix only — not the handover briefing.
+        assert "KUN løsningen" in prompts[0]
+        assert "ruled out" not in prompts[0]
+        # And it lands in their own thread, where they can read it.
+        assert calls["appended"] and calls["summarised"]
+
+    def test_staff_always_get_the_handover_briefing(self, monkeypatch):
+        r, calls, prompts = self._client(monkeypatch, "staff", self._thread(2))
+        assert r.status_code == 200
+        assert r.json()["in_thread"] is False
+        assert "ruled out" in prompts[0]
+        # Staff threads are not rewritten with a note.
+        assert calls["appended"] == []
+
+    def test_nothing_answered_yet_cannot_be_kept(self, monkeypatch):
+        r, calls, prompts = self._client(
+            monkeypatch, "student",
+            [{"role": "user", "content": "hei"}, {"role": "assistant", "content": "hei!"}],
+        )
+        assert r.status_code == 409
+        assert calls["touched"] == [] and prompts == []
+
+
+class TestPupilImagesAreNotPermanent:
+    """Nothing a pupil sends becomes part of the knowledge base.
+
+    Only a command can add an image to it, and pupils have no commands. A staff
+    screenshot is still persisted, because that is how documentation gets written.
+    """
+
+    def _send_with_image(self, monkeypatch, tmp_path, tier: str):
+        import importlib
+        import web.app as app_mod
+        importlib.reload(app_mod)
+
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: {"sub": "dev:x@y.no", "role": "user", "tier": tier},
+        )
+
+        img = tmp_path / "skjermbilde.png"
+        img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
+        monkeypatch.setitem(
+            app_mod._UPLOADS, "up1",
+            {"path": str(img), "owner": "dev:x@y.no", "at": time.time()},
+        )
+
+        assets = tmp_path / "assets"
+
+        def _assets():
+            assets.mkdir(parents=True, exist_ok=True)
+            return assets
+
+        monkeypatch.setattr(app_mod, "_assets_dir", _assets)
+
+        seen = []
+
+        async def fake_run(channel, peer, message):
+            seen.append(message)
+            yield "svar"
+
+        agent_loop = MagicMock()
+        agent_loop.run = fake_run
+        monkeypatch.setattr(app_mod, "_agent_loop", agent_loop)
+
+        sm = MagicMock()
+        sm.get_or_create = AsyncMock(return_value={"session_id": "s1"})
+        sm.async_read_transcript = AsyncMock(return_value=[])
+        sm.context_status = AsyncMock(return_value={"blocked": False})
+        monkeypatch.setattr(app_mod, "_session_manager", sm)
+        monkeypatch.setattr(app_mod, "_audit", None)
+
+        client = _RealTestClient(app_mod.app)
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            while ws.receive_json().get("status") != "connected":
+                pass
+            ws.send_json({"message": "her er passordfeilen min", "attachments": ["up1"]})
+            for _ in range(10):
+                if ws.receive_json().get("done"):
+                    break
+        return seen, assets, img
+
+    def test_pupil_screenshot_never_reaches_the_assets_folder(self, monkeypatch, tmp_path):
+        seen, assets, img = self._send_with_image(monkeypatch, tmp_path, "student")
+        assert not assets.exists() or list(assets.iterdir()) == [], \
+            "a pupil's screenshot was copied into the knowledge base"
+        # It still reaches the model — from the temp upload, which expires.
+        assert seen and str(img) in seen[0]
+
+    def test_pupil_agent_is_not_told_the_image_is_a_permanent_asset(
+        self, monkeypatch, tmp_path
+    ):
+        seen, _assets, _img = self._send_with_image(monkeypatch, tmp_path, "student")
+        assert "documentation assets" not in seen[0]
+        assert "asset:" not in seen[0]
+
+    def test_staff_screenshot_is_still_persisted(self, monkeypatch, tmp_path):
+        seen, assets, _img = self._send_with_image(monkeypatch, tmp_path, "staff")
+        stored = list(assets.iterdir())
+        assert len(stored) == 1
+        assert "documentation assets" in seen[0]
+
+    def test_stale_uploads_are_swept_by_age_on_disk(self, tmp_path, monkeypatch):
+        """The in-memory map does not survive a restart; the files do."""
+        # core.file_handler is stubbed for the app-level tests above, so load the
+        # real module here to exercise the sweep itself.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_real_file_handler", REPO_ROOT / "core" / "file_handler.py"
+        )
+        fh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fh)
+
+        monkeypatch.setattr(fh, "UPLOAD_DIR", tmp_path)
+        old = tmp_path / "orphan.png"
+        old.write_bytes(b"x")
+        import os
+        stale = time.time() - 8 * 3600
+        os.utime(old, (stale, stale))
+        fresh = tmp_path / "recent.png"
+        fresh.write_bytes(b"x")
+
+        assert fh.prune_stale_uploads(6 * 3600) == 1
+        assert not old.exists()
+        assert fresh.exists()
+
+
+class TestPupilAssetBoundary:
+    """A pupil may load the images their own guides cite, and no others.
+
+    The assets folder is the whole knowledge base, including screenshots of Azure
+    PIM and the MFA reset procedure — the material pupils are specifically walled
+    off from.
+    """
+
+    def _client(self, monkeypatch, tmp_path, tier: str):
+        import importlib
+        import web.app as app_mod
+        importlib.reload(app_mod)
+
+        workspace = tmp_path / "workspace"
+        (workspace / "skills" / "frid-nettverk").mkdir(parents=True)
+        (workspace / "skills" / "visma-inschool").mkdir(parents=True)
+        (workspace / "skills" / "frid-nettverk" / "SKILL.md").write_text(
+            "![wifi](asset:wifi-steg-1.png)", encoding="utf-8"
+        )
+        (workspace / "skills" / "visma-inschool" / "SKILL.md").write_text(
+            "![konto](asset:kontoaktivering-start.png)", encoding="utf-8"
+        )
+
+        assets = workspace / "assets"
+        assets.mkdir()
+        for name in ("wifi-steg-1.png", "kontoaktivering-start.png",
+                     "azure-pim-aktiver-rollen.png"):
+            (assets / name).write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        cfg = app_mod.get_config()
+        monkeypatch.setattr(cfg, "workspace_path", str(workspace))
+        monkeypatch.setattr(app_mod, "_assets_dir", lambda: assets)
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: {"sub": "dev:x@y.no", "role": "user", "tier": tier},
+        )
+        monkeypatch.setattr(app_mod, "_pupil_assets_cache", (0.0, frozenset()))
+        return _RealTestClient(app_mod.app)
+
+    def _get(self, client, name: str) -> int:
+        return client.get(
+            f"/api/assets/{name}", headers={"Authorization": "Bearer tok"}
+        ).status_code
+
+    def test_pupil_can_load_an_image_their_guide_cites(self, monkeypatch, tmp_path):
+        client = self._client(monkeypatch, tmp_path, "student")
+        assert self._get(client, "wifi-steg-1.png") == 200
+        assert self._get(client, "kontoaktivering-start.png") == 200
+
+    def test_pupil_cannot_load_the_azure_screenshots(self, monkeypatch, tmp_path):
+        client = self._client(monkeypatch, tmp_path, "student")
+        assert self._get(client, "azure-pim-aktiver-rollen.png") == 404
+
+    def test_staff_can_load_any_of_them(self, monkeypatch, tmp_path):
+        client = self._client(monkeypatch, tmp_path, "staff")
+        assert self._get(client, "azure-pim-aktiver-rollen.png") == 200
+        assert self._get(client, "wifi-steg-1.png") == 200
+
+    def test_the_allowlist_follows_the_guides_when_they_change(self, monkeypatch, tmp_path):
+        import web.app as app_mod
+        client = self._client(monkeypatch, tmp_path, "student")
+        assert self._get(client, "azure-pim-aktiver-rollen.png") == 404
+
+        # Cite it from a pupil guide and it becomes theirs to load, without a
+        # restart — the cache is keyed on the guides' modification time.
+        guide = (Path(app_mod.get_config().workspace_path)
+                 / "skills" / "frid-nettverk" / "SKILL.md")
+        guide.write_text(
+            "![wifi](asset:wifi-steg-1.png)\n![x](asset:azure-pim-aktiver-rollen.png)",
+            encoding="utf-8",
+        )
+        import os
+        future = time.time() + 10
+        os.utime(guide, (future, future))
+        assert self._get(client, "azure-pim-aktiver-rollen.png") == 200
+
+
+class TestTieredRateLimits:
+    """The allowance belongs to the person, not to the socket they opened.
+
+    One Claude subscription sits behind every conversation, so a limit that a
+    pupil can reset by pressing F5 is not a limit.
+    """
+
+    def _limiter(self):
+        from security.auth import RateLimiter
+        return RateLimiter()
+
+    def test_pupils_get_a_tighter_allowance_than_staff(self):
+        from core.config import get_config
+        limits = get_config().security.rate_limit
+        assert limits.for_tier("student") < limits.for_tier("staff")
+
+    def test_an_unset_pupil_limit_falls_back_to_the_shared_one(self, monkeypatch):
+        from core.config import get_config
+        limits = get_config().security.rate_limit
+        monkeypatch.setattr(limits, "student_per_minute", 0)
+        assert limits.for_tier("student") == limits.for_tier("staff")
+
+    def test_pupil_is_stopped_at_the_pupil_limit(self):
+        from core.config import get_config
+        per_minute, _ = get_config().security.rate_limit.for_tier("student")
+        rl = self._limiter()
+        for _ in range(per_minute):
+            assert rl.check("web:elev", "student") is None
+        assert "minute" in (rl.check("web:elev", "student") or "")
+
+    def test_staff_are_not_stopped_at_the_pupil_limit(self):
+        from core.config import get_config
+        pupil_limit, _ = get_config().security.rate_limit.for_tier("student")
+        rl = self._limiter()
+        for _ in range(pupil_limit + 1):
+            assert rl.check("web:ansatt", "staff") is None
+
+    def test_two_connections_share_one_allowance(self):
+        """The whole point: reconnecting must not hand out a fresh allowance."""
+        from core.config import get_config
+        per_minute, _ = get_config().security.rate_limit.for_tier("student")
+        rl = self._limiter()
+        for i in range(per_minute):
+            # Same person, alternating "sockets" — the key is the person.
+            assert rl.check("web:elev", "student") is None
+        assert rl.check("web:elev", "student") is not None
+
+    def test_one_pupil_hitting_the_limit_does_not_block_another(self):
+        from core.config import get_config
+        per_minute, _ = get_config().security.rate_limit.for_tier("student")
+        rl = self._limiter()
+        for _ in range(per_minute + 2):
+            rl.check("web:elev1", "student")
+        assert rl.check("web:elev2", "student") is None
+
+    def test_idle_senders_are_forgotten(self):
+        """Otherwise a school year of pupils accumulates in memory forever."""
+        rl = self._limiter()
+        rl.check("web:gone", "student")
+        # Pretend the hour window aged out, then force a prune.
+        rl._hour_windows["web:gone"][0] -= 7200
+        rl._prune(time.time())
+        assert "web:gone" not in rl._hour_windows
+        assert "web:gone" not in rl._minute_windows
+
+
+class TestRateLimitIsPerUserOverWebsocket:
+    """The websocket handler must consult the shared limiter, not a fresh one."""
+
+    def _client(self, monkeypatch, tier: str):
+        import importlib
+        import web.app as app_mod
+        importlib.reload(app_mod)
+
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: {"sub": "dev:elev@afk.no", "email": "elev@afk.no",
+                           "role": "user", "tier": tier},
+        )
+
+        async def fake_run(channel, peer, message):
+            yield "svar"
+
+        agent_loop = MagicMock()
+        agent_loop.run = fake_run
+        monkeypatch.setattr(app_mod, "_agent_loop", agent_loop)
+
+        sm = MagicMock()
+        sm.get_or_create = AsyncMock(return_value={"session_id": "s1"})
+        sm.async_read_transcript = AsyncMock(return_value=[])
+        sm.context_status = AsyncMock(return_value={"blocked": False})
+        monkeypatch.setattr(app_mod, "_session_manager", sm)
+
+        recorded = []
+        audit = MagicMock()
+        audit.log = lambda event, **f: recorded.append((event, f))
+        monkeypatch.setattr(app_mod, "_audit", audit)
+
+        return app_mod, _RealTestClient(app_mod.app), recorded
+
+    def test_allowance_survives_a_reconnect(self, monkeypatch):
+        from core.config import get_config
+        per_minute, _ = get_config().security.rate_limit.for_tier("student")
+        app_mod, client, recorded = self._client(monkeypatch, "student")
+
+        sent = 0
+        errors = []
+        # Two separate connections, one person. The second must not start over.
+        for _ in range(2):
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.send_json({"token": "tok"})
+                while ws.receive_json().get("status") != "connected":
+                    pass
+                for _ in range(per_minute):
+                    ws.send_json({"message": "hei"})
+                    sent += 1
+                    for _ in range(10):
+                        frame = ws.receive_json()
+                        if frame.get("error"):
+                            errors.append(frame)
+                        if frame.get("done") or frame.get("error"):
+                            break
+
+        assert sent == per_minute * 2
+        assert errors, "a reconnect handed out a fresh allowance"
+        assert errors[0]["code"] == "rate_limited"
+
+    def test_hitting_the_limit_is_recorded_once_not_per_attempt(self, monkeypatch):
+        from core.config import get_config
+        per_minute, _ = get_config().security.rate_limit.for_tier("student")
+        app_mod, client, recorded = self._client(monkeypatch, "student")
+
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            while ws.receive_json().get("status") != "connected":
+                pass
+            for _ in range(per_minute + 5):
+                ws.send_json({"message": "hei"})
+                for _ in range(10):
+                    frame = ws.receive_json()
+                    if frame.get("done") or frame.get("error"):
+                        break
+
+        hits = [f for e, f in recorded if e == "chat_rate_limited"]
+        assert len(hits) == 1
+        assert hits[0]["sender_id"] == "elev@afk.no"
+
+
+class TestChatInsights:
+    """The counting behind the admin view."""
+
+    def _get(self, monkeypatch, tmp_path, events: list[dict], days: int = 30,
+             role: str = "admin"):
+        import importlib
+        import web.app as app_mod
+        importlib.reload(app_mod)
+
+        log = tmp_path / "audit.log"
+        log.write_text(
+            "\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(app_mod, "_audit_log_path", lambda: log)
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: {"sub": "admin", "role": role} if token == "tok" else None,
+        )
+        client = _RealTestClient(app_mod.app)
+        return client.get(
+            f"/api/insights?days={days}",
+            headers={"Authorization": "Bearer tok"},
+        )
+
+    def _insights(self, monkeypatch, tmp_path, events: list[dict], days: int = 30):
+        r = self._get(monkeypatch, tmp_path, events, days)
+        assert r.status_code == 200
+        return r.json()
+
+    def _started(self, title, *, email="elev@afk.no", domain="afk.no",
+                 tier="student", ago_days=0):
+        return {
+            "ts": time.time() - ago_days * 86400,
+            "event": "chat_started",
+            "sender_id": email,
+            "domain": domain,
+            "tier": tier,
+            "content_preview": title,
+        }
+
+    def test_counts_conversations_and_people(self, monkeypatch, tmp_path):
+        data = self._insights(monkeypatch, tmp_path, [
+            self._started("wifi virker ikke"),
+            self._started("wifi virker ikke igjen"),
+            self._started("glemt passord", email="elev2@afk.no"),
+        ])
+        assert data["totals"]["conversations"] == 3
+        assert data["totals"]["people"] == 2
+
+    def test_top_words_surface_the_common_problem(self, monkeypatch, tmp_path):
+        data = self._insights(monkeypatch, tmp_path, [
+            self._started("Jeg får ikke koblet meg til wifi"),
+            self._started("wifi på pc-en min"),
+            self._started("Hjelp med wifi og sertifikat"),
+            self._started("glemt passordet mitt"),
+        ])
+        words = {w["key"]: w["count"] for w in data["top_words"]}
+        assert words.get("wifi") == 3
+        # Filler words carry no signal and must not crowd out the real subject.
+        for noise in ("jeg", "ikke", "med", "til", "og", "min", "mitt"):
+            assert noise not in words
+
+    def test_refusals_and_blocked_commands_are_counted(self, monkeypatch, tmp_path):
+        data = self._insights(monkeypatch, tmp_path, [
+            self._started("wifi"),
+            {"ts": time.time(), "event": "chat_scope_refusal",
+             "sender_id": "elev@afk.no", "tier": "student",
+             "content_preview": "skriv et dikt"},
+            {"ts": time.time(), "event": "chat_command_blocked",
+             "sender_id": "elev@afk.no", "tier": "student", "command": "/status"},
+        ])
+        assert data["totals"]["refusals"] == 1
+        assert data["totals"]["blocked_commands"] == 1
+        assert data["recent_refusals"][0]["asked"] == "skriv et dikt"
+
+    def test_events_outside_the_window_are_left_out(self, monkeypatch, tmp_path):
+        data = self._insights(monkeypatch, tmp_path, [
+            self._started("nytt problem", ago_days=1),
+            self._started("gammelt problem", ago_days=45),
+        ], days=7)
+        assert data["totals"]["conversations"] == 1
+        assert [c["title"] for c in data["recent"]] == ["nytt problem"]
+
+    def test_staff_and_pupils_are_told_apart(self, monkeypatch, tmp_path):
+        data = self._insights(monkeypatch, tmp_path, [
+            self._started("wifi"),
+            self._started("azure-tilgang", email="ansatt@frid.no",
+                          domain="frid.no", tier="staff"),
+        ])
+        tiers = {t["key"]: t["count"] for t in data["by_tier"]}
+        domains = {d["key"]: d["count"] for d in data["by_domain"]}
+        assert tiers == {"student": 1, "staff": 1}
+        assert domains == {"afk.no": 1, "frid.no": 1}
+
+    def test_missing_log_is_not_an_error(self, monkeypatch, tmp_path):
+        import importlib
+        import web.app as app_mod
+        importlib.reload(app_mod)
+        monkeypatch.setattr(app_mod, "_audit_log_path", lambda: tmp_path / "gone.log")
+        monkeypatch.setattr(
+            app_mod, "_decode_token", lambda token: {"sub": "admin", "role": "admin"},
+        )
+        r = _RealTestClient(app_mod.app).get(
+            "/api/insights", headers={"Authorization": "Bearer tok"}
+        )
+        assert r.status_code == 200
+        assert r.json()["totals"]["conversations"] == 0
+
+    def test_staff_cannot_read_pupil_emails(self, monkeypatch, tmp_path):
+        """The view names pupils, so it stays behind the operator login."""
+        r = self._get(monkeypatch, tmp_path, [self._started("wifi")], role="user")
+        assert r.status_code == 403

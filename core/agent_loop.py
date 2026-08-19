@@ -8,18 +8,33 @@ NO_REPLY sentinel suppresses responses (heartbeat use).
 
 import asyncio
 import logging
+import re
 import traceback
 import weakref
+from pathlib import Path
 from typing import AsyncGenerator, Optional
 
-from core.config import get_config
+from core.config import get_config, TIER_STAFF, TIER_STUDENT
 from core.session_manager import SessionManager
-from core.context_engine import build_system_prompt
+from core.context_engine import build_system_prompt, STUDENT_TURN_MARKER
 from core.cli_backend import call_claude
 
 logger = logging.getLogger("helix.agent")
 
 NO_REPLY = "NO_REPLY"
+
+# The web layer prepends one of these per upload so the agent can open the file.
+# A pupil's agent has no file tools, so for that tier the path is pulled back out
+# and the image is sent inside the message instead. Staff keep the marker and open
+# the file themselves, which is also what lets them turn a screenshot into a
+# permanent documentation asset.
+_ATTACHED_IMAGE = re.compile(r"^\[Attached image:\s*([^\]]+)\]\s*$", re.M)
+
+
+def _extract_images(message: str) -> tuple[str, list[Path]]:
+    """Split attachment markers off a message, returning the text and the paths."""
+    paths = [Path(m.group(1).strip()) for m in _ATTACHED_IMAGE.finditer(message)]
+    return _ATTACHED_IMAGE.sub("", message).strip(), paths
 
 
 class AgentLoop:
@@ -52,9 +67,16 @@ class AgentLoop:
         claude_session_id = session.get("claude_session_id")
         is_new_session = claude_session_id is None
 
+        # Which instructions this conversation gets. The tier is stored on the
+        # session by whoever opened it; a web session without one predates the
+        # column and falls to the restricted set, while the internal channels —
+        # heartbeat, cron, the task queue — have no user behind them and need the
+        # full context.
+        tier = session.get("tier") or (TIER_STUDENT if channel == "web" else TIER_STAFF)
+
         async with self._get_lock(session_id):
             try:
-                system = build_system_prompt(is_new_session=is_new_session)
+                system = build_system_prompt(is_new_session=is_new_session, tier=tier)
 
                 # Inject context from previous session if a model switch just happened
                 if is_new_session:
@@ -62,12 +84,23 @@ class AgentLoop:
                     if pending:
                         user_message = f"{pending}\n\n{user_message}"
 
+                # What the model sees, as opposed to what the person wrote. The
+                # transcript below stores the latter, so a pupil's own chat bubble
+                # stays their own words rather than our plumbing.
+                prompt_message = user_message
+                images: list[Path] = []
+                if tier == TIER_STUDENT:
+                    prompt_message, images = _extract_images(user_message)
+                    prompt_message = f"{STUDENT_TURN_MARKER}\n\n{prompt_message}"
+
                 response_text, used_session_id, usage = await call_claude(
                     model=model_id,
                     system=system,
-                    user_message=user_message,
+                    user_message=prompt_message,
                     claude_session_id=claude_session_id,
                     is_new_session=is_new_session,
+                    tier=tier,
+                    images=images,
                 )
 
                 # Persist claude_session_id if new or changed (fresh start or resume fallback)
@@ -89,7 +122,16 @@ class AgentLoop:
             except Exception as e:
                 logger.error(f"Agent loop error [{channel}:{peer}]: {e}\n{traceback.format_exc()}")
                 logger.error(f"Full traceback: {traceback.format_exc()}")
-                yield "Something went wrong. Please try again."
+                # Norwegian, and specific where we can be: staff should know
+                # whether to retry or to report it, not just see "went wrong".
+                from core.cli_backend import AuthExpiredError
+                if isinstance(e, AuthExpiredError):
+                    yield ("⚠️ Tjenesten er ikke pålogget akkurat nå, så jeg får "
+                           "ikke svart. Dette er ikke noe du har gjort feil — si "
+                           "fra til IT, så fikser de det.")
+                else:
+                    yield ("⚠️ Noe gikk galt her, og jeg fikk ikke svart. Prøv en "
+                           "gang til. Skjer det igjen, si fra til IT.")
 
     async def _collect(self, channel: str, peer: str, message: str, model: str = None) -> Optional[str]:
         """Run agent and collect full response. Returns None for NO_REPLY/errors."""
