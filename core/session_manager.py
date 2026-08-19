@@ -423,6 +423,21 @@ class SessionManager:
             )
             await self._db.commit()
 
+    async def forget_model_sessions(self, channel: str) -> int:
+        """Drop Claude session ids for a channel so the next turn is a new context.
+
+        Transcripts stay. Used when an old model session must not keep carrying
+        operator identity that leaked into it.
+        """
+        async with self._lock:
+            cur = await self._db.execute(
+                "UPDATE sessions SET claude_session_id=NULL "
+                "WHERE agent_id=? AND channel=? AND claude_session_id IS NOT NULL",
+                (self.agent_id, channel),
+            )
+            await self._db.commit()
+            return cur.rowcount or 0
+
     async def reset_session(self, channel: str, peer: str) -> None:
         """Force-reset: delete session row + archive transcript."""
         async with self._lock:

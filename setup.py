@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from getpass import getpass
 from pathlib import Path
@@ -19,7 +20,10 @@ HELIX_ROOT = Path(__file__).parent
 HELIX_DIR = Path.home() / ".helix"
 CONFIG_PATH = HELIX_DIR / "config.json"
 WORKSPACE_PATH = HELIX_DIR / "workspace"
-CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
+# Helix's own Claude Code config dir — deliberately NOT ~/.claude, so the agent
+# never inherits the user's settings, MCP servers, history, or memory.
+HELIX_CLAUDE_DIR = HELIX_DIR / "claude"
+HELIX_CLAUDE_SETTINGS = HELIX_CLAUDE_DIR / "settings.json"
 TEMPLATE_DIR = HELIX_ROOT / "workspace-template"
 
 
@@ -54,6 +58,16 @@ def _ask_password(prompt: str) -> str:
             print("  Passwords don't match. Try again.")
             continue
         return pw
+
+
+def _valid_timezone(tz: str) -> bool:
+    """Is this a resolvable IANA timezone name?"""
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo(tz)
+        return True
+    except Exception:
+        return False
 
 
 def _detect_timezone() -> str:
@@ -94,43 +108,170 @@ def _detect_timezone() -> str:
 
 
 def _check_claude_installed() -> bool:
-    return shutil.which("claude") is not None
+    """Locate the claude binary.
+
+    Not just shutil.which() — on Windows ~/.local/bin is commonly absent from
+    PATH, so reuse the same fallback list the runtime backend uses.
+    """
+    if shutil.which("claude"):
+        return True
+    try:
+        from core.cli_backend import _find_claude_bin
+        return bool(_find_claude_bin())
+    except Exception:
+        return False
+
+
+def _helix_claude_authenticated() -> bool:
+    """Does Helix's isolated Claude Code config have usable credentials?
+
+    Shares the user's existing login by copying just the credential file, so
+    there's no second login to perform.
+    """
+    try:
+        from core.cli_backend import sync_credentials
+        return sync_credentials()
+    except Exception:
+        return (HELIX_CLAUDE_DIR / ".credentials.json").exists()
+
+
+def _login_command() -> str:
+    """Shell snippet to log in to Helix's isolated Claude Code config."""
+    if os.name == "nt":
+        return (
+            f'    $env:CLAUDE_CONFIG_DIR = "{HELIX_CLAUDE_DIR}"\n'
+            f"    claude   # complete the login, then exit with /exit"
+        )
+    return (
+        f'    CLAUDE_CONFIG_DIR="{HELIX_CLAUDE_DIR}" claude\n'
+        f"    # complete the login, then exit with /exit"
+    )
 
 
 def _setup_claude_permissions():
-    """Add home directory to Claude Code's allowed paths."""
-    home = str(Path.home())
-    settings_dir = CLAUDE_SETTINGS.parent
-    settings_dir.mkdir(parents=True, exist_ok=True)
+    """Write permissions into Helix's OWN Claude Code config directory.
 
-    # Load existing settings or start fresh
-    if CLAUDE_SETTINGS.exists():
-        settings = json.loads(CLAUDE_SETTINGS.read_text())
+    Deliberately does not touch the user's personal ~/.claude/settings.json.
+    Access is scoped to the agent workspace rather than the whole home
+    directory, and the user's own Claude config is explicitly denied.
+    """
+    # Claude Code permission globs use forward slashes on every platform
+    workspace = WORKSPACE_PATH.as_posix()
+    # resolve() expands Windows 8.3 short names (JORGEN~1 -> jorgenthin_f).
+    # Without it the glob never matches the path the agent actually sees, and
+    # every pasted screenshot is denied.
+    _uploads_dir = Path(tempfile.gettempdir()) / "helix_uploads"
+    uploads = _uploads_dir.resolve().as_posix()
+    uploads_raw = _uploads_dir.as_posix()
+    user_claude = (Path.home() / ".claude").as_posix()
+    helix_home = HELIX_DIR.as_posix()
+
+    HELIX_CLAUDE_SETTINGS.parent.mkdir(parents=True, exist_ok=True)
+
+    # Load existing Helix settings or start fresh
+    if HELIX_CLAUDE_SETTINGS.exists():
+        settings = json.loads(HELIX_CLAUDE_SETTINGS.read_text(encoding="utf-8"))
     else:
         settings = {}
 
     permissions = settings.setdefault("permissions", {})
     allow = permissions.setdefault("allow", [])
+    deny = permissions.setdefault("deny", [])
 
-    # Required permission entries
+    # Edit(path) covers all file-editing tools including Write; a Write(path)
+    # rule is not matched by file permission checks and Claude Code rejects it.
     needed = [
-        f"Read({home}/**)",
-        f"Write({home}/**)",
-        f"Edit({home}/**)",
-        "Read(/tmp/**)",
-        "Write(/tmp/**)",
-        "Bash",
+        f"Read({workspace}/**)",
+        f"Edit({workspace}/**)",
+        f"Read({uploads}/**)",
+        f"Edit({uploads}/**)",
+        # Both spellings, since which one the agent resolves can vary.
+        f"Read({uploads_raw}/**)",
+        f"Edit({uploads_raw}/**)",
+        # Deliberately NO "Bash". The agent advises and never executes. The
+        # primary enforcement is --allowedTools in core/cli_backend.py, which
+        # never offers the tool at all; this omission is the second layer.
     ]
-
     for entry in needed:
         if entry not in allow:
             allow.append(entry)
 
+    # Keep the agent out of the user's personal Claude Code state and secrets.
+    # deny takes precedence over allow.
+    denied = [
+        f"Read({user_claude}/**)",
+        f"Edit({user_claude}/**)",
+        f"Read({helix_home}/secrets.enc)",
+        f"Read({helix_home}/.salt)",
+        # Claude Code stores the operator's account email here and injects it
+        # into every session. The agent must not be able to open the file.
+        f"Read({helix_home}/claude/.claude.json)",
+        # The Read/Edit scoping above does NOT constrain Bash — a blanket
+        # "Bash" allow would otherwise let the agent mutate any git repo on
+        # the machine. Block the state-changing git verbs. Best-effort: this
+        # is a command-pattern filter, not a sandbox.
+        "Bash(git commit:*)",
+        "Bash(git push:*)",
+        "Bash(git pull:*)",
+        "Bash(git merge:*)",
+        "Bash(git rebase:*)",
+        "Bash(git reset:*)",
+        "Bash(git revert:*)",
+        "Bash(git checkout:*)",
+        "Bash(git switch:*)",
+        "Bash(git restore:*)",
+        "Bash(git add:*)",
+        "Bash(git stash:*)",
+        "Bash(git clone:*)",
+        "Bash(git remote:*)",
+        "Bash(git branch:*)",
+        "Bash(git config:*)",
+        # IT-support profile: the agent diagnoses read-only. These block the
+        # obvious state-changing commands. Defence in depth, NOT a sandbox —
+        # anything that can run a shell can ultimately route around a prefix
+        # filter. The real controls are the rules in AGENTS.md, the absence of
+        # admin tooling, and the permissions of the account Helix runs as.
+        "Bash(rm:*)",
+        "Bash(rmdir:*)",
+        "Bash(Remove-Item:*)",
+        "Bash(shutdown:*)",
+        "Bash(Restart-Computer:*)",
+        "Bash(Stop-Computer:*)",
+        "Bash(Stop-Service:*)",
+        "Bash(Set-Service:*)",
+        "Bash(Set-ExecutionPolicy:*)",
+        "Bash(reg:*)",
+        "Bash(regedit:*)",
+        "Bash(diskpart:*)",
+        "Bash(format:*)",
+        "Bash(net user:*)",
+        "Bash(net localgroup:*)",
+        "Bash(Install-Module:*)",
+        "Bash(winget install:*)",
+        "Bash(winget uninstall:*)",
+        # Tenant access: not installed today, denied so it stays a decision
+        # rather than something the agent quietly starts doing.
+        "Bash(az:*)",
+        "Bash(Connect-AzAccount:*)",
+        "Bash(Connect-MgGraph:*)",
+        "Bash(Connect-ExchangeOnline:*)",
+        # Belt and braces: even if Bash were somehow re-enabled, deny it wholesale.
+        "Bash",
+    ]
+    for entry in denied:
+        if entry not in deny:
+            deny.append(entry)
+
     permissions.setdefault("defaultMode", "acceptEdits")
     settings["permissions"] = permissions
 
-    CLAUDE_SETTINGS.write_text(json.dumps(settings, indent=2))
-    print(f"  Claude Code permissions set for {home}/")
+    # Sharing the login also exposes claude.ai account connectors (Exa, Spotify,
+    # etc.), which --strict-mcp-config does NOT block. Turn them off explicitly.
+    settings["disableClaudeAiConnectors"] = True
+
+    HELIX_CLAUDE_SETTINGS.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    print(f"  Helix Claude config written to {HELIX_CLAUDE_SETTINGS}")
+    print(f"  Agent scoped to {workspace}/ (your ~/.claude is untouched)")
 
 
 def _copy_templates(workspace: Path):
@@ -157,7 +298,8 @@ def _write_identity(workspace: Path, name: str, emoji: str):
         f"- **Name:** {name}\n"
         f"- **Emoji:** {emoji}\n"
         f"- **Vibe:** [Edit this to describe your agent's tone]\n"
-        f"- **Avatar:** _(optional)_\n"
+        f"- **Avatar:** _(optional)_\n",
+        encoding="utf-8",  # agent emoji is non-ASCII; Windows defaults to cp1252
     )
 
 
@@ -171,7 +313,8 @@ def _write_user(workspace: Path, name: str, nickname: str, tz: str):
         f"## Preferences\n\n"
         f"_(The agent will fill this in as it learns how you like to work)_\n\n"
         f"## Context\n\n"
-        f"_(Background context about you — added over time through conversation)_\n"
+        f"_(Background context about you — added over time through conversation)_\n",
+        encoding="utf-8",  # names/timezones may contain non-ASCII (e.g. æøå)
     )
 
 
@@ -210,13 +353,20 @@ def run_setup():
     print(f"  1) System default ({detected_tz})")
     print("  2) UTC")
     print("  Or type a custom timezone (e.g. America/New_York, Europe/London)")
-    tz_choice = input("  Choose (press Enter for 1): ").strip()
-    if tz_choice == "2":
-        user_tz = "UTC"
-    elif tz_choice in ("", "1"):
-        user_tz = detected_tz
-    else:
-        user_tz = tz_choice
+    while True:
+        tz_choice = input("  Choose (press Enter for 1): ").strip()
+        if tz_choice == "2":
+            user_tz = "UTC"
+        elif tz_choice in ("", "1"):
+            user_tz = detected_tz
+        else:
+            user_tz = tz_choice
+        # Validate before writing it: an unrecognised zone is only caught at
+        # startup, where it crashes the scheduler with an opaque error.
+        if _valid_timezone(user_tz):
+            break
+        print(f"  '{user_tz}' is not a valid IANA timezone name.")
+        print("  Use the Region/City form, e.g. Europe/Oslo — not a country name.")
     print(f"  Timezone set to: {user_tz}")
     print()
 
@@ -306,7 +456,7 @@ def run_setup():
 
     # Write config
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(config, indent=2))
+    CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
     CONFIG_PATH.chmod(0o600)
     print("  Config written to ~/.helix/config.json")
 
@@ -332,17 +482,46 @@ def run_setup():
     print("  Admin UI: http://127.0.0.1:18791")
     print(f"  Config:   {CONFIG_PATH}")
     print(f"  Workspace: {WORKSPACE_PATH}")
+    print(f"  Claude config: {HELIX_CLAUDE_DIR}  (isolated from your ~/.claude)")
     print()
     print("  You can add more channels anytime from the admin UI")
     print("  or just ask your agent to set them up for you.")
     print()
-    print("  To manage permissions for additional directories,")
-    print("  use: claude /permissions")
+    print("  To manage permissions for additional directories, edit:")
+    print(f"  {HELIX_CLAUDE_SETTINGS}")
     print()
 
+    # Normally this shares the existing login from ~/.claude. It only fails if
+    # the user's own Claude Code isn't logged in either.
+    if not _helix_claude_authenticated():
+        print("  ─" * 24)
+        print("  ACTION REQUIRED: no Claude Code credentials found to share.")
+        print("  Log in to Claude Code, then re-run setup — or log Helix in")
+        print("  directly with:")
+        print()
+        print(_login_command())
+        print("  ─" * 24)
+        print()
+        print("  To start after logging in: ./start.ps1" if os.name == "nt"
+              else "  To start after logging in: ./start.sh")
+        print()
+        return False
+
     if _ask_yn("  Launch Helix now?"):
-        start_script = HELIX_ROOT / "start.sh"
-        result = subprocess.run(["bash", str(start_script)], capture_output=True, text=True)
+        if os.name == "nt":
+            start_script = HELIX_ROOT / "start.ps1"
+            cmd = [
+                "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", str(start_script),
+            ]
+        else:
+            start_script = HELIX_ROOT / "start.sh"
+            cmd = ["bash", str(start_script)]
+        # Do NOT capture output here. The launcher detaches a long-running
+        # background process which inherits the stdout/stderr pipe handles;
+        # subprocess.run would then block forever waiting for EOF that only
+        # arrives when Helix itself exits. Let it write to the console.
+        result = subprocess.run(cmd)
         if result.returncode == 0:
             print()
             print("  Helix launched successfully!")
@@ -354,13 +533,15 @@ def run_setup():
             print()
         else:
             print("  Warning: could not start Helix automatically.")
-            print("  Run manually: ./start.sh")
-            print(f"  Error: {result.stderr.strip()}")
+            print("  Run manually: ./start.ps1" if os.name == "nt"
+                  else "  Run manually: ./start.sh")
+            print("  (the launcher's own error output is above)")
             print()
         return False
 
     print()
-    print("  To start later: ./start.sh")
-    print("  Or: python3 main.py")
+    print("  To start later: ./start.ps1" if os.name == "nt"
+          else "  To start later: ./start.sh")
+    print("  Or: python main.py")
     print()
     return False

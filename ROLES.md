@@ -692,6 +692,75 @@ The MFA split is deliberate: helping a pupil enrol Authenticator for the first
 time is documented and fine, but an already-broken second factor only IT can
 reset, so it escalates rather than guessing.
 
+## Knowledge coverage, so the gaps are visible
+
+The scope work is finished and the knowledge behind it is uneven. Two of the six
+domains — `m365-office` and `windows-endpoint` — hold no verified, org-specific
+content at all, only scoping questions and a `_(Add confirmed findings)_`
+placeholder. If the ticket mix here looks like most school IT operations, those are
+the two biggest first-line categories. So the agent falls back on general reasoning
+exactly where it is asked most, inside a prompt that forbids inventing specifics.
+That is the *confidently wrong* failure this whole design is meant to avoid, and it
+is now the largest remaining risk — larger than anything left in the permission
+model.
+
+Writing those files from general knowledge would be the same mistake in a different
+costume. `frid-nettverk` is good because it came from the real onboarding portal.
+So instead: measure, and let the real work say what to document first.
+
+`core/knowledge.py` answers two questions and joins them.
+
+**What was asked.** A topic per conversation, classified from vocabulary *derived
+from the skill frontmatter* — so adding a skill makes it classifiable without
+touching any code. The frontmatter is English and the questions are Norwegian, so
+`ALIASES` supplies the words people actually type. The label is resolved when the
+conversation starts, from the whole opening message, and stored on the
+`chat_started` record; classifying a 60-character title later had less to go on, and
+one label is less data than the title already kept.
+
+**What is documented.** Counting `###` entries under a *Verified* heading is not
+enough on its own: `frid-nettverk` is the best-documented file in the workspace and
+has none, because its whole body is verified portal content. Counting only
+subsections would have called it empty and sent you to rewrite it. So a skill counts
+as documented if it has verified entries **or** org-specific anchors — a real
+hostname under a FRID or county domain, or a screenshot of a real screen.
+
+The join is the number worth acting on: questions arriving in a domain with nothing
+written down. Skills nobody asked about are listed too, so an empty file is visible
+before it is urgent. Both measures are heuristics that enforce nothing; a miss costs
+a mislabelled row in an admin report.
+
+### What the probe caught that the tests would not have
+
+`scripts/probe_coverage.py` runs realistic questions against the real workspace, and
+found four faults in the first pass — none of which a synthetic fixture would have
+shown:
+
+- **Hyphenated compounds.** `SharePoint-området` is one token to a word regex, so
+  the only word identifying the domain was invisible. Tokens now also split on
+  hyphens.
+- **Norwegian inflection.** `aktiverer` did not match the alias `aktivere`.
+  Enumerating forms is a losing game, so a term of five characters or more now also
+  matches any token it prefixes.
+- **Spelling scored twice.** Holding both `konto` and `kontoen` let `entra-azure`
+  score one word twice and outvote the pupil tie-break on spelling alone.
+  `_collapse_stems` keeps only the shortest stem, so a score counts concepts.
+- **Aliases that could never match.** `loenn`, `fravaer`, `traadloes` and `laast`
+  were written ASCII-folded against text containing `lønn`, `fravær`, `trådløs` and
+  `låst`. Dead terms, failing silently. A test now asserts the real spellings.
+
+And one that only stem-matching created: `personal`, there for HR, matched
+`personalrommet` — the staff room — filing a printer fault under payroll. Norwegian
+compounds make prefix matching sharp in both directions, which is why the alias
+table says so in a comment.
+
+Verified against the live server: 12/12 test questions classify as expected, and
+`/api/insights` returns the coverage table over the real audit log. The admin view
+highlights any row with undocumented demand in amber, and `askedPct` plus the
+three-state label were exercised with fabricated rows in the browser, because an
+Alpine expression that only runs when data is present renders silently when it is
+wrong.
+
 ### Still open
 
 The shared-core split is done — see *The shared core had to earn the name* above.
@@ -702,12 +771,8 @@ Two smaller things surfaced while doing it and are not fixed:
   about permission scope, and points at `skills/entra-azure/SKILL.md` by name. A
   pupil cannot follow that pointer, but it is the largest and least pupil-shaped
   thing in their prompt. Splitting the pupil-relevant procedures out is the fix.
-- `stop.ps1` reported "Helix was not running (stale PID file cleaned up)" while two
-  processes were serving on 18791, so `start.ps1` then started a second pair that
-  could not bind and failed silently apart from one line in the log. The orphan
-  match on the `main.py` path that README-WINDOWS.md describes did not fire. Worth
-  fixing before this moves off the workstation, where a half-restart is harder to
-  notice.
+- `m365-office` and `windows-endpoint` still hold nothing verified. The coverage
+  view says so; filling them needs a real source rather than a plausible one.
 
 Every decision recorded here has code behind it.
 
@@ -716,8 +781,8 @@ Covered by `TestCommandTierGate`, `TestTieredPrompt`, `TestTieredTools`,
 `TestPupilCliInvocation`, `TestAgentLoopTierWiring`, `TestChatAuditRecords`,
 `TestChatInsights`, `TestPupilRetentionWindow`, `TestPupilKeepsTheSolution`,
 `TestTieredRateLimits`, `TestRateLimitIsPerUserOverWebsocket`,
-`TestPupilImagesAreNotPermanent` and `TestPupilAssetBoundary` in
-`tests/test_helix.py` — 121 tests passing.
+`TestPupilImagesAreNotPermanent`, `TestPupilAssetBoundary` and
+`TestKnowledgeCoverage` in `tests/test_helix.py` — 138 tests passing.
 
 Note for anyone extending the suite: `security.auth` is no longer stubbed. The
 `security` stub carries a `__path__`, so modules with no heavy dependencies are
@@ -734,8 +799,11 @@ pupil can fetch. `probe_tier_smoke.py` exercises a staff turn that uses its file
 tools and a pupil turn carrying an image inline, which is what catches a prompt
 change that breaks the CLI invocation rather than the wording. Alongside them,
 `measure_prompt.py` prints what each tier's prompt is made of and how large it is —
-run it after moving anything between the workspace files. Run these after touching
-tiers, tools or prompts. The gate
+run it after moving anything between the workspace files. `probe_coverage.py` checks
+topic classification and knowledge coverage against the real skill files, and
+`read_insights.py` prints the coverage table from the running server. Run these
+after touching tiers, tools or prompts, and run `probe_coverage.py` after editing
+any skill's frontmatter, since that is where its vocabulary comes from. The gate
 tests check both directions, so a gate that is uniformly open or uniformly shut
 fails. Plus a one-off check of all three tenant ids, the domain mapping, the
 fail-closed default and the authority choice.

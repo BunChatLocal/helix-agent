@@ -123,6 +123,46 @@ def sync_credentials() -> bool:
         return dst.exists()
 
 
+_OAUTH_PII_FIELDS = ("emailAddress", "displayName", "organizationName")
+
+
+def sanitize_helix_oauth_profile() -> bool:
+    """Strip the operator's Claude account identity from Helix's config dir.
+
+    Claude Code injects ``oauthAccount.emailAddress`` into every session as a
+    ``# userEmail`` block. Helix talks to staff and pupils; that address is the
+    operator's personal account and must never reach them.
+
+    Only ``~/.helix/claude/.claude.json`` is touched — never ``~/.claude``.
+    Returns True if personal fields were present and removed.
+    """
+    path = HELIX_CLAUDE_CONFIG / ".claude.json"
+    try:
+        if not path.exists():
+            return False
+        data = json.loads(path.read_text(encoding="utf-8"))
+        acct = data.get("oauthAccount")
+        if not isinstance(acct, dict):
+            return False
+        changed = False
+        for key in _OAUTH_PII_FIELDS:
+            val = acct.get(key)
+            if val:
+                acct[key] = ""
+                changed = True
+        if not changed:
+            return False
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        logger.warning(
+            "Stripped operator identity from Helix Claude profile — it must "
+            "not reach staff or pupil chats"
+        )
+        return True
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning(f"Could not sanitise Helix Claude profile: {e}")
+        return False
+
+
 def _agent_cwd() -> str:
     """Working directory for the claude subprocess.
 
@@ -150,6 +190,18 @@ def _build_env() -> dict:
     env["ENABLE_CLAUDEAI_MCP_SERVERS"] = "false"
     # Pick up any token refresh from the user's normal CLI before each call
     sync_credentials()
+    sanitize_helix_oauth_profile()
+    # A long-lived token (claude setup-token) belongs in the Helix secret store,
+    # not a Windows user environment variable. If it is set, it is what the
+    # subprocess uses; if it is not, a leftover user-wide value must not pin us.
+    from security.secrets import get_secret
+    token = (get_secret("CLAUDE_CODE_OAUTH_TOKEN") or "").strip()
+    if token:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+        env.pop("ANTHROPIC_API_KEY", None)
+        env.pop("ANTHROPIC_AUTH_TOKEN", None)
+    else:
+        env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
     local_bin = str(Path.home() / ".local" / "bin")
     # PATH is ';'-delimited on Windows, ':' elsewhere — joining with the wrong
     # separator corrupts PATH for the spawned claude process.
@@ -345,8 +397,11 @@ async def _invoke(
                                    "oauth", "credentials")):
             logger.critical(
                 "CLAUDE LOGIN EXPIRED — every chat reply will fail until this is "
-                "fixed. On the Helix machine run:  claude  (log in, then /exit). "
-                "Helix picks the refreshed token up automatically."
+                "fixed. If Helix uses CLAUDE_CODE_OAUTH_TOKEN in the secret store, "
+                "run: claude setup-token   then   python main.py secrets set "
+                "CLAUDE_CODE_OAUTH_TOKEN <token>   and restart. Otherwise run: "
+                "claude  (log in, then /exit). Helix picks a refreshed file login "
+                "up automatically."
             )
             raise AuthExpiredError("Claude Code login has expired")
 

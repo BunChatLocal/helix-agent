@@ -50,18 +50,10 @@ specifics:
 
 ## Verified procedures
 
-_Fill this in yourself as you resolve tickets. Suggested format:_
-
-```
-### <Short problem title>
-**Symptom:** what the user reports / sees
-**Cause:** confirmed root cause
-**Fix:** exact steps or click-path
-**Verified:** YYYY-MM-DD
-```
-
-_No employee names, birth numbers, or case details — describe roles and record
-types instead._
+Write new entries as a `###` heading, then symptom, cause, fix, and the date
+you confirmed it. Do not leave a blank heading in this section — an unfilled
+template looks like a procedure. No employee names, birth numbers, or case
+details; describe roles and record types instead.
 
 ## Integration notes
 

@@ -33,9 +33,12 @@ so it doesn't repeat the same checks unnecessarily.
 Add recurring tasks here. The agent will pick them up on each heartbeat:
 
 ```
-- [ ] Check git status on active projects
 - [ ] Review open todos
 ```
+
+Note: git write operations (commit, push, merge, rebase, checkout, ...) are
+denied in `~/.helix/claude/settings.json`. Don't add tasks here that expect to
+change repository state.
 
 ---
 

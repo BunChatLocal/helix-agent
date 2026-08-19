@@ -215,7 +215,7 @@ async def handle_slash(
         today = datetime.now(tz).strftime("%Y-%m-%d")
         memory_file = Path(cfg.workspace_path) / "memory" / f"{today}.md"
         if memory_file.exists():
-            content = memory_file.read_text()
+            content = memory_file.read_text(encoding="utf-8")
             # Send first 1500 chars
             preview = content[:1500]
             if len(content) > 1500:
@@ -394,14 +394,17 @@ async def handle_slash(
         try:
             resolved = cmd_file.resolve()
             resolved_dir = commands_dir.resolve()
-            if not str(resolved).startswith(str(resolved_dir) + "/") and resolved != resolved_dir:
+            # is_relative_to handles the platform separator. The previous check
+            # hardcoded "/", so on Windows it never matched and every custom
+            # command was rejected as unknown.
+            if not resolved.is_relative_to(resolved_dir):
                 await send_fn(f"Unknown command: `{cmd}`. Try `/help`")
                 return True
         except Exception:
             await send_fn(f"Unknown command: `{cmd}`. Try `/help`")
             return True
         if cmd_file.exists():
-            cmd_content = cmd_file.read_text()
+            cmd_content = cmd_file.read_text(encoding="utf-8")
             injected = f"[Custom command /{cmd_name} triggered]\n\n{cmd_content}\n\nUser args: {args}"
             # Run through agent loop
             response_parts = []

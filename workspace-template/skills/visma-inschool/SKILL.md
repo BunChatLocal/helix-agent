@@ -46,19 +46,10 @@ Do not reconstruct screens from memory.
 
 ## Verified procedures
 
-_Fill this in yourself as you resolve tickets. Suggested format:_
-
-```
-### <Short problem title>
-**Symptom:** what the user reports / sees
-**Role affected:** e.g. teacher, administrator
-**Cause:** confirmed root cause
-**Fix:** exact steps or click-path
-**Verified:** YYYY-MM-DD
-```
-
-_Never record pupil or staff names, birth numbers, classes tied to individuals,
-or case details._
+Write new entries as a `###` heading, then who it applies to, the steps, and
+the date you confirmed it. Do not leave a blank heading in this section — an
+unfilled template looks like a procedure. Never record pupil or staff names,
+birth numbers, classes tied to individuals, or case details.
 
 ## Integration notes
 

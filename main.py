@@ -194,6 +194,12 @@ async def main():
     session_manager = SessionManager(agent_id=cfg.agent_id)
     await session_manager.start()
     logger.info(f"Session manager started (agent: {cfg.agent_id})")
+    dropped = await session_manager.forget_model_sessions("web")
+    if dropped:
+        logger.warning(
+            f"Dropped {dropped} cached web model session(s) so operator identity "
+            "cannot ride in on --resume"
+        )
 
     agent_loop = AgentLoop(session_manager=session_manager)
     auth = AuthManager(audit_logger=audit)

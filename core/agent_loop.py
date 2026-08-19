@@ -55,6 +55,8 @@ class AgentLoop:
         peer: str,
         user_message: str,
         model_override: Optional[str] = None,
+        caller_name: str = "",
+        caller_email: str = "",
     ) -> AsyncGenerator[str, None]:
         """
         Main agent turn. Yields response text.
@@ -76,7 +78,13 @@ class AgentLoop:
 
         async with self._get_lock(session_id):
             try:
-                system = build_system_prompt(is_new_session=is_new_session, tier=tier)
+                system = build_system_prompt(
+                    is_new_session=is_new_session,
+                    tier=tier,
+                    channel=channel,
+                    caller_name=caller_name,
+                    caller_email=caller_email,
+                )
 
                 # Inject context from previous session if a model switch just happened
                 if is_new_session:

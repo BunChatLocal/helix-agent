@@ -19,6 +19,23 @@ SECRETS_PATH = Path.home() / ".helix" / "secrets.enc"
 SALT_PATH = Path.home() / ".helix" / ".salt"
 
 
+def _windows_machine_guid() -> Optional[str]:
+    """Stable per-machine GUID from the registry — the Windows analogue of
+    /etc/machine-id. Survives reboots and upgrades."""
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography",
+            0,
+            winreg.KEY_READ | winreg.KEY_WOW64_64KEY,
+        ) as key:
+            guid, _ = winreg.QueryValueEx(key, "MachineGuid")
+            return guid.strip() or None
+    except Exception:
+        return None
+
+
 def _machine_entropy() -> bytes:
     """Stable per-machine entropy from machine-id."""
     sources = [
@@ -28,9 +45,20 @@ def _machine_entropy() -> bytes:
     for src in sources:
         if src.exists():
             return src.read_bytes().strip()
-    # Fallback: hash of hostname + uid
+
+    if os.name == "nt":
+        guid = _windows_machine_guid()
+        if guid:
+            return hashlib.sha256(guid.encode()).digest()
+
+    # Fallback: hash of hostname + user identity. os.getuid() is POSIX-only,
+    # so fall back to the account name on Windows.
     import socket
-    return hashlib.sha256(f"{socket.gethostname()}:{os.getuid()}".encode()).digest()
+    try:
+        user_id = str(os.getuid())
+    except AttributeError:
+        user_id = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
+    return hashlib.sha256(f"{socket.gethostname()}:{user_id}".encode()).digest()
 
 
 def _get_or_create_salt() -> bytes:

@@ -452,6 +452,20 @@ class TestTieredPrompt:
         assert "marker for USER.md" in prompt
         assert "marker for STUDENT.md" not in prompt
 
+    def test_staff_chat_does_not_get_the_operator_notes(self, tmp_path):
+        """USER.md is the operator. A colleague at /chat is someone else."""
+        cfg = self._workspace(tmp_path)
+        with patch("core.context_engine.get_config", return_value=cfg):
+            from core.context_engine import build_system_prompt
+            prompt = build_system_prompt(
+                is_new_session=True, tier="staff", channel="web",
+                caller_name="Ny Ansatt", caller_email="nyansatt@frid.no",
+            )
+        assert "marker for USER.md" not in prompt
+        assert "Ny Ansatt" in prompt
+        assert "nyansatt@frid.no" in prompt
+        assert "never speak it" in prompt
+
     def test_unknown_tier_falls_back_to_staff(self, tmp_path):
         """Internal channels pass no tier and must keep the full context."""
         assert self._prompt(tmp_path, "nonsense") == self._prompt(tmp_path, "staff")
@@ -601,6 +615,208 @@ class TestSharedCoreIsActuallyShared:
             )
 
 
+class TestAgentName:
+    """One name for both audiences, and it is never volunteered as an introduction."""
+
+    def _prompt(self, tier):
+        from core.context_engine import build_system_prompt
+        return build_system_prompt(is_new_session=True, tier=tier)
+
+    def test_both_tiers_are_told_the_same_name(self):
+        from core.config import get_config
+        from core.context_engine import _agent_name
+        name = _agent_name(get_config())
+        assert f"Your name is {name}" in self._prompt("staff")
+        assert f"Your name is {name}" in self._prompt("student")
+
+    def test_a_blank_display_name_falls_back_to_the_agent_id(self, monkeypatch):
+        from core.config import get_config
+        from core.context_engine import _agent_name
+        cfg = get_config()
+        monkeypatch.setattr(cfg, "agent_name", "")
+        monkeypatch.setattr(cfg, "agent_id", "helix")
+        assert _agent_name(cfg) == "Helix"
+
+    def test_the_greeting_is_in_the_shared_core(self):
+        """A greeting that names the agent is the thing we do not want."""
+        from pathlib import Path
+        from core.config import get_config
+        agents = (Path(get_config().workspace_path) / "AGENTS.md").read_text(
+            encoding="utf-8"
+        )
+        assert "Hei! Hva kan jeg hjelpe deg med i dag?" in agents
+        assert "Never introduce yourself" in agents
+        for prompt in (self._prompt("staff"), self._prompt("student")):
+            assert "Hei! Hva kan jeg hjelpe deg med i dag?" in prompt
+
+    def test_the_pupil_header_does_not_promise_a_filesystem(self):
+        """It would contradict the scope note, which says there are no tools."""
+        prompt = self._prompt("student")
+        for plumbing in ("Your home directory is",
+                         "Always read from and write to these locations",
+                         "read them carefully"):
+            assert plumbing not in prompt, (
+                f"{plumbing!r} tells a toolless agent it can reach files"
+            )
+
+    def test_staff_keep_the_workspace_directions(self):
+        prompt = self._prompt("staff")
+        assert "Your home directory is" in prompt
+        assert "Always read from and write to these locations" in prompt
+
+
+class TestKnowledgeCoverage:
+    """Where people ask, against what has actually been written down.
+
+    A synthetic workspace throughout, so filling in a real skill file cannot
+    break these — the mechanism is under test, not today's contents.
+    """
+
+    def _skill(self, root, skill_id, description, body=""):
+        d = root / "skills" / skill_id
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "SKILL.md").write_text(
+            f"---\nname: {skill_id}\ndescription: {description}\n---\n\n{body}",
+            encoding="utf-8",
+        )
+        return d
+
+    # ---- coverage -------------------------------------------------------
+
+    def test_a_template_stub_is_not_a_procedure(self, tmp_path):
+        """`### <Short problem title>` ships in the skill template unfilled."""
+        from core.knowledge import skill_coverage
+        self._skill(tmp_path, "visma-enterprise", "HR", (
+            "## Verified procedures\n\n"
+            "### <Short problem title>\n**Symptom:** what the user reports\n\n"
+            "### Registrere egenmelding\n1. Meny\n2. Ansatt\n"
+        ))
+        facts = skill_coverage(tmp_path)["visma-enterprise"]
+        assert facts["procedures"] == 1, "the angle-bracket stub must not count"
+
+    def test_a_subsection_outside_the_verified_section_is_not_a_procedure(self, tmp_path):
+        from core.knowledge import skill_coverage
+        self._skill(tmp_path, "m365-office", "Outlook", (
+            "## Scoping questions\n\n### Which client?\n\n"
+            "## Verified local knowledge\n\n_(Add confirmed findings.)_\n"
+        ))
+        assert skill_coverage(tmp_path)["m365-office"]["procedures"] == 0
+
+    def test_verified_prose_with_org_anchors_counts_as_documented(self, tmp_path):
+        """frid-nettverk's shape: no ### entries, but real hostnames and screenshots.
+
+        Counting only verified subsections would call the best-documented file in
+        the workspace empty.
+        """
+        from core.knowledge import skill_coverage
+        self._skill(tmp_path, "frid-nettverk", "wifi", (
+            "## Getting online\n\nGo to <https://onboard.frid-iks.no/> and download\n"
+            "the certificate.\n\n![Skjermbilde](asset:onboarding-1.png)\n"
+        ))
+        facts = skill_coverage(tmp_path)["frid-nettverk"]
+        assert facts["procedures"] == 0
+        assert facts["anchors"] >= 2
+        assert facts["documented"] is True
+
+    def test_generic_advice_with_no_org_specifics_is_undocumented(self, tmp_path):
+        from core.knowledge import skill_coverage
+        self._skill(tmp_path, "windows-endpoint", "Windows devices", (
+            "## Scoping questions\n\n- One device or many?\n\n"
+            "## Verified local knowledge\n\n_(Add confirmed findings here.)_\n"
+        ))
+        assert skill_coverage(tmp_path)["windows-endpoint"]["documented"] is False
+
+    # ---- classification -------------------------------------------------
+
+    def test_a_new_skill_is_classifiable_from_its_frontmatter_alone(self, tmp_path):
+        """The point of deriving vocabulary: adding a skill needs no code change."""
+        from core.knowledge import classify_topic
+        self._skill(tmp_path, "smartboard", "Smartboard projectors in classrooms")
+        assert classify_topic("projectors in the classroom are dead", workspace=tmp_path) == "smartboard"
+
+    def test_a_hyphenated_compound_still_matches(self, tmp_path):
+        """"SharePoint-området" is one token to a word regex, hiding the only clue."""
+        from core.knowledge import classify_topic
+        self._skill(tmp_path, "m365-office", "Outlook Teams SharePoint")
+        self._skill(tmp_path, "entra-azure", "Sign-in and licences")
+        assert classify_topic(
+            "En bruker mangler tilgang til et delt SharePoint-område",
+            workspace=tmp_path,
+        ) == "m365-office"
+
+    def test_norwegian_inflection_matches_the_stem(self, tmp_path):
+        from core.knowledge import classify_topic
+        self._skill(tmp_path, "frid-nettverk", "wifi and account activation")
+        for phrasing in ("hvordan aktiverer jeg kontoen",
+                         "jeg vil aktivere kontoen min",
+                         "aktiveringen feilet"):
+            assert classify_topic(phrasing, workspace=tmp_path) == "frid-nettverk", phrasing
+
+    def test_a_stem_and_its_inflection_do_not_score_twice(self, tmp_path):
+        """Holding "konto" and "kontoen" let one domain win on spelling alone."""
+        from core.knowledge import vocabulary
+        self._skill(tmp_path, "entra-azure", "konto kontoen kontoer lisens lisenser")
+        terms = vocabulary(tmp_path)["entra-azure"]
+        assert "konto" in terms
+        assert "kontoen" not in terms and "kontoer" not in terms
+        assert "lisenser" not in terms
+
+    def test_a_tie_goes_to_the_pupils_own_guide(self, tmp_path):
+        """MFA means the activation guide to a pupil, the reset procedure to staff."""
+        from core.knowledge import classify_topic
+        self._skill(tmp_path, "frid-nettverk", "Authenticator setup")
+        self._skill(tmp_path, "entra-azure", "Authenticator resets")
+        assert classify_topic("authenticator", tier="student", workspace=tmp_path) == "frid-nettverk"
+
+    def test_nothing_recognisable_classifies_as_nothing(self, tmp_path):
+        from core.knowledge import classify_topic
+        self._skill(tmp_path, "m365-office", "Outlook and Teams")
+        assert classify_topic("hei", workspace=tmp_path) is None
+        assert classify_topic("", workspace=tmp_path) is None
+
+    def test_no_skills_directory_is_survivable(self, tmp_path):
+        from core.knowledge import classify_topic, skill_coverage
+        assert skill_coverage(tmp_path) == {}
+        assert classify_topic("wifi", workspace=tmp_path) is None
+
+    # ---- the report -----------------------------------------------------
+
+    def test_undocumented_demand_sorts_to_the_top(self, tmp_path):
+        from core.knowledge import coverage_report
+        self._skill(tmp_path, "entra-azure", "sign-in",
+                    "## Verified procedures\n\n### Resette MFA\n1. Open\n")
+        self._skill(tmp_path, "windows-endpoint", "devices", "## Scoping\n\n- One?\n")
+        self._skill(tmp_path, "m365-office", "Outlook", "## Scoping\n\n- Which client?\n")
+        rows = coverage_report({"entra-azure": 50, "windows-endpoint": 3}, tmp_path)
+
+        assert rows[0]["skill"] == "windows-endpoint", (
+            "3 questions with nothing written down outrank 50 that are documented"
+        )
+        assert rows[0]["undocumented_demand"] == 3
+        # Documented, so busy is fine — it is not work waiting to be done.
+        assert next(r for r in rows if r["skill"] == "entra-azure")["undocumented_demand"] == 0
+        # Nobody asked, but an empty file should be visible before it is urgent.
+        assert any(r["skill"] == "m365-office" and r["asked"] == 0 for r in rows)
+        assert all(r["file"] == f"skills/{r['skill']}/SKILL.md" for r in rows)
+
+    def test_aliases_are_spelled_the_way_people_type_them(self):
+        """ASCII-folded aliases can never match, and fail silently.
+
+        "loenn", "fravaer" and "traadloes" were all here once, matching nothing.
+        """
+        from core.knowledge import ALIASES
+        for skill_id, expected in (
+            ("visma-enterprise", "lønn"),
+            ("visma-inschool", "fravær"),
+            ("frid-nettverk", "trådløs"),
+            ("entra-azure", "låst"),
+        ):
+            assert expected in ALIASES[skill_id], (
+                f"{expected!r} missing from {skill_id} — check it was not "
+                f"ASCII-folded, which matches nothing a Norwegian user types"
+            )
+
+
 class TestPupilCliInvocation:
     """A toolless tier needs the streaming input path, or images cannot arrive."""
 
@@ -666,6 +882,106 @@ class TestPupilCliInvocation:
         assert [b["type"] for b in blocks] == ["text"]
 
 
+class TestHelixYearlyClaudeToken:
+    """Helix may use a setup-token from the secret store. It must not inherit
+    a user-wide CLAUDE_CODE_OAUTH_TOKEN, and an API key must not outrank it."""
+
+    def _env(self, monkeypatch, secret, extra=None):
+        from core import cli_backend
+        monkeypatch.setattr(cli_backend, "sync_credentials", lambda: True)
+        for key, value in (extra or {}).items():
+            monkeypatch.setenv(key, value)
+        with patch("security.secrets.get_secret", return_value=secret):
+            return cli_backend._build_env()
+
+    def test_secret_is_what_the_subprocess_sees(self, monkeypatch):
+        env = self._env(
+            monkeypatch,
+            "sk-ant-oat01-helix",
+            {"CLAUDE_CODE_OAUTH_TOKEN": "stale-user", "ANTHROPIC_API_KEY": "sk-user"},
+        )
+        assert env["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-helix"
+        assert "ANTHROPIC_API_KEY" not in env
+
+    def test_without_a_secret_a_user_wide_token_does_not_pin_helix(self, monkeypatch):
+        env = self._env(
+            monkeypatch, None, {"CLAUDE_CODE_OAUTH_TOKEN": "stale-user"}
+        )
+        assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
+
+
+class TestReadableSubjects:
+    """Insights brackets are phrases, reused when the problem is the same."""
+
+    def test_label_keeps_the_question(self):
+        from core.subjects import labelize
+        assert labelize("hei") == ""
+        label = labelize("hei, authenticator gir meg ikke bekreftelseskode")
+        assert "authenticator" in label.lower()
+        assert "bekreftelseskode" in label.lower()
+        assert not label.lower().startswith("hei")
+
+    def test_a_new_phrasing_joins_the_existing_bracket(self, tmp_path):
+        from core.subjects import remember_subject
+        path = tmp_path / "subjects.json"
+        first = remember_subject(
+            "Jeg får ikke bekreftelseskode i Authenticator", path=path
+        )
+        second = remember_subject(
+            "authenticator gir ikke kode", path=path
+        )
+        assert first == second
+        assert "authenticator" in first.lower()
+
+    def test_unrelated_problems_stay_apart(self, tmp_path):
+        from core.subjects import remember_subject
+        path = tmp_path / "subjects.json"
+        wifi = remember_subject("hvordan logger jeg på FRID-nettverket", path=path)
+        payroll = remember_subject("hvor registrerer jeg egenmelding", path=path)
+        assert wifi != payroll
+
+
+class TestOperatorAccountStaysOffTheChat:
+    """Claude Code injects the operator's oauth email into every session.
+    Helix must strip it from its own config dir and never touch ~/.claude."""
+
+    def test_helix_profile_is_stripped_personal_is_not(self, tmp_path, monkeypatch):
+        from core import cli_backend
+        helix = tmp_path / "helix-claude"
+        personal = tmp_path / "user-claude"
+        helix.mkdir()
+        personal.mkdir()
+        payload = {
+            "oauthAccount": {
+                "emailAddress": "operator@example.com",
+                "displayName": "Operator",
+                "organizationName": "operator@example.com's Organization",
+                "accountUuid": "keep-me",
+            }
+        }
+        (helix / ".claude.json").write_text(json.dumps(payload), encoding="utf-8")
+        (personal / ".claude.json").write_text(json.dumps(payload), encoding="utf-8")
+        monkeypatch.setattr(cli_backend, "HELIX_CLAUDE_CONFIG", helix)
+        monkeypatch.setattr(cli_backend, "USER_CLAUDE_CONFIG", personal)
+        assert cli_backend.sanitize_helix_oauth_profile() is True
+        helix_acct = json.loads((helix / ".claude.json").read_text(encoding="utf-8"))["oauthAccount"]
+        personal_acct = json.loads((personal / ".claude.json").read_text(encoding="utf-8"))["oauthAccount"]
+        assert helix_acct["emailAddress"] == ""
+        assert helix_acct["displayName"] == ""
+        assert helix_acct["accountUuid"] == "keep-me"
+        assert personal_acct["emailAddress"] == "operator@example.com"
+
+    def test_already_clean_is_a_no_op(self, tmp_path, monkeypatch):
+        from core import cli_backend
+        helix = tmp_path / "helix-claude"
+        helix.mkdir()
+        (helix / ".claude.json").write_text(
+            json.dumps({"oauthAccount": {"emailAddress": ""}}), encoding="utf-8"
+        )
+        monkeypatch.setattr(cli_backend, "HELIX_CLAUDE_CONFIG", helix)
+        assert cli_backend.sanitize_helix_oauth_profile() is False
+
+
 class TestAgentLoopTierWiring:
     """The tier stored on the session must reach both the prompt and the CLI."""
 
@@ -695,7 +1011,7 @@ class TestAgentLoopTierWiring:
 
         with patch("core.agent_loop.call_claude", fake_call), \
              patch("core.agent_loop.build_system_prompt",
-                   lambda is_new_session, tier: f"SYS:{tier}"):
+                   lambda is_new_session, tier, **kwargs: f"SYS:{tier}"):
             async for _chunk in AgentLoop(sm).run(channel, "dev:x|1", message):
                 pass
         return seen
@@ -1584,6 +1900,34 @@ class TestAdminApiIntegration:
         assert len(list_resp_2.json()["skills"]) == 1
 
 
+class TestEntraCallbackLandsOnChat:
+    """SSO belongs to /chat. The admin UI at / is a password and never reads
+    the token fragment, so a callback that sent people there dropped them."""
+
+    def test_helpers_point_at_chat(self):
+        from web.app import _entra_error, _entra_success
+        assert _entra_error(1).headers["location"] == "/chat?login_error=1"
+        assert _entra_error(2).headers["location"] == "/chat?login_error=2"
+        assert _entra_success("tok").headers["location"] == "/chat#token=tok"
+
+    @pytest.mark.skipif(not _HAS_REAL_FASTAPI, reason="fastapi not installed")
+    def test_a_failed_callback_returns_to_chat_not_admin(self, tmp_path, monkeypatch):
+        import importlib
+        import web.app as app_mod
+        importlib.reload(app_mod)
+        monkeypatch.setattr(app_mod, "get_config", lambda: _make_temp_config(tmp_path))
+        client = _RealTestClient(app_mod.app, raise_server_exceptions=False)
+        r = client.get("/api/auth/microsoft/callback", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["location"] == "/chat?login_error=1"
+        r = client.get(
+            "/api/auth/microsoft/callback",
+            params={"error": "access_denied"},
+            follow_redirects=False,
+        )
+        assert r.headers["location"] == "/chat?login_error=1"
+
+
 # ---------------------------------------------------------------------------
 # Integration tests — WebSocket auth (connect with good/bad token)
 # ---------------------------------------------------------------------------
@@ -1833,6 +2177,20 @@ class TestChatAuditRecords:
         assert rec["domain"] == "afk.no"
         assert rec["tier"] == "student"
         assert "wifi" in rec["content_preview"].lower()
+
+    def test_the_record_carries_the_topic_it_was_about(self, monkeypatch):
+        """Resolved from the whole message here, not from the 60-char title later."""
+        recorded = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "email": "elev@afk.no",
+             "role": "user", "tier": "student"},
+            "Jeg får ikke koblet mobilen min til skolens wifi",
+        )
+        rec = [f for e, f in recorded if e == "chat_started"][0]
+        assert rec["topic"] == "frid-nettverk", (
+            "the network guide is what a pupil asking about wifi needs; a blank "
+            "topic here means the coverage view cannot see the demand"
+        )
 
     def test_only_the_first_message_starts_a_conversation(self, monkeypatch):
         client, recorded = self._client(
@@ -2385,6 +2743,9 @@ class TestChatInsights:
         )
         monkeypatch.setattr(app_mod, "_audit_log_path", lambda: log)
         monkeypatch.setattr(
+            "core.subjects.CATALOG_PATH", tmp_path / "subjects.json"
+        )
+        monkeypatch.setattr(
             app_mod, "_decode_token",
             lambda token: {"sub": "admin", "role": role} if token == "tok" else None,
         )
@@ -2431,6 +2792,66 @@ class TestChatInsights:
         # Filler words carry no signal and must not crowd out the real subject.
         for noise in ("jeg", "ikke", "med", "til", "og", "min", "mitt"):
             assert noise not in words
+
+    def test_topics_are_counted_from_the_stored_label(self, monkeypatch, tmp_path):
+        events = [
+            self._started("wifi virker ikke") | {"topic": "frid-nettverk"},
+            self._started("wifi igjen") | {"topic": "frid-nettverk"},
+            self._started("pc-en er treg") | {"topic": "windows-endpoint"},
+        ]
+        data = self._insights(monkeypatch, tmp_path, events)
+        topics = {t["key"]: t["count"] for t in data["by_topic"]}
+        assert topics["frid-nettverk"] == 2
+        assert topics["windows-endpoint"] == 1
+
+    def test_similar_questions_share_one_readable_subject(self, monkeypatch, tmp_path):
+        data = self._insights(monkeypatch, tmp_path, [
+            self._started("Jeg får ikke koblet meg til wifi"),
+            self._started("wifi på pc-en min"),
+            self._started("Hjelp med wifi og sertifikat"),
+            self._started("glemt passordet mitt"),
+        ])
+        subjects = {s["key"]: s["count"] for s in data["by_subject"]}
+        wifi = [k for k in subjects if "wifi" in k.lower()]
+        assert len(wifi) == 1, subjects
+        assert subjects[wifi[0]] == 3
+        assert any("passord" in k.lower() for k in subjects)
+        for pile in ("jeg", "ikke", "med", "til"):
+            assert pile not in subjects
+
+    def test_a_stored_subject_is_kept_even_if_the_title_is_short(self, monkeypatch, tmp_path):
+        data = self._insights(monkeypatch, tmp_path, [
+            self._started("wifi") | {"subject": "Logge på FRID-nettverket"},
+            self._started("koble til nettet") | {"subject": "Logge på FRID-nettverket"},
+        ])
+        assert data["by_subject"] == [
+            {"key": "Logge på FRID-nettverket", "count": 2}
+        ]
+
+    def test_every_conversation_is_either_classified_or_counted_as_unclassified(
+        self, monkeypatch, tmp_path
+    ):
+        """An invariant, so this holds whatever the skill files happen to contain."""
+        data = self._insights(monkeypatch, tmp_path, [
+            self._started("wifi virker ikke") | {"topic": "frid-nettverk"},
+            self._started("hei"),
+            self._started("takk for hjelpen"),
+        ])
+        classified = sum(t["count"] for t in data["by_topic"])
+        assert classified + data["unclassified"] == data["totals"]["conversations"]
+
+    def test_coverage_joins_demand_to_what_is_written_down(self, monkeypatch, tmp_path):
+        data = self._insights(monkeypatch, tmp_path, [
+            self._started("wifi virker ikke") | {"topic": "frid-nettverk"},
+        ])
+        assert data["coverage"], "the report should list the workspace's skills"
+        for row in data["coverage"]:
+            assert {"skill", "file", "asked", "procedures", "documented",
+                    "undocumented_demand"} <= set(row)
+            assert row["file"] == f"skills/{row['skill']}/SKILL.md"
+        assert data["totals"]["undocumented"] == sum(
+            r["undocumented_demand"] for r in data["coverage"]
+        )
 
     def test_refusals_and_blocked_commands_are_counted(self, monkeypatch, tmp_path):
         data = self._insights(monkeypatch, tmp_path, [

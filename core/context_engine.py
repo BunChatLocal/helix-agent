@@ -85,7 +85,16 @@ STUDENT_TURN_MARKER = (
 )
 
 
-def bootstrap_files(tier: str = TIER_STAFF) -> list[str]:
+def _agent_name(cfg) -> str:
+    """What the agent calls itself. One name for every audience.
+
+    Falls back to the agent id so a workspace with no display name configured
+    still gets something to answer with rather than calling itself Claude.
+    """
+    return cfg.agent_name or cfg.agent_id.title() or "Helix"
+
+
+def bootstrap_files(tier: str = TIER_STAFF, *, for_chat: bool = False) -> list[str]:
     """The workspace files that make up the system prompt for a tier.
 
     An unknown tier falls back to the staff set. That is deliberate: this
@@ -93,20 +102,33 @@ def bootstrap_files(tier: str = TIER_STAFF) -> list[str]:
     queue — which have no user behind them and need the full context. The
     restriction that matters is applied where a tier is actually known, at the
     web boundary.
+
+    ``for_chat`` is the public IT chat. USER.md describes the operator of this
+    machine, not the colleague or pupil on the other side of /chat, so it is
+    dropped there.
     """
     files = [*SHARED_BOOTSTRAP, *TIER_BOOTSTRAP.get(tier, TIER_BOOTSTRAP[TIER_STAFF])]
+    if for_chat:
+        files = [f for f in files if f != "USER.md"]
     if tier == TIER_STUDENT:
         files += PUPIL_KNOWLEDGE
     return files
 
 
-def _load_bootstrap(workspace: Path, tier: str = TIER_STAFF) -> str:
+def _load_bootstrap(
+    workspace: Path,
+    tier: str = TIER_STAFF,
+    *,
+    for_chat: bool = False,
+    caller_name: str = "",
+    caller_email: str = "",
+) -> str:
     """Load the bootstrap files for `tier` into a single system prompt string."""
     cfg = get_config()
     sections = []
     total = 0
 
-    for filename in bootstrap_files(tier):
+    for filename in bootstrap_files(tier, for_chat=for_chat):
         fp = workspace / filename
         if not fp.exists():
             # The tier's own file carries its scope rules, and for a pupil the
@@ -133,7 +155,7 @@ def _load_bootstrap(workspace: Path, tier: str = TIER_STAFF) -> str:
         sections.append(chunk)
         total += len(chunk)
 
-    agent_name = cfg.agent_name or cfg.agent_id.title() or "Helix"
+    agent_name = _agent_name(cfg)
     workspace = str(workspace)
     helix_dir = str(Path.home() / ".helix")
 
@@ -153,9 +175,25 @@ def _load_bootstrap(workspace: Path, tier: str = TIER_STAFF) -> str:
     # workspace file, so it cannot be edited away by accident and cannot be
     # out-argued by the length of everything that follows.
     scope_note = ""
+    if for_chat:
+        who = caller_name.strip() or "a signed-in colleague"
+        mail = caller_email.strip()
+        who_line = f"{who} <{mail}>" if mail else who
+        scope_note += (
+            f"WHO YOU ARE TALKING TO: {who_line}.\n"
+            "That is the only identity that belongs to this conversation. "
+            "USER.md, a userEmail block, a displayName, or any other name or "
+            "address in the environment is the operator of this machine or the "
+            "Claude account that runs you — never speak it, never greet from it, "
+            "never guess a nickname from it. Greet without a name: "
+            "«Hei! Hva kan jeg hjelpe deg med i dag?»\n\n"
+        )
     if tier == TIER_STUDENT:
-        scope_note = (
-            "WHO YOU ARE TALKING TO: a PUPIL at one of the schools FRID operates.\n"
+        if not for_chat:
+            scope_note += (
+                "WHO YOU ARE TALKING TO: a PUPIL at one of the schools FRID operates.\n"
+            )
+        scope_note += (
             "You help with IT only — accounts, sign-in, wifi, devices, printers, "
             "school systems.\n"
             "You do NOT do schoolwork. Not maths, not writing, not subject "
@@ -168,20 +206,42 @@ def _load_bootstrap(workspace: Path, tier: str = TIER_STAFF) -> str:
             "inventing steps.\n\n"
         )
 
-    header = (
-        f"IMPORTANT: Your name is {agent_name}. You are NOT Claude. You are {agent_name}, "
-        f"a personal AI assistant built on the Helix framework. Always refer to yourself as {agent_name}. "
-        "Never identify yourself as Claude, an AI by Anthropic, or any other name.\n\n"
-        f"Your home directory is {helix_dir} — this is where your memory, logs, sessions, and configuration live. "
-        f"Your workspace (identity, memory files, tools) is at {workspace}. "
-        "Always read from and write to these locations. Do NOT use ~/.claude or any other directory for memory or logs.\n\n"
-        "The following files define your identity, memory, and operating instructions — read them carefully.\n\n"
-        "---\n\n"
-    )
+    if tier == TIER_STUDENT:
+        # No framework name: a pupil asking what to call you should get one
+        # answer, and how this is built is not theirs to discuss. No home
+        # directory or workspace either — a pupil's agent has no tools, so
+        # "always read from and write to these locations" contradicts the scope
+        # note above, and an agent that believes it can look something up will
+        # promise to go and look.
+        header = (
+            f"IMPORTANT: Your name is {agent_name}. You are NOT Claude. You are "
+            f"{agent_name}. Always refer to yourself as {agent_name}. Never identify "
+            "yourself as Claude, an AI by Anthropic, or any other name, and do not "
+            "name the software you run on.\n\n"
+            "---\n\n"
+        )
+    else:
+        header = (
+            f"IMPORTANT: Your name is {agent_name}. You are NOT Claude. You are {agent_name}, "
+            f"a personal AI assistant built on the Helix framework. Always refer to yourself as {agent_name}. "
+            "Never identify yourself as Claude, an AI by Anthropic, or any other name.\n\n"
+            f"Your home directory is {helix_dir} — this is where your memory, logs, sessions, and configuration live. "
+            f"Your workspace (identity, memory files, tools) is at {workspace}. "
+            "Always read from and write to these locations. Do NOT use ~/.claude or any other directory for memory or logs.\n\n"
+            "The following files define your identity, memory, and operating instructions — read them carefully.\n\n"
+            "---\n\n"
+        )
     return today + scope_note + header + "\n".join(sections)
 
 
-def build_system_prompt(is_new_session: bool = True, tier: str = TIER_STAFF) -> str:
+def build_system_prompt(
+    is_new_session: bool = True,
+    tier: str = TIER_STAFF,
+    *,
+    channel: str = "",
+    caller_name: str = "",
+    caller_email: str = "",
+) -> str:
     """Return the system prompt for an agent turn.
 
     On a new session (``is_new_session=True``) the full bootstrap is loaded
@@ -197,9 +257,20 @@ def build_system_prompt(is_new_session: bool = True, tier: str = TIER_STAFF) -> 
     Because it is only read on a new session, a conversation keeps the prompt it
     started with for its whole life — which is what we want: the tier belongs to
     the person, and the person does not change mid-conversation.
+
+    ``channel`` ``web`` is a person at /chat, not the operator. USER.md stays
+    off that prompt; ``caller_name`` / ``caller_email`` are the signed-in
+    identity from the token.
     """
     if not is_new_session:
         return ""
     cfg = get_config()
     workspace = Path(cfg.workspace_path)
-    return _load_bootstrap(workspace, tier)
+    for_chat = channel == "web"
+    return _load_bootstrap(
+        workspace,
+        tier,
+        for_chat=for_chat,
+        caller_name=caller_name,
+        caller_email=caller_email,
+    )

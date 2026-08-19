@@ -42,7 +42,7 @@ may turn out to need nothing at all.
 
 Entra admin centre → **App registrations** → **New registration**:
 
-- **Name:** Helix IT Support
+- **Name:** Zork
 - **Supported account types:** **Accounts in any organizational directory
   (Any Microsoft Entra ID tenant — Multitenant)**
 - **Redirect URI:** platform **Web**, value
@@ -89,7 +89,7 @@ be enough:
 
 **Try user consent first.** `User.Read` is a low-impact delegated scope, so if
 Akershus permits users to consent to apps for such scopes — the Entra default —
-the first pupil to sign in simply gets a one-time "Helix IT Support wants to sign
+the first pupil to sign in simply gets a one-time "Zork wants to sign
 you in and read your profile" prompt, accepts it, and that's the whole step. Test
 this with a single pupil account before escalating anything.
 
@@ -177,8 +177,8 @@ carries a code:
 
 | Redirect | Meaning |
 |---|---|
-| `/?login_error=2` | tenant not on the allow-list — expected for any tenant but the three above |
-| `/?login_error=1` | audience mismatch, token exchange failure, or foreign tenant under the legacy single-tenant path |
+| `/chat?login_error=2` | tenant not on the allow-list — expected for any tenant but the three above |
+| `/chat?login_error=1` | audience mismatch, token exchange failure, or foreign tenant under the legacy single-tenant path |
 
 A pupil hitting `login_error=2` when they should be admitted means the Akershus
 tenant id is wrong or missing from `student_tenant_ids`.
@@ -192,8 +192,7 @@ tenant id is wrong or missing from `student_tenant_ids`.
 2. **TLS.** OAuth over plain HTTP leaks tokens. Terminate TLS at a reverse proxy
    (IIS, nginx, Caddy) and use the `https://` redirect URI.
 3. **Bind address.** `web.host` should be `127.0.0.1` with the reverse proxy in
-   front, not `0.0.0.0`. It is currently `0.0.0.0`, which is only survivable
-   because no inbound firewall rule exists for 18791.
+   front, not `0.0.0.0`. It is currently `127.0.0.1`.
 4. **The agent has no shell.** `--allowedTools` in `core/cli_backend.py` omits
    Bash for every tier, and pupils get no tools at all. Keep it that way.
 5. **Quota.** Every conversation runs on one Claude subscription. Tiered rate

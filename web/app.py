@@ -285,6 +285,15 @@ def _entra_authority(cfg) -> str:
     return f"https://login.microsoftonline.com/{tenant}"
 
 
+def _entra_error(code: int) -> RedirectResponse:
+    """SSO is the /chat page. The admin UI at / is a password, not Entra."""
+    return RedirectResponse(f"/chat?login_error={code}", status_code=302)
+
+
+def _entra_success(token: str) -> RedirectResponse:
+    return RedirectResponse(f"/chat#token={token}", status_code=302)
+
+
 @app.get("/api/auth/microsoft/enabled")
 async def entra_enabled():
     """Unauthenticated: lets the login page decide whether to show the SSO button."""
@@ -330,16 +339,16 @@ async def entra_callback(request: Request):
     if params.get("error"):
         desc = params.get("error_description", params.get("error", "unknown"))
         logger.warning(f"Entra sign-in error: {desc}")
-        return RedirectResponse("/?login_error=1", status_code=302)
+        return _entra_error(1)
 
     state = params.get("state", "")
     code = params.get("code", "")
     entry = _ENTRA_STATES.pop(state, None)
     if not entry or not code:
         # Unknown/replayed state — treat as CSRF and refuse.
-        return RedirectResponse("/?login_error=1", status_code=302)
+        return _entra_error(1)
     if time.time() - entry["created"] > _ENTRA_STATE_TTL:
-        return RedirectResponse("/?login_error=1", status_code=302)
+        return _entra_error(1)
 
     client_secret = get_secret("ENTRA_CLIENT_SECRET") or ""
     data = {
@@ -364,14 +373,14 @@ async def entra_callback(request: Request):
                 payload = await resp.json()
                 if resp.status != 200:
                     logger.warning(f"Entra token exchange failed: {payload.get('error_description', payload)}")
-                    return RedirectResponse("/?login_error=1", status_code=302)
+                    return _entra_error(1)
     except Exception as e:
         logger.error(f"Entra token exchange error: {e}")
-        return RedirectResponse("/?login_error=1", status_code=302)
+        return _entra_error(1)
 
     id_token = payload.get("id_token")
     if not id_token:
-        return RedirectResponse("/?login_error=1", status_code=302)
+        return _entra_error(1)
 
     # The id_token comes straight from Microsoft over TLS in response to our own
     # PKCE-bound request, so we read the claims without re-verifying the
@@ -379,7 +388,7 @@ async def entra_callback(request: Request):
     try:
         claims = jwt.decode(id_token, options={"verify_signature": False})
     except Exception:
-        return RedirectResponse("/?login_error=1", status_code=302)
+        return _entra_error(1)
 
     oid = claims.get("oid") or claims.get("sub")
     tid = claims.get("tid", "")
@@ -387,10 +396,10 @@ async def entra_callback(request: Request):
     name = claims.get("name") or upn or "Ukjent bruker"
 
     if not oid:
-        return RedirectResponse("/?login_error=1", status_code=302)
+        return _entra_error(1)
     if claims.get("aud") and claims["aud"] != cfg.entra.client_id:
         logger.warning("Entra sign-in rejected: audience mismatch")
-        return RedirectResponse("/?login_error=1", status_code=302)
+        return _entra_error(1)
     # The tenant decides the tier, and an unlisted tenant gets no tier and no
     # entry. This check is what makes the multi-tenant authority safe, so it runs
     # whenever tiers are configured, whatever restrict_to_tenant says.
@@ -398,16 +407,16 @@ async def entra_callback(request: Request):
     if cfg.tiers.tenant_ids:
         if not tier:
             logger.warning(f"Entra sign-in rejected: tenant {tid} is not admitted")
-            return RedirectResponse("/?login_error=2", status_code=302)
+            return _entra_error(2)
     elif cfg.entra.restrict_to_tenant and tid != cfg.entra.tenant_id:
         logger.warning(f"Entra sign-in rejected: foreign tenant {tid}")
-        return RedirectResponse("/?login_error=1", status_code=302)
+        return _entra_error(1)
 
     if cfg.entra.allowed_group_ids:
         groups = claims.get("groups") or []
         if not set(groups) & set(cfg.entra.allowed_group_ids):
             logger.warning(f"Entra sign-in rejected: {upn} not in an allowed group")
-            return RedirectResponse("/?login_error=2", status_code=302)
+            return _entra_error(2)
 
     token = _create_token(
         sub=f"entra:{oid}", role="user", name=name, tier=tier or TIER_STAFF,
@@ -416,7 +425,7 @@ async def entra_callback(request: Request):
     logger.info(f"Entra sign-in: {name} <{upn}> as {tier or TIER_STAFF}")
     # Hand the token to the SPA via the fragment so it never lands in server
     # logs or the Referer header.
-    return RedirectResponse(f"/#token={token}", status_code=302)
+    return _entra_success(token)
 
 
 # ─── Test sign-in (no verification) ───────────────────────────────────────────
@@ -614,6 +623,26 @@ def _audit_chat(event: str, claims: dict, **fields) -> None:
         )
     except Exception as exc:
         logger.warning(f"Could not write audit event {event}: {exc}")
+
+
+def _classify_topic(text: str, tier: str) -> str:
+    """Which skill a question belongs to, for the coverage view. Never raises."""
+    try:
+        from core.knowledge import classify_topic
+        return classify_topic(text, tier) or ""
+    except Exception as exc:
+        logger.debug(f"Could not classify topic: {exc}")
+        return ""
+
+
+def _remember_subject(text: str, skill: str) -> str:
+    """Readable Insights bracket for this opening message. Never raises."""
+    try:
+        from core.subjects import remember_subject
+        return remember_subject(text, skill) or ""
+    except Exception as exc:
+        logger.debug(f"Could not assign subject: {exc}")
+        return ""
 
 
 def _title_from_transcript(messages: list) -> str:
@@ -1678,6 +1707,9 @@ async def chat_insights(days: int = 30, recent: int = 50):
     by_day: dict[str, int] = {}
     by_person: dict[str, int] = {}
     words: dict[str, int] = {}
+    # Subject area, not email domain — by_domain above is who they are, this is
+    # what they asked about.
+    by_topic: dict[str, int] = {}
 
     tz = None
     try:
@@ -1692,6 +1724,13 @@ async def chat_insights(days: int = 30, recent: int = 50):
             by_person[e["sender_id"]] = by_person.get(e["sender_id"], 0) + 1
         day = datetime.fromtimestamp(e.get("ts") or 0, tz).strftime("%Y-%m-%d")
         by_day[day] = by_day.get(day, 0) + 1
+        # Records written before topics were stored still classify, from the
+        # title — less to go on, but it keeps the history from reading as empty.
+        topic = e.get("topic") or _classify_topic(
+            e.get("content_preview") or "", e.get("tier") or ""
+        )
+        if topic:
+            by_topic[topic] = by_topic.get(topic, 0) + 1
         for word in _WORD_RE.findall((e.get("content_preview") or "").lower()):
             if word in _INSIGHT_STOPWORDS or word.isdigit():
                 continue
@@ -1703,6 +1742,24 @@ async def chat_insights(days: int = 30, recent: int = 50):
             for k, v in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]
         ]
 
+    # Where questions are arriving in a domain with nothing written down. This is
+    # the number to act on: it says which skill file to fill in next, in the order
+    # people are actually asking.
+    try:
+        from core.knowledge import coverage_report
+        coverage = coverage_report(by_topic)
+    except Exception as exc:
+        logger.warning(f"Could not build coverage report: {exc}")
+        coverage = []
+    unclassified = len(started) - sum(by_topic.values())
+
+    try:
+        from core.subjects import count_subjects
+        by_subject = count_subjects(started)
+    except Exception as exc:
+        logger.warning(f"Could not cluster subjects: {exc}")
+        by_subject = {}
+
     return {
         "days": days,
         "totals": {
@@ -1711,7 +1768,12 @@ async def chat_insights(days: int = 30, recent: int = 50):
             "blocked_commands": len(blocked),
             "rate_limited": len(throttled),
             "people": len(by_person),
+            "undocumented": sum(r["undocumented_demand"] for r in coverage),
         },
+        "coverage": coverage,
+        "by_topic": top(by_topic, 20),
+        "by_subject": top(by_subject, 20),
+        "unclassified": unclassified,
         "by_domain": top(by_domain, 20),
         "by_tier": top(by_tier, 10),
         "by_day": [{"key": k, "count": by_day[k]} for k in sorted(by_day)],
@@ -2151,7 +2213,11 @@ async def ws_chat(websocket: WebSocket):
                     + (f"\n\nUser's note: {extra}" if extra else "")
                 )
                 response_parts = []
-                async for chunk in _agent_loop.run("web", peer, message):
+                async for chunk in _agent_loop.run(
+                    "web", peer, message,
+                    caller_name=display_name,
+                    caller_email=claims.get("email") or "",
+                ):
                     response_parts.append(chunk)
                     await websocket.send_json({"chunk": chunk})
                 await websocket.send_json({
@@ -2215,7 +2281,11 @@ async def ws_chat(websocket: WebSocket):
                 clean_message = f"{attachment_note}\n\n{body}"
 
             response_parts = []
-            async for chunk in _agent_loop.run("web", peer, clean_message):
+            async for chunk in _agent_loop.run(
+                "web", peer, clean_message,
+                caller_name=display_name,
+                caller_email=claims.get("email") or "",
+            ):
                 response_parts.append(chunk)
                 await websocket.send_json({"chunk": chunk})
 
@@ -2225,11 +2295,17 @@ async def ws_chat(websocket: WebSocket):
             # Recorded after the turn so a conversation that failed outright is not
             # counted as a question anyone asked.
             if new_conversation:
+                # The topic is resolved here, from the whole opening message,
+                # rather than at report time from the 60-character title — more
+                # to go on, and a single label stores less than the title does.
+                topic = _classify_topic(clean_message, tier) or ""
                 _audit_chat(
                     "chat_started", claims,
                     content_preview=_title_from_transcript(
                         [{"role": "user", "content": clean_message}]
                     ),
+                    topic=topic,
+                    subject=_remember_subject(clean_message, topic),
                 )
                 new_conversation = False
 
