@@ -9,6 +9,7 @@ import collections
 import json
 import logging
 import re
+import sys
 import time
 import uuid
 import zoneinfo
@@ -1540,43 +1541,221 @@ async def toggle_cron(cron_id: str):
     return {"status": "ok", "enabled": cron.enabled, "next_run": _cron_next_run(cron_id)}
 
 
+def _save_cron_run(
+    cron_id: str, status: str, result: str, *, finished: bool = True,
+) -> None:
+    from core.config import load_config, save_config as _save
+    cfg = load_config(force_reload=True)
+    tz = zoneinfo.ZoneInfo(cfg.timezone)
+    cron = next((c for c in cfg.crons if c.id == cron_id), None)
+    if not cron:
+        return
+    if finished:
+        cron.last_run = datetime.now(tz).isoformat()
+    cron.last_status = status
+    cron.last_result = result
+    _save(cfg)
+
+
+def clear_stale_cron_runs() -> None:
+    """A restart cannot resume a probe; don't leave the button stuck on Running."""
+    from core.config import load_config, save_config as _save
+    cfg = load_config(force_reload=True)
+    dirty = False
+    for cron in cfg.crons:
+        if cron.last_status == "running":
+            cron.last_status = "error"
+            cron.last_result = (
+                "Interrupted — Helix restarted before this run finished. Click Run Now."
+            )
+            dirty = True
+    if dirty:
+        _save(cfg)
+
+
 @app.post("/api/crons/{cron_id}/run", dependencies=[Depends(require_admin)])
 async def run_cron_now(cron_id: str):
-    cfg = get_config()
+    from core.config import load_config
+    cfg = load_config(force_reload=True)
     cron = next((c for c in cfg.crons if c.id == cron_id), None)
     if not cron:
         raise HTTPException(404, "Cron not found")
-    if not _agent_loop:
+    if cron.last_status == "running" or cron_id in _cron_inflight:
+        raise HTTPException(409, "This job is already running")
+    n = _load_test_n(cron.prompt)
+    if n is None and not _agent_loop:
         raise HTTPException(503, "Agent loop not running")
+    if n:
+        note = (
+            f"Running {n} concurrent /chat users now. "
+            "This usually takes 1–2 minutes. The report appears here when it finishes."
+        )
+    else:
+        note = "Running now. The result appears here when the job finishes."
+    _save_cron_run(cron_id, "running", note, finished=False)
     asyncio.create_task(_execute_cron(cron_id))
-    return {"status": "triggered"}
+    return {"status": "running"}
+
+
+_CRON_RESULT_MAX = 8000
+_LOAD_TEST_HINT = re.compile(
+    r"(?i)(?:stress|load)\s*test|\bconcurrent\s+users\b|probe_concurrency"
+)
+_LOAD_TEST_N = re.compile(r"(?i)(\d+)\s*concurrent")
+
+
+def _load_test_n(prompt: str) -> Optional[int]:
+    """How many concurrent /chat users a load-test cron should fire, or None."""
+    text = prompt or ""
+    if not _LOAD_TEST_HINT.search(text):
+        return None
+    m = _LOAD_TEST_N.search(text) or re.search(r"(?i)(\d+)", text)
+    n = int(m.group(1)) if m else 8
+    return max(1, min(n, 200))
+
+
+def _clip_cron_result(text: str) -> str:
+    text = (text or "").strip()
+    if len(text) <= _CRON_RESULT_MAX:
+        return text
+    return "…\n" + text[-_CRON_RESULT_MAX:]
+
+
+def _cron_outcome(text: Optional[str], error: Optional[BaseException] = None) -> tuple[str, str]:
+    """Classify a cron turn so the admin UI can show pass/fail, not just a time."""
+    if error is not None:
+        return "error", _clip_cron_result(f"{type(error).__name__}: {error}")
+    body = (text or "").strip()
+    if not body or body.startswith("NO_REPLY"):
+        return "silent", body or "NO_REPLY"
+    if (
+        body.startswith("⚠️")
+        or "Noe gikk galt" in body
+        or "Tjenesten er ikke pålogget" in body
+        or "Something went wrong" in body
+    ):
+        return "error", _clip_cron_result(body)
+    return "ok", _clip_cron_result(body)
+
+
+def _probe_script() -> Path:
+    return Path(__file__).resolve().parent.parent / "scripts" / "probe_concurrency.py"
+
+
+def _probe_budget(n: int) -> tuple[int, int]:
+    """(per-turn seconds, subprocess seconds) so a queued blast is not killed early.
+
+    Pupils stay on the websocket until they get an answer. Killing the last
+    people at 240s made a class of 150 look like total failure even when the
+    queue was still draining.
+    """
+    try:
+        from core.cli_backend import _claude_limit
+        cap = max(1, int(_claude_limit()))
+    except Exception:
+        cap = 20
+    waves = max(1, (n + cap - 1) // cap)
+    per_turn = min(1800, max(240, waves * 120))
+    overall = min(2400, per_turn + 180)
+    return per_turn, overall
+
+
+async def _run_load_probe(n: int) -> tuple[int, str]:
+    """Run the live /chat probe as a subprocess so Helix can keep serving it."""
+    script = _probe_script()
+    if not script.is_file():
+        return 127, f"Load probe script missing: {script}"
+    per_turn, overall = _probe_budget(n)
+    kwargs = {}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, str(script), "--n", str(n),
+        "--timeout", str(per_turn),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        cwd=str(script.parent.parent),
+        **kwargs,
+    )
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=overall)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return 124, f"Load probe timed out after {overall // 60} minutes"
+    text = (out or b"").decode("utf-8", errors="replace")
+    header = f"Load probe: {n} concurrent /chat users\n"
+    return int(proc.returncode or 0), header + text
+
+
+_cron_inflight: set[str] = set()
 
 
 async def _execute_cron(cron_id: str):
     """Execute a cron job by ID. Used by APScheduler and the 'run now' endpoint."""
-    from core.config import load_config, save_config as _save
+    from core.config import load_config
 
     cfg = load_config(force_reload=True)
-    tz = zoneinfo.ZoneInfo(cfg.timezone)
     cron = next((c for c in cfg.crons if c.id == cron_id), None)
-    if not cron or not cron.enabled:
+    if not cron:
+        return
+    if cron_id in _cron_inflight:
+        return
+    _cron_inflight.add(cron_id)
+    try:
+        await _execute_cron_body(cron_id, cron)
+    finally:
+        _cron_inflight.discard(cron_id)
+
+
+async def _execute_cron_body(cron_id: str, cron) -> None:
+    logger.info(f"Running cron job: {cron.name} ({cron_id})")
+    n = _load_test_n(cron.prompt)
+    if cron.last_status != "running":
+        note = (
+            (
+                f"Running {n} /chat users through the queue. "
+                f"Expect up to {_probe_budget(n)[1] // 60} minutes — "
+                "they wait in line; they should all get answers."
+            )
+            if n else
+            "Running now. The result appears here when the job finishes."
+        )
+        _save_cron_run(cron_id, "running", note, finished=False)
+    if n:
+        logger.info(f"Cron [{cron.name}] is a load probe ({n} users)")
+        try:
+            code, text = await _run_load_probe(n)
+        except Exception as e:
+            logger.error(f"Cron [{cron.name}] probe failed: {e}", exc_info=True)
+            status, report = _cron_outcome(None, error=e)
+            _save_cron_run(cron_id, status, report)
+            return
+        status = "ok" if code == 0 else "error"
+        report = _clip_cron_result(text)
+        logger.info(f"Cron [{cron.name}] probe exit {code}: {report[-200:]}")
+        _save_cron_run(cron_id, status, report)
         return
 
-    logger.info(f"Running cron job: {cron.name} ({cron_id})")
     if not _agent_loop:
         logger.warning("Agent loop not available for cron execution")
+        _save_cron_run(cron_id, "error", "Agent loop not running")
         return
 
-    result = await _agent_loop.run_cron(cron.id, cron.name, cron.prompt, cron.model)
+    try:
+        result = await _agent_loop.run_cron(cron.id, cron.name, cron.prompt, cron.model)
+    except Exception as e:
+        logger.error(f"Cron [{cron.name}] failed: {e}", exc_info=True)
+        status, text = _cron_outcome(None, error=e)
+        _save_cron_run(cron_id, status, text)
+        return
+
+    status, text = _cron_outcome(result)
     if result:
         logger.info(f"Cron [{cron.name}]: {result[:200]}")
-
-    # Update last_run (re-load to avoid overwriting concurrent writes)
-    cfg2 = load_config(force_reload=True)
-    cron2 = next((c for c in cfg2.crons if c.id == cron_id), None)
-    if cron2:
-        cron2.last_run = datetime.now(tz).isoformat()
-        _save(cfg2)
+    else:
+        logger.info(f"Cron [{cron.name}]: {status}")
+    _save_cron_run(cron_id, status, text)
 
 
 # ─── Snapshot API ────────────────────────────────────────────────────────────

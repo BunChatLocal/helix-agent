@@ -1017,6 +1017,7 @@ class TestClaudeConcurrencyGate:
         from core import cli_backend
 
         monkeypatch.setattr(cli_backend, "_claude_limit", lambda: 2)
+        monkeypatch.setattr(cli_backend, "_claude_gap", lambda: 0)
         cli_backend.reset_claude_gate()
         current = 0
         peak = 0
@@ -1049,6 +1050,7 @@ class TestClaudeConcurrencyGate:
         from core import cli_backend
 
         monkeypatch.setattr(cli_backend, "_claude_limit", lambda: 1)
+        monkeypatch.setattr(cli_backend, "_claude_gap", lambda: 0)
         cli_backend.reset_claude_gate()
         hold = asyncio.Event()
         first_started = asyncio.Event()
@@ -1092,6 +1094,7 @@ class TestClaudeConcurrencyGate:
         from core import cli_backend
 
         monkeypatch.setattr(cli_backend, "_claude_limit", lambda: 1)
+        monkeypatch.setattr(cli_backend, "_claude_gap", lambda: 0)
         cli_backend.reset_claude_gate()
         hold = asyncio.Event()
         first_started = asyncio.Event()
@@ -1131,6 +1134,173 @@ class TestClaudeConcurrencyGate:
             assert q.in_flight == 0
 
         asyncio.run(run())
+        cli_backend.reset_claude_gate()
+
+    def test_failed_cli_does_not_retry_during_a_blast(self, monkeypatch):
+        import asyncio
+        from core import cli_backend
+
+        monkeypatch.setattr(cli_backend, "_claude_limit", lambda: 2)
+        monkeypatch.setattr(cli_backend, "_claude_gap", lambda: 0)
+        cli_backend.reset_claude_gate()
+        calls = {"n": 0}
+
+        async def fake_once(*args, **kwargs):
+            calls["n"] += 1
+            cli_backend._claude_queue().waiters.append(cli_backend._WaitTicket())
+            raise RuntimeError("cli exit 1")
+
+        monkeypatch.setattr(cli_backend, "_call_claude_once", fake_once)
+
+        async def boom():
+            await cli_backend.call_claude(
+                model="m", system="s", user_message="u",
+                is_new_session=True, tier="student",
+            )
+
+        with pytest.raises(RuntimeError, match="cli exit 1"):
+            asyncio.run(boom())
+        assert calls["n"] == 1
+        cli_backend.reset_claude_gate()
+
+    def test_grants_are_paced(self, monkeypatch):
+        import asyncio
+        import time
+        from core import cli_backend
+
+        monkeypatch.setattr(cli_backend, "_claude_limit", lambda: 3)
+        monkeypatch.setattr(cli_backend, "_claude_gap", lambda: 0.05)
+        cli_backend.reset_claude_gate()
+        starts = []
+
+        async def fake_invoke(*args, **kwargs):
+            starts.append(time.monotonic())
+            return ("ok", "sid", {})
+
+        monkeypatch.setattr(cli_backend, "_invoke", fake_invoke)
+
+        async def burst():
+            await asyncio.gather(*[
+                cli_backend.call_claude(
+                    model="m", system="s", user_message="u",
+                    is_new_session=True, tier="student",
+                )
+                for _ in range(3)
+            ])
+
+        asyncio.run(burst())
+        starts.sort()
+        gaps = [starts[i] - starts[i - 1] for i in range(1, len(starts))]
+        assert all(g >= 0.04 for g in gaps), gaps
+        cli_backend.reset_claude_gate()
+
+    def test_repeated_failures_open_a_cooldown(self):
+        from core.cli_backend import ClaudeQueue
+
+        q = ClaudeQueue(20)
+        for _ in range(4):
+            q.note_failure()
+        assert q._cool_until == 0.0
+        q.note_failure()
+        assert q._cool_until > time.monotonic()
+
+    def test_quota_rejection_is_detected(self):
+        from core.cli_backend import _quota_from_cli_output
+
+        blob = (
+            '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected",'
+            '"resetsAt":1787241600,"rateLimitType":"five_hour",'
+            '"overageDisabledReason":"out_of_credits"}}'
+        )
+        assert _quota_from_cli_output(blob) == 1787241600
+        staff = (
+            '{"is_error":true,"duration_api_ms":0,"oauthAccount":{"email":"x"},'
+            '"usage":{"output_tokens":0},"result":""}'
+        )
+        assert _quota_from_cli_output(staff) == 0
+        assert _quota_from_cli_output("claude CLI exit 1: boom") is None
+        from core.cli_backend import _login_expired
+        assert _login_expired(staff) is False
+        assert _login_expired("please run /login") is True
+
+    def test_staff_empty_error_is_quota_not_login(self, monkeypatch):
+        from core import cli_backend
+
+        monkeypatch.setattr(cli_backend, "_claude_limit", lambda: 20)
+        cli_backend.reset_claude_gate()
+        payload = (
+            '{"is_error":true,"usage":{"output_tokens":0},'
+            '"oauthAccount":{"emailAddress":"x"},"result":""}'
+        )
+        with pytest.raises(cli_backend.QuotaExhaustedError):
+            cli_backend._raise_cli_failure("", payload)
+        cli_backend.reset_claude_gate()
+
+    def test_quota_message_names_the_reset_time(self, monkeypatch):
+        from datetime import datetime
+        from types import SimpleNamespace
+        from zoneinfo import ZoneInfo
+        from core.cli_backend import quota_user_message
+
+        tz = ZoneInfo("Europe/Oslo")
+        monkeypatch.setattr(
+            "core.config.get_config",
+            lambda: SimpleNamespace(timezone="Europe/Oslo"),
+        )
+        when = datetime(2026, 8, 20, 20, 0, tzinfo=tz)
+        msg = quota_user_message(int(when.timestamp()))
+        assert msg.startswith("Jeg er ikke i stand til å svare på flere spørsmål før")
+        assert "kl. 20:00" in msg
+        assert msg.endswith("hvis du trenger svar før det kan du snakke med IT-avdelingen")
+
+    def test_cli_session_limit_phrase_becomes_the_clock(self):
+        from core.cli_backend import _quota_from_cli_output, quota_user_message
+
+        blob = (
+            '{"is_error":true,"api_error_status":429,'
+            '"usage":{"output_tokens":0},'
+            '"result":"You\'ve hit your session limit · resets 6pm (Europe/Oslo)"}'
+        )
+        ts = _quota_from_cli_output(blob)
+        assert ts and ts > 0
+        msg = quota_user_message(ts)
+        assert msg.startswith("Jeg er ikke i stand til å svare på flere spørsmål før")
+        assert "kl. 18:00" in msg
+        assert "kvoten fylles opp igjen" not in msg
+        assert msg.endswith("hvis du trenger svar før det kan du snakke med IT-avdelingen")
+
+    def test_quota_fails_the_line_without_launching_more(self, monkeypatch):
+        import asyncio
+        from core import cli_backend
+
+        monkeypatch.setattr(cli_backend, "_claude_limit", lambda: 1)
+        monkeypatch.setattr(cli_backend, "_claude_gap", lambda: 0)
+        cli_backend.reset_claude_gate()
+        invokes = {"n": 0}
+
+        async def fake_invoke(*args, **kwargs):
+            invokes["n"] += 1
+            cli_backend._claude_queue().note_quota(int(time.time()) + 3600)
+            raise cli_backend.QuotaExhaustedError(int(time.time()) + 3600)
+
+        monkeypatch.setattr(cli_backend, "_invoke", fake_invoke)
+
+        async def run():
+            first = asyncio.create_task(cli_backend.call_claude(
+                model="m", system="s", user_message="u",
+                is_new_session=True, tier="student",
+            ))
+            waiter = asyncio.create_task(cli_backend.call_claude(
+                model="m", system="s", user_message="u",
+                is_new_session=True, tier="student",
+            ))
+            with pytest.raises(cli_backend.QuotaExhaustedError):
+                await first
+            with pytest.raises(cli_backend.QuotaExhaustedError):
+                await waiter
+
+        asyncio.run(run())
+        assert invokes["n"] == 1
         cli_backend.reset_claude_gate()
 
 
@@ -3284,3 +3454,167 @@ class TestOperatorConsole:
         rows = r.json()["conversations"]
         assert len(rows) == 1
         assert rows[0]["topic"] == "frid-nettverk"
+
+
+class TestCronRunResult:
+    """A cron is a debug tool: the last run must show pass/fail, not only a time."""
+
+    def test_ok_keeps_the_agent_text(self):
+        from web.app import _cron_outcome
+        assert _cron_outcome("50 users all clean") == ("ok", "50 users all clean")
+
+    def test_norwegian_failure_is_an_error(self):
+        from web.app import _cron_outcome
+        status, text = _cron_outcome(
+            "⚠️ Noe gikk galt her, og jeg fikk ikke svart."
+        )
+        assert status == "error"
+        assert "Noe gikk galt" in text
+
+    def test_no_reply_is_silent(self):
+        from web.app import _cron_outcome
+        assert _cron_outcome("NO_REPLY")[0] == "silent"
+        assert _cron_outcome(None)[0] == "silent"
+        assert _cron_outcome("")[0] == "silent"
+
+    def test_exception_is_an_error(self):
+        from web.app import _cron_outcome
+        status, text = _cron_outcome(None, error=RuntimeError("cli exit 1"))
+        assert status == "error"
+        assert "cli exit 1" in text
+
+    def test_probe_budget_grows_with_queue_depth(self, monkeypatch):
+        from web.app import _probe_budget
+
+        monkeypatch.setattr("core.cli_backend._claude_limit", lambda: 20)
+        turn50, _ = _probe_budget(50)
+        turn150, overall150 = _probe_budget(150)
+        assert turn50 == 360
+        assert turn150 == 960
+        assert overall150 > turn150
+        assert overall150 <= 2400
+
+    def test_morning_load_prompt_is_a_50_user_probe(self):
+        from web.app import _load_test_n
+        assert _load_test_n("run a stress test running 50 concurrent users") == 50
+        assert _load_test_n("Morning briefing") is None
+        assert _load_test_n("run 50") is None
+
+    @pytest.mark.anyio
+    async def test_load_test_cron_stores_the_probe_report(self, tmp_path, monkeypatch):
+        from core.config import HelixConfig, CronJob, save_config, load_config
+        from core import config as config_mod
+        import web.app as app_mod
+
+        cfg_path = tmp_path / "config.json"
+        cron = CronJob(
+            id="e5700f84", name="morning load", schedule="0 7 * * *",
+            prompt="run a stress test running 50 concurrent users",
+        )
+        cfg = HelixConfig(workspace_path=str(tmp_path / "ws"), crons=[cron])
+        save_config(cfg, cfg_path)
+        real_load, real_save = config_mod.load_config, config_mod.save_config
+        monkeypatch.setattr(
+            config_mod, "load_config",
+            lambda path=cfg_path, force_reload=False: real_load(cfg_path, force_reload=True),
+        )
+        monkeypatch.setattr(
+            config_mod, "save_config",
+            lambda cfg, path=cfg_path: real_save(cfg, cfg_path),
+        )
+        config_mod._config_cache = None
+        config_mod._config_mtime = 0.0
+
+        async def fake_probe(n):
+            assert n == 50
+            return 1, (
+                "Load probe: 50 concurrent /chat users\n"
+                "wall clock: 49.2s\n"
+                "cross-talk: none\n"
+                "3/50 turns had issues\n"
+            )
+
+        monkeypatch.setattr(app_mod, "_run_load_probe", fake_probe)
+        monkeypatch.setattr(app_mod, "_agent_loop", MagicMock())
+
+        await app_mod._execute_cron("e5700f84")
+        saved = load_config(cfg_path, force_reload=True)
+        assert saved.crons[0].last_status == "error"
+        assert "3/50 turns had issues" in saved.crons[0].last_result
+        config_mod._config_cache = None
+
+    def test_old_config_still_loads_without_result_fields(self):
+        from core.config import CronJob
+        job = CronJob(name="x", schedule="0 8 * * *", prompt="go")
+        assert job.last_status is None
+        assert job.last_result is None
+
+    @pytest.mark.anyio
+    async def test_execute_cron_stores_the_agent_result(self, tmp_path, monkeypatch):
+        from core.config import HelixConfig, CronJob, save_config, load_config
+        from core import config as config_mod
+        import web.app as app_mod
+
+        cfg_path = tmp_path / "config.json"
+        cron = CronJob(
+            id="abc12345", name="stress", schedule="0 8 * * *", prompt="run 50",
+        )
+        cfg = HelixConfig(workspace_path=str(tmp_path / "ws"), crons=[cron])
+        save_config(cfg, cfg_path)
+        real_load, real_save = config_mod.load_config, config_mod.save_config
+        monkeypatch.setattr(
+            config_mod, "load_config",
+            lambda path=cfg_path, force_reload=False: real_load(cfg_path, force_reload=True),
+        )
+        monkeypatch.setattr(
+            config_mod, "save_config",
+            lambda cfg, path=cfg_path: real_save(cfg, cfg_path),
+        )
+        config_mod._config_cache = None
+        config_mod._config_mtime = 0.0
+
+        loop = MagicMock()
+        loop.run_cron = AsyncMock(return_value="50/50 ok, no mix-ups")
+        monkeypatch.setattr(app_mod, "_agent_loop", loop)
+
+        await app_mod._execute_cron("abc12345")
+        saved = load_config(cfg_path, force_reload=True)
+        assert saved.crons[0].last_status == "ok"
+        assert "50/50" in saved.crons[0].last_result
+        assert saved.crons[0].last_run
+        config_mod._config_cache = None
+
+    @pytest.mark.anyio
+    async def test_execute_cron_stores_a_crash(self, tmp_path, monkeypatch):
+        from core.config import HelixConfig, CronJob, save_config, load_config
+        from core import config as config_mod
+        import web.app as app_mod
+
+        cfg_path = tmp_path / "config.json"
+        cron = CronJob(
+            id="abc12345", name="stress", schedule="0 8 * * *", prompt="run 50",
+        )
+        cfg = HelixConfig(workspace_path=str(tmp_path / "ws"), crons=[cron])
+        save_config(cfg, cfg_path)
+        real_load, real_save = config_mod.load_config, config_mod.save_config
+        monkeypatch.setattr(
+            config_mod, "load_config",
+            lambda path=cfg_path, force_reload=False: real_load(cfg_path, force_reload=True),
+        )
+        monkeypatch.setattr(
+            config_mod, "save_config",
+            lambda cfg, path=cfg_path: real_save(cfg, cfg_path),
+        )
+        config_mod._config_cache = None
+        config_mod._config_mtime = 0.0
+
+        loop = MagicMock()
+        loop.run_cron = AsyncMock(side_effect=RuntimeError("cli exit 1"))
+        monkeypatch.setattr(app_mod, "_agent_loop", loop)
+
+        await app_mod._execute_cron("abc12345")
+        saved = load_config(cfg_path, force_reload=True)
+        assert saved.crons[0].last_status == "error"
+        assert "cli exit 1" in saved.crons[0].last_result
+        config_mod._config_cache = None
+

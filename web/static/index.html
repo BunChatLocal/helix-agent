@@ -410,6 +410,22 @@
 
   /* Cron code */
   .cron-code { color: var(--accent-light); background: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.1); padding: 1px 6px; border-radius: 4px; }
+  .cron-result{
+    margin-top:12px;padding:10px 12px;border-radius:10px;font-size:12px;line-height:1.5;
+    border:1px solid rgba(255,255,255,0.08);background:rgba(0,0,0,0.22);
+  }
+  .cron-result.ok{border-color:rgba(16,185,129,0.28);background:rgba(16,185,129,0.06)}
+  .cron-result.error{border-color:rgba(239,68,68,0.28);background:rgba(239,68,68,0.06)}
+  .cron-result.running{border-color:rgba(245,158,11,0.35);background:rgba(245,158,11,0.07)}
+  .cron-result .label{font-weight:650;letter-spacing:.02em;margin-bottom:6px}
+  .cron-result.ok .label{color:#34d399}
+  .cron-result.error .label{color:#f87171}
+  .cron-result.running .label{color:#fbbf24}
+  .cron-result.silent .label,.cron-result.idle .label{color:#94a3b8}
+  .cron-result pre{
+    margin:0;white-space:pre-wrap;word-break:break-word;max-height:18rem;overflow:auto;
+    color:#cbd5e1;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11.5px;
+  }
 
   /* Theme selector button */
   .theme-btn {
@@ -1082,7 +1098,7 @@
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="section-title">Cron Jobs</h2>
-          <p class="text-slate-600 text-sm mt-0.5">Scheduled autonomous agent tasks</p>
+          <p class="text-slate-600 text-sm mt-0.5">Scheduled agent tasks. Each job shows whether the last run succeeded.</p>
         </div>
         <button @click="cronFormOpen = !cronFormOpen" class="btn-primary px-4 py-2 text-sm flex items-center gap-2"
           x-text="cronFormOpen ? '✕ Cancel' : '+ Add Cron'"></button>
@@ -1159,6 +1175,11 @@
                   </span>
                 </div>
                 <div class="text-xs text-slate-500 bg-black/30 rounded-lg px-3 py-2 font-mono truncate" x-text="cron.prompt"></div>
+                <div class="cron-result"
+                  :class="(cronRunning[cron.id] || cron.last_status === 'running') ? 'running' : (cron.last_status || 'idle')">
+                  <div class="label" x-text="cronResultLabel(cron)"></div>
+                  <pre x-show="cron.last_result" x-text="cron.last_result"></pre>
+                </div>
               </div>
               <div class="flex flex-col gap-2 flex-shrink-0">
                 <button
@@ -1167,9 +1188,12 @@
                   :class="cron.enabled ? 'border-yellow-600/30 text-yellow-500 hover:bg-yellow-500/10' : 'border-emerald-600/30 text-emerald-500 hover:bg-emerald-500/10'"
                   x-text="cron.enabled ? 'Pause' : 'Resume'"
                 ></button>
-                <button @click="runCronNow(cron)" class="text-xs px-3 py-1.5 rounded-lg border transition"
+                <button @click="runCronNow(cron)"
+                  :disabled="cronRunning[cron.id] || cron.last_status === 'running'"
+                  class="text-xs px-3 py-1.5 rounded-lg border transition disabled:opacity-50 disabled:cursor-not-allowed"
                   style="border-color: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.3); color: var(--accent-light);"
-                >Run Now</button>
+                  x-text="(cronRunning[cron.id] || cron.last_status === 'running') ? 'Running…' : 'Run Now'"
+                ></button>
                 <button @click="deleteCron(cron)" class="text-xs px-3 py-1.5 rounded-lg border border-red-500/20 text-red-500 hover:bg-red-500/10">Delete</button>
               </div>
             </div>
@@ -1718,6 +1742,8 @@ function helixApp() {
     newCron: { name: '', schedule: '', prompt: '', model: '', enabled: true },
     cronAdded: false,
     cronAddError: '',
+    cronRunning: {},
+    cronWatching: {},
     // Skills
     skillsList: [],
     skillsLoading: false,
@@ -2053,6 +2079,9 @@ function helixApp() {
       try {
         const r = await this.api('/api/crons');
         if (r.ok) this.crons = await r.json();
+        (this.crons || []).forEach(c => {
+          if (c.last_status === 'running') this.watchCron(c);
+        });
       } catch {}
     },
 
@@ -2093,8 +2122,50 @@ function helixApp() {
     },
 
     async runCronNow(cron) {
+      if (this.cronRunning[cron.id] || cron.last_status === 'running') {
+        this.watchCron(cron);
+        return;
+      }
+      this.cronRunning = { ...this.cronRunning, [cron.id]: true };
       const r = await this.api(`/api/crons/${cron.id}/run`, { method: 'POST' });
-      if (r.ok) setTimeout(() => this.loadCrons(), 3000);
+      if (r.status === 409) {
+        await this.loadCrons();
+        return;
+      }
+      if (!r.ok) {
+        this.cronRunning = { ...this.cronRunning, [cron.id]: false };
+        return;
+      }
+      await this.loadCrons();
+    },
+
+    async watchCron(cron) {
+      if (this.cronWatching[cron.id]) return;
+      this.cronWatching = { ...this.cronWatching, [cron.id]: true };
+      this.cronRunning = { ...this.cronRunning, [cron.id]: true };
+      try {
+        for (let i = 0; i < 450; i++) {
+          await new Promise(ok => setTimeout(ok, 2000));
+          const r = await this.api('/api/crons');
+          if (r.ok) this.crons = await r.json();
+          const updated = this.crons.find(c => c.id === cron.id);
+          if (!updated || updated.last_status !== 'running') break;
+        }
+      } finally {
+        this.cronWatching = { ...this.cronWatching, [cron.id]: false };
+        this.cronRunning = { ...this.cronRunning, [cron.id]: false };
+      }
+    },
+
+    cronResultLabel(cron) {
+      if (this.cronRunning[cron.id] || cron.last_status === 'running') {
+        return 'Running now — wait here for the report';
+      }
+      if (cron.last_status === 'ok') return 'Last run succeeded';
+      if (cron.last_status === 'error') return 'Last run failed';
+      if (cron.last_status === 'silent') return 'Last run finished with no reply';
+      if (cron.last_run) return 'Last run finished — run again to record the result';
+      return 'Not run yet';
     },
 
     // ── Log methods ───────────────────────────────────────────────────────────

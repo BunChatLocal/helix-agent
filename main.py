@@ -221,7 +221,7 @@ async def main():
     logger.info("Task queue started")
 
     # ── Web Admin UI ────────────────────────────────────────────────────────
-    from web.app import app as fastapi_app, init_web, _execute_cron
+    from web.app import app as fastapi_app, init_web, _execute_cron, clear_stale_cron_runs
     import uvicorn
 
     # Scheduler created before init_web so the web API has a reference
@@ -340,6 +340,7 @@ async def main():
     else:
         logger.warning("Retention disabled — conversations are kept indefinitely")
 
+    clear_stale_cron_runs()
     for cron in cfg.crons:
         if cron.enabled:
             try:

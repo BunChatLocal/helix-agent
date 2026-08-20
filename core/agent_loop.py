@@ -182,11 +182,15 @@ class AgentLoop:
                 logger.error(f"Full traceback: {traceback.format_exc()}")
                 # Norwegian, and specific where we can be: staff should know
                 # whether to retry or to report it, not just see "went wrong".
-                from core.cli_backend import AuthExpiredError
+                from core.cli_backend import (
+                    AuthExpiredError, QuotaExhaustedError, quota_user_message,
+                )
                 if isinstance(e, AuthExpiredError):
                     yield ("⚠️ Tjenesten er ikke pålogget akkurat nå, så jeg får "
                            "ikke svart. Dette er ikke noe du har gjort feil — si "
                            "fra til IT, så fikser de det.")
+                elif isinstance(e, QuotaExhaustedError):
+                    yield quota_user_message(e.resets_at)
                 else:
                     yield ("⚠️ Noe gikk galt her, og jeg fikk ikke svart. Prøv en "
                            "gang til. Skjer det igjen, si fra til IT.")
@@ -235,7 +239,15 @@ class AgentLoop:
         prompt: str,
         model: Optional[str] = None,
     ) -> Optional[str]:
-        """Run a user-defined cron job. Returns response or None if NO_REPLY."""
+        """Run a user-defined cron job. Returns the full reply, including errors.
+
+        Unlike heartbeat, a cron is a debug/ops tool: silence and failures must
+        both be visible, not collapsed into None.
+        """
         cfg = get_config()
         model_id = cfg.models.resolve(model) if model else cfg.models.heartbeat_id
-        return await self._collect("cron", cron_id, prompt, model_id)
+        parts = []
+        async for chunk in self.run("cron", cron_id, prompt, model_override=model_id):
+            if isinstance(chunk, str):
+                parts.append(chunk)
+        return "".join(parts) or None

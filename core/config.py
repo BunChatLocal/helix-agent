@@ -91,10 +91,15 @@ class SecurityConfig(BaseModel):
     web_fetch_domain_allowlist: list[str] = Field(default_factory=list)  # empty = all allowed
     inject_detection_enabled: bool = True
     audit_log_max_mb: int = 100
-    # One Claude Code process per in-flight turn. 50 concurrent was clean on
-    # this machine; 100 started failing with CLI exit 1. Overflow waits in
-    # line instead of all launching at once. 0 = no cap.
-    max_concurrent_claude: int = 50
+    # In-flight Claude Code processes. A single burst of 50 was clean; holding
+    # 50 open for the minutes it takes to drain a class of 150 made Max return
+    # empty is_error and the queue looked useless. 20 is slow enough to survive
+    # that blast (students wait in line) and still clears a 50-person class in
+    # a couple of waves. 0 = no cap.
+    max_concurrent_claude: int = 20
+    # Minimum gap between starting two claude.exe processes. Stops a free slot
+    # from immediately launching the next 20 at the same instant Max recovered.
+    claude_start_gap_ms: int = 400
 
 
 
@@ -141,6 +146,8 @@ class CronJob(BaseModel):
     prompt: str          # message to send to the agent when this fires
     enabled: bool = True
     last_run: Optional[str] = None   # ISO timestamp
+    last_status: Optional[str] = None  # ok | error | silent
+    last_result: Optional[str] = None  # truncated agent output or error
     model: Optional[str] = None      # alias/id override; None = use heartbeat model
 
 
