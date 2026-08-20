@@ -283,12 +283,25 @@ def _copy_templates(workspace: Path):
     workspace.mkdir(parents=True, exist_ok=True)
     for item in TEMPLATE_DIR.iterdir():
         dest = workspace / item.name
-        if dest.exists():
-            continue
         if item.is_dir():
-            shutil.copytree(item, dest)
-        else:
+            _copy_missing(item, dest)
+        elif not dest.exists():
             shutil.copy2(item, dest)
+
+
+def _copy_missing(src: Path, dest: Path) -> None:
+    """Copy template files that are not already in the live workspace.
+
+    Never overwrites. A machine that already ran setup still picks up new
+    screenshots added to workspace-template/assets/ later.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    for child in src.iterdir():
+        target = dest / child.name
+        if child.is_dir():
+            _copy_missing(child, target)
+        elif not target.exists():
+            shutil.copy2(child, target)
 
 
 def _write_identity(workspace: Path, name: str, emoji: str):

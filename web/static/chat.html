@@ -105,6 +105,14 @@
     border-radius:7px;padding:4px 8px;cursor:pointer;font-size:12px;color:var(--muted);
   }
   .lang:hover{color:var(--text)}
+  .who-wrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+  #who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .logout{
+    align-self:flex-start;border:0;background:transparent;padding:0;
+    cursor:pointer;font-size:12px;color:var(--muted);text-align:left;
+  }
+  .logout:hover{color:var(--text)}
+  .top .logout{margin-left:auto;padding:4px 2px;font-size:13px}
 
   /* ---------- Main ---------- */
   main{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -156,6 +164,10 @@
   .dots span:nth-child(2){animation-delay:.18s}
   .dots span:nth-child(3){animation-delay:.36s}
   @keyframes b{0%,60%,100%{opacity:.25}30%{opacity:1}}
+  .queue-note{
+    margin-top:10px;color:var(--muted);font-size:15px;line-height:1.5;
+    max-width:36em;white-space:normal;
+  }
 
   .composer{border-top:1px solid var(--line);background:var(--bg);padding:14px 24px 20px}
   .composer-in{max-width:760px;margin:0 auto}
@@ -365,7 +377,10 @@
     </div>
     <div class="side-foot">
       <div class="avatar" id="ini">–</div>
-      <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="who">–</div>
+      <div class="who-wrap">
+        <div id="who">–</div>
+        <button type="button" class="logout" id="logoutBtn" data-t="logout">Logg ut</button>
+      </div>
       <button class="lang" id="langB">EN</button>
     </div>
   </aside>
@@ -375,6 +390,7 @@
     <div class="top">
       <button class="burger" id="burger">☰</button>
       <strong style="font-size:15px" data-t="title">Zork</strong>
+      <button type="button" class="logout" id="logoutTop" data-t="logout">Logg ut</button>
     </div>
 
     <div class="thread" id="thread">
@@ -473,6 +489,7 @@ const I18N = {
     or:"eller", testmode:"TESTMODUS — ingen verifisering",
     testbar:"TESTMODUS — innlogging er ikke verifisert",
     testsignin:"Logg inn for testing", emailph:"navn@frid.no",
+    logout:"Logg ut",
     err_email:"Skriv inn en gyldig e-postadresse.",
     ctx:"Kontekst",
     fulltext:"Denne samtalen er blitt lang. Komprimer den for å fortsette — jeg lager et sammendrag og husker det viktigste.",
@@ -494,7 +511,9 @@ const I18N = {
     tooshort:d=>`Det er ikke noe konkret svar å ta vare på her ennå, så samtalen kan ikke beholdes. Den slettes automatisk etter ${d} dager uten aktivitet.`,
     tooshortShort:"Ikke noe svar å ta vare på ennå — slettes automatisk senere.",
     ratelimit:"Du har sendt mange meldinger på kort tid. Vent litt, så kan du sende igjen.",
-    imgmissing:"Bildet er ikke tilgjengelig"
+    imgmissing:"Bildet er ikke tilgjengelig",
+    queuenext:"Du er neste i køen. Ikke lukk siden — svaret kommer.",
+    queuepos:n=>`Du er nummer ${n} i køen. Ikke lukk siden — svaret kommer.`
   },
   en:{
     title:"Zork",
@@ -522,6 +541,7 @@ const I18N = {
     or:"or", testmode:"TEST MODE — no verification",
     testbar:"TEST MODE — sign-in is not verified",
     testsignin:"Sign in for testing", emailph:"name@frid.no",
+    logout:"Sign out",
     err_email:"Enter a valid email address.",
     ctx:"Context",
     fulltext:"This conversation has grown long. Compact it to continue — I'll summarise and keep what matters.",
@@ -543,7 +563,9 @@ const I18N = {
     tooshort:d=>`There's no real answer to keep here yet, so this chat can't be kept. It's deleted automatically after ${d} days without activity.`,
     tooshortShort:"No answer to keep yet — deleted automatically later.",
     ratelimit:"You've sent a lot of messages in a short time. Wait a moment and try again.",
-    imgmissing:"Image unavailable"
+    imgmissing:"Image unavailable",
+    queuenext:"You're next in the queue. Don't close the page — the answer is coming.",
+    queuepos:n=>`You are number ${n} in the queue. Don't close the page — the answer is coming.`
   }
 };
 /* Norwegian is the default; English only if saved or the browser asks for it.
@@ -615,6 +637,7 @@ function render(text){
 /* ---------------- state ---------------- */
 let token = null, ws = null, convId = null, convs = [], busy = false;
 let stream = null, retry = 0, codes = [];
+let isPupil = false;
 
 /* ---------------- sign-in ---------------- */
 (function boot(){
@@ -689,6 +712,8 @@ $("msBtn").onclick = async () => {
 };
 $("langA").onclick = toggleLang;
 $("langB").onclick = toggleLang;
+$("logoutBtn").onclick = signOut;
+$("logoutTop").onclick = signOut;
 
 /* ---------------- app ---------------- */
 async function start(){
@@ -726,7 +751,18 @@ function signOut(){
   sessionStorage.removeItem("helix_token"); token = null;
   isPupil = false;
   document.body.classList.remove("pupil");
-  $("app").classList.remove("on"); $("signin").style.display = "grid";
+  if(ws){ ws.onclose = null; ws.close(); ws = null; }
+  retry = 0; convs = []; convId = null; busy = false; stream = null;
+  $("msgs").innerHTML = "";
+  $("convList").innerHTML = "";
+  $("who").textContent = "–";
+  $("ini").textContent = "–";
+  $("testBar").classList.remove("on");
+  $("offline").classList.remove("on");
+  $("signinErr").style.display = "none";
+  $("app").classList.remove("on");
+  $("signin").style.display = "grid";
+  closeSide();
 }
 
 async function loadConvs(){
@@ -986,6 +1022,7 @@ $("modalKeep").onclick = async () => {
 
 /* ---------------- websocket ---------------- */
 function connect(){
+  if(!token) return;
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws/chat`);
   ws.onopen = () => {
@@ -1006,6 +1043,21 @@ function connect(){
       scroll(); return;
     }
     if(d.type === "history") return;               // we load history over REST
+    if(d.type === "queue"){
+      // Replace the thinking dots with a live place-in-line. Never write this
+      // into dataset.raw — it is status, not part of the answer.
+      if(!stream){ stream = add("a",""); stream.dataset.raw = ""; }
+      if(d.position > 0){
+        const note = d.position === 1 ? t("queuenext") : t("queuepos", d.position);
+        stream.innerHTML =
+          '<span class="dots"><span></span><span></span><span></span></span>'
+          + '<div class="queue-note">' + note + '</div>';
+      } else if(!stream.dataset.raw){
+        stream.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
+      }
+      scroll();
+      return;
+    }
     if(d.chunk){
       if(!stream){ stream = add("a",""); stream.dataset.raw = ""; }
       stream.dataset.raw += d.chunk;
@@ -1022,6 +1074,7 @@ function connect(){
     }
   };
   ws.onclose = () => {
+    if(!token) return;
     $("offline").classList.add("on");
     retry = Math.min(retry+1, 6);
     setTimeout(connect, 600 * Math.pow(2, retry-1));
@@ -1136,7 +1189,6 @@ document.addEventListener("drop", e => {
   files.forEach(upload);
 });
 
-let isPupil = false;
 function applyChips(){
   const keys = isPupil ? ["p1","p2","p3","p4"] : ["s1","s2","s3","s4"];
   document.querySelectorAll(".chip").forEach((c, i) => {

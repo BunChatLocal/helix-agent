@@ -769,8 +769,9 @@
         <div class="text-sm font-medium text-amber-300">Live workspace differs from git</div>
         <p class="text-xs text-slate-400 mt-1">
           Skills edited here live in <span class="font-mono">~/.helix/workspace</span>,
-          not in the repo. Copy them back to <span class="font-mono">workspace-template/</span>
-          if you want them on GitHub.
+          not in the repo. On the Skills page, use
+          <span class="text-slate-300">Copy this skill into the repo template</span>
+          so GitHub and the next PC get it.
         </p>
         <p class="text-xs text-slate-500 mt-2 font-mono"
            x-text="(health.drift.diverged || []).concat(health.drift.missing_in_live || []).slice(0,8).join(', ') || ''"></p>
@@ -779,14 +780,14 @@
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-7">
         <div class="card p-5">
           <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Claude CLI</div>
-          <div class="text-lg font-semibold" :class="health.claude_cli?.found ? 'text-emerald-400' : 'text-amber-400'"
-               x-text="health.claude_cli?.found ? 'found' : 'missing'"></div>
+          <div class="text-lg font-semibold" :class="!health.claude_cli ? 'text-slate-500' : (health.claude_cli.found ? 'text-emerald-400' : 'text-amber-400')"
+               x-text="health.claude_cli ? (health.claude_cli.found ? 'found' : 'missing') : '–'"></div>
           <div class="text-xs text-slate-700 mt-2 truncate" x-text="health.claude_cli?.path || ''"></div>
         </div>
         <div class="card p-5">
           <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Claude login</div>
-          <div class="text-lg font-semibold" :class="health.auth?.ready ? 'text-emerald-400' : 'text-amber-400'"
-               x-text="health.auth?.oauth_token ? 'yearly token' : (health.auth?.credentials_file ? 'file login' : 'none')"></div>
+          <div class="text-lg font-semibold" :class="!health.auth ? 'text-slate-500' : (health.auth.ready ? 'text-emerald-400' : 'text-amber-400')"
+               x-text="!health.auth ? '–' : (health.auth.oauth_token ? 'yearly token' : (health.auth.credentials_file ? 'file login' : 'none'))"></div>
         </div>
         <div class="card p-5">
           <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Pupil prompt</div>
@@ -1517,7 +1518,14 @@
             <button @click="saveSkill()" :disabled="skillSaving || !skillUnsaved"
               class="btn-primary px-3 py-1.5 text-xs flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
               x-text="skillSaving ? 'Saving…' : 'Save'"></button>
+            <button @click="copySkillToTemplate()" :disabled="skillTemplateBusy || skillUnsaved"
+              class="px-3 py-1.5 text-xs flex-shrink-0 rounded-lg border border-white/10 text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Overwrite workspace-template/ so this skill (and its screenshots) survive the next PC"
+              x-text="skillTemplateBusy ? 'Copying…' : 'Copy this skill into the repo template'"></button>
           </div>
+          <div x-show="skillTemplateMsg"
+            class="px-4 py-2 text-xs text-emerald-400 bg-emerald-500/5 border-b border-white/5 flex-shrink-0"
+            x-text="skillTemplateMsg"></div>
 
           <div x-show="skillError" class="px-4 py-3 text-xs text-red-400 bg-red-500/5 border-b border-red-500/10 flex-shrink-0"
             x-text="skillError"></div>
@@ -1721,6 +1729,8 @@ function helixApp() {
     skillSaved: false,
     skillUnsaved: false,
     skillError: '',
+    skillTemplateBusy: false,
+    skillTemplateMsg: '',
     skillCreateMessage: '',
     newSkill: { name: '', description: '' },
     // Files
@@ -1861,6 +1871,9 @@ function helixApp() {
           this.currentPage = 'skills';
           await this.loadSkills();
           await this.openSkill(row.topic);
+          this.skillTemplateMsg = data.already
+            ? 'Already in this skill. Copy this skill into the repo template to put it on GitHub.'
+            : 'Draft added here. Copy this skill into the repo template when it is ready.';
         } else {
           this.insightPromoteMsg = data.detail || 'Could not add draft';
         }
@@ -2128,6 +2141,7 @@ function helixApp() {
       this.skillUnsaved = false;
       this.skillSaved = false;
       this.skillError = '';
+      this.skillTemplateMsg = '';
       this.selectedSkillPath = '';
       try {
         const r = await this.api(`/api/skills/${encodeURIComponent(skillId)}`);
@@ -2211,6 +2225,34 @@ function helixApp() {
       }
     },
 
+    async copySkillToTemplate() {
+      if (!this.selectedSkillId || this.skillTemplateBusy || this.skillUnsaved) return;
+      this.skillTemplateBusy = true;
+      this.skillTemplateMsg = '';
+      this.skillError = '';
+      try {
+        const r = await this.api(
+          `/api/skills/${encodeURIComponent(this.selectedSkillId)}/to-template`,
+          { method: 'POST' },
+        );
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) {
+          const n = (data.copied || []).length;
+          const a = (data.assets || []).length;
+          const miss = (data.missing_assets || []).length;
+          this.skillTemplateMsg = `Wrote ${n} file(s) and ${a} screenshot(s) to workspace-template/`
+            + (miss ? ` — ${miss} cited image(s) missing from assets/` : '');
+          setTimeout(() => this.skillTemplateMsg = '', 5000);
+        } else {
+          this.skillError = data.detail || 'Could not copy to template';
+        }
+      } catch (e) {
+        this.skillError = e.message;
+      } finally {
+        this.skillTemplateBusy = false;
+      }
+    },
+
     connectWS() {
       this.wsStatus = 'connecting...';
       try {
@@ -2235,9 +2277,20 @@ function helixApp() {
             }
           } else if (data.status === 'connected') {
             this.wsStatus = 'connected';
+          } else if (data.type === 'queue') {
+            const last = this.chatMessages[this.chatMessages.length - 1];
+            if (last && last.role === 'assistant') {
+              last.queued = data.position > 0;
+              last.content = data.position <= 0 ? '' : (
+                data.position === 1
+                  ? 'Du er neste i køen. Ikke lukk siden — svaret kommer.'
+                  : `Du er nummer ${data.position} i køen. Ikke lukk siden — svaret kommer.`
+              );
+            }
           } else if (data.chunk) {
             const last = this.chatMessages[this.chatMessages.length - 1];
             if (last && last.role === 'assistant') {
+              if (last.queued) { last.content = ''; last.queued = false; }
               last.content += data.chunk;
             }
           } else if (data.done) {

@@ -1165,8 +1165,22 @@ async def api_status():
             pass
     from core.ops_health import report as ops_report
     from core.workspace_sync import drift_report
-    ops = ops_report(_read_audit_events(7))
-    drift = drift_report()
+    try:
+        ops = ops_report(_read_audit_events(7))
+    except Exception as exc:
+        logger.warning(f"ops health failed: {exc}")
+        ops = {
+            "agent": cfg.agent_name or cfg.agent_id,
+            "claude_cli": {"found": False, "path": ""},
+            "auth": {"oauth_token": False, "credentials_file": False, "ready": False},
+            "prompts": {"staff": None, "student": None},
+            "last_chat_ts": None,
+        }
+    try:
+        drift = drift_report()
+    except Exception as exc:
+        logger.warning(f"workspace drift failed: {exc}")
+        drift = {"ok": True, "diverged": [], "missing_in_live": [], "only_in_live": []}
     ready = ops["claude_cli"]["found"] and ops["auth"]["ready"]
     return {
         "status": "ok" if ready else "degraded",
@@ -1923,6 +1937,19 @@ async def skills_save_api(skill_id: str, body: dict):
         raise HTTPException(422, str(e))
 
 
+@app.post("/api/skills/{skill_id}/to-template", dependencies=[Depends(require_admin)])
+async def skill_to_template_api(skill_id: str):
+    """Copy this live skill (and its screenshots) into workspace-template/."""
+    from core.workspace_sync import copy_skill_to_template
+    cfg = get_config()
+    try:
+        return copy_skill_to_template(skill_id, workspace=Path(cfg.workspace_path))
+    except FileNotFoundError:
+        raise HTTPException(404, "Skill not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
 # ─── File Browser API ─────────────────────────────────────────────────────────
 
 _FILE_MAX_BYTES = 512 * 1024  # 512 KB cap for reads/writes
@@ -2103,6 +2130,19 @@ _SCOPE_REFUSAL_NB = re.compile(r"jeg kan bare hjelpe med it", re.I)
 
 # ─── WebSocket chat ───────────────────────────────────────────────────────────
 
+async def _relay_agent_chunks(websocket: WebSocket, agen) -> str:
+    """Forward agent output. Status dicts (queue place) go as themselves;
+    text is a `chunk` frame and is what gets saved as the reply."""
+    parts = []
+    async for chunk in agen:
+        if isinstance(chunk, dict):
+            await websocket.send_json(chunk)
+            continue
+        parts.append(chunk)
+        await websocket.send_json({"chunk": chunk})
+    return "".join(parts)
+
+
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket):
     """Real-time chat via WebSocket."""
@@ -2278,16 +2318,16 @@ async def ws_chat(websocket: WebSocket):
                     + wrap_external_content(page["text"], page["url"])
                     + (f"\n\nUser's note: {extra}" if extra else "")
                 )
-                response_parts = []
-                async for chunk in _agent_loop.run(
-                    "web", peer, message,
-                    caller_name=display_name,
-                    caller_email=claims.get("email") or "",
-                ):
-                    response_parts.append(chunk)
-                    await websocket.send_json({"chunk": chunk})
+                full = await _relay_agent_chunks(
+                    websocket,
+                    _agent_loop.run(
+                        "web", peer, message,
+                        caller_name=display_name,
+                        caller_email=claims.get("email") or "",
+                    ),
+                )
                 await websocket.send_json({
-                    "done": True, "full_response": "".join(response_parts)})
+                    "done": True, "full_response": full})
                 continue
 
             # Handle slash commands before passing to agent loop
@@ -2346,16 +2386,14 @@ async def ws_chat(websocket: WebSocket):
                 )
                 clean_message = f"{attachment_note}\n\n{body}"
 
-            response_parts = []
-            async for chunk in _agent_loop.run(
-                "web", peer, clean_message,
-                caller_name=display_name,
-                caller_email=claims.get("email") or "",
-            ):
-                response_parts.append(chunk)
-                await websocket.send_json({"chunk": chunk})
-
-            full = "".join(response_parts)
+            full = await _relay_agent_chunks(
+                websocket,
+                _agent_loop.run(
+                    "web", peer, clean_message,
+                    caller_name=display_name,
+                    caller_email=claims.get("email") or "",
+                ),
+            )
 
             # One record per conversation, titled by the message that opened it.
             # Recorded after the turn so a conversation that failed outright is not

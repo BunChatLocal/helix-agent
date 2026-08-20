@@ -22,7 +22,10 @@ def claude_cli() -> dict:
 
 
 def auth_status() -> dict:
-    token = bool((get_secret("CLAUDE_CODE_OAUTH_TOKEN") or "").strip())
+    try:
+        token = bool((get_secret("CLAUDE_CODE_OAUTH_TOKEN") or "").strip())
+    except Exception:
+        token = False
     creds = CREDENTIALS.exists()
     return {
         "oauth_token": token,

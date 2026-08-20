@@ -1009,6 +1009,178 @@ class TestOperatorAccountStaysOffTheChat:
         assert cli_backend.sanitize_helix_oauth_profile() is False
 
 
+class TestClaudeConcurrencyGate:
+    """A holiday spike must wait in line, not launch 100 claude.exe processes."""
+
+    def test_in_flight_turns_stay_at_the_cap(self, monkeypatch):
+        import asyncio
+        from core import cli_backend
+
+        monkeypatch.setattr(cli_backend, "_claude_limit", lambda: 2)
+        cli_backend.reset_claude_gate()
+        current = 0
+        peak = 0
+
+        async def fake_invoke(*args, **kwargs):
+            nonlocal current, peak
+            current += 1
+            peak = max(peak, current)
+            await asyncio.sleep(0.05)
+            current -= 1
+            return ("ok", "sid", {})
+
+        monkeypatch.setattr(cli_backend, "_invoke", fake_invoke)
+
+        async def burst():
+            await asyncio.gather(*[
+                cli_backend.call_claude(
+                    model="m", system="s", user_message="u",
+                    is_new_session=True, tier="student",
+                )
+                for _ in range(6)
+            ])
+
+        asyncio.run(burst())
+        assert peak == 2
+        cli_backend.reset_claude_gate()
+
+    def test_waiters_are_told_their_place(self, monkeypatch):
+        import asyncio
+        from core import cli_backend
+
+        monkeypatch.setattr(cli_backend, "_claude_limit", lambda: 1)
+        cli_backend.reset_claude_gate()
+        hold = asyncio.Event()
+        first_started = asyncio.Event()
+        got_place = asyncio.Event()
+        seen = []
+
+        async def fake_invoke(*args, **kwargs):
+            first_started.set()
+            await hold.wait()
+            return ("ok", "sid", {})
+
+        monkeypatch.setattr(cli_backend, "_invoke", fake_invoke)
+
+        async def on_wait(position, waiting):
+            seen.append(position)
+            if position == 1:
+                got_place.set()
+
+        async def run():
+            first = asyncio.create_task(cli_backend.call_claude(
+                model="m", system="s", user_message="u",
+                is_new_session=True, tier="student",
+            ))
+            await first_started.wait()
+            second = asyncio.create_task(cli_backend.call_claude(
+                model="m", system="s", user_message="u",
+                is_new_session=True, tier="student",
+                on_wait=on_wait,
+            ))
+            await asyncio.wait_for(got_place.wait(), timeout=1)
+            assert seen[0] == 1
+            hold.set()
+            await asyncio.gather(first, second)
+            assert seen[-1] == 0
+
+        asyncio.run(run())
+        cli_backend.reset_claude_gate()
+
+    def test_cancelled_waiter_leaves_the_line(self, monkeypatch):
+        import asyncio
+        from core import cli_backend
+
+        monkeypatch.setattr(cli_backend, "_claude_limit", lambda: 1)
+        cli_backend.reset_claude_gate()
+        hold = asyncio.Event()
+        first_started = asyncio.Event()
+        got_place = asyncio.Event()
+
+        async def fake_invoke(*args, **kwargs):
+            first_started.set()
+            await hold.wait()
+            return ("ok", "sid", {})
+
+        monkeypatch.setattr(cli_backend, "_invoke", fake_invoke)
+
+        async def on_wait(position, waiting):
+            if position == 1:
+                got_place.set()
+
+        async def run():
+            first = asyncio.create_task(cli_backend.call_claude(
+                model="m", system="s", user_message="u",
+                is_new_session=True, tier="student",
+            ))
+            await first_started.wait()
+            waiter = asyncio.create_task(cli_backend.call_claude(
+                model="m", system="s", user_message="u",
+                is_new_session=True, tier="student",
+                on_wait=on_wait,
+            ))
+            await asyncio.wait_for(got_place.wait(), timeout=1)
+            waiter.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await waiter
+            q = cli_backend._claude_queue()
+            assert q.waiters == []
+            assert q.in_flight == 1
+            hold.set()
+            await first
+            assert q.in_flight == 0
+
+        asyncio.run(run())
+        cli_backend.reset_claude_gate()
+
+
+class TestQueueStatusEvents:
+    """Place-in-line is a live status event, not a chat message."""
+
+    @pytest.mark.anyio
+    async def test_web_yields_queue_dict_not_transcript(self):
+        from core.agent_loop import AgentLoop
+
+        sid = str(uuid.uuid4())
+        sm = MagicMock()
+        sm.get_or_create = AsyncMock(return_value={
+            "session_id": sid,
+            "channel": "web",
+            "peer": "dev:x|1",
+            "model": "claude-sonnet-4-6",
+            "claude_session_id": None,
+            "tier": "student",
+        })
+        sm.pop_pending_context = AsyncMock(return_value=None)
+        sm.append_message = AsyncMock()
+        sm.update_activity = AsyncMock()
+        sm.set_claude_session_id = AsyncMock()
+
+        async def fake_call(**kwargs):
+            on_wait = kwargs.get("on_wait")
+            if on_wait:
+                await on_wait(3, 12)
+                await on_wait(1, 8)
+                await on_wait(0, 0)
+            return "svar", "sid", {}
+
+        with patch("core.agent_loop.call_claude", fake_call), \
+             patch("core.agent_loop.build_system_prompt",
+                   lambda is_new_session, tier, **kwargs: f"SYS:{tier}"):
+            chunks = []
+            async for chunk in AgentLoop(sm).run("web", "dev:x|1", "hei"):
+                chunks.append(chunk)
+
+        assert {"type": "queue", "position": 3, "waiting": 12} in chunks
+        assert {"type": "queue", "position": 1, "waiting": 8} in chunks
+        assert {"type": "queue", "position": 0, "waiting": 0} in chunks
+        assert "svar" in chunks
+        assistant = [
+            c.args for c in sm.append_message.await_args_list if c.args[1] == "assistant"
+        ]
+        assert assistant == [(sid, "assistant", "svar")]
+
+
 class TestAgentLoopTierWiring:
     """The tier stored on the session must reach both the prompt and the CLI."""
 
@@ -1925,6 +2097,21 @@ class TestAdminApiIntegration:
         list_resp_2 = client.get("/api/skills", headers=headers)
         assert list_resp_2.status_code == 200
         assert len(list_resp_2.json()["skills"]) == 1
+
+        (tmp_path / "assets").mkdir(exist_ok=True)
+        (tmp_path / "assets" / "a.png").write_bytes(b"\x89PNG")
+        (tmp_path / "skills" / "triage-flow" / "SKILL.md").write_text(
+            "![x](asset:a.png)", encoding="utf-8"
+        )
+        tmpl = tmp_path / "repo-template"
+        import core.workspace_sync as ws
+        monkeypatch.setattr(ws, "TEMPLATE_DIR", tmpl)
+        copy_resp = client.post("/api/skills/triage-flow/to-template", headers=headers)
+        assert copy_resp.status_code == 200
+        body = copy_resp.json()
+        assert body["assets"] == ["a.png"]
+        assert (tmpl / "skills" / "triage-flow" / "SKILL.md").exists()
+        assert (tmpl / "assets" / "a.png").read_bytes().startswith(b"\x89PNG")
 
 
 class TestEntraCallbackLandsOnChat:
@@ -2993,6 +3180,71 @@ class TestOperatorConsole:
         assert "entra-azure" not in pupil
         assert "colleague in the same role" not in pupil
         assert "entra-azure" in staff
+
+    def test_copy_skill_to_template_takes_screenshots(self, tmp_path):
+        from core.workspace_sync import copy_skill_to_template
+        live = tmp_path / "live"
+        tmpl = tmp_path / "template"
+        skill = live / "skills" / "visma-inschool"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(
+            "staff ![x](asset:tap.png)", encoding="utf-8"
+        )
+        (skill / "PUPIL.md").write_text(
+            "pupil ![x](asset:tap.png)", encoding="utf-8"
+        )
+        (live / "assets").mkdir()
+        (live / "assets" / "tap.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        (live / "assets" / "unrelated.png").write_bytes(b"nope")
+        result = copy_skill_to_template(
+            "visma-inschool", workspace=live, template=tmpl
+        )
+        assert "skills/visma-inschool/PUPIL.md" in result["copied"]
+        assert result["assets"] == ["tap.png"]
+        assert result["missing_assets"] == []
+        assert (tmpl / "assets" / "tap.png").read_bytes().startswith(b"\x89PNG")
+        assert not (tmpl / "assets" / "unrelated.png").exists()
+
+    def test_copy_skill_to_template_lists_missing_images(self, tmp_path):
+        from core.workspace_sync import copy_skill_to_template
+        live = tmp_path / "live"
+        tmpl = tmp_path / "template"
+        skill = live / "skills" / "demo"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("![x](asset:gone.png)", encoding="utf-8")
+        result = copy_skill_to_template("demo", workspace=live, template=tmpl)
+        assert result["missing_assets"] == ["gone.png"]
+        assert result["assets"] == []
+
+    def test_copy_skill_to_template_rejects_bad_id(self, tmp_path):
+        from core.workspace_sync import copy_skill_to_template
+        with pytest.raises(ValueError):
+            copy_skill_to_template("../etc", workspace=tmp_path, template=tmp_path / "t")
+
+    def test_pupil_visma_screenshots_are_in_the_template(self):
+        import re
+        pupil = Path("workspace-template/skills/visma-inschool/PUPIL.md").read_text(
+            encoding="utf-8"
+        )
+        names = re.findall(r"asset:([A-Za-z0-9._-]+)", pupil)
+        assert len(set(names)) == 9, names
+        assets = Path("workspace-template/assets")
+        missing = [
+            n for n in names
+            if not (assets / n).is_file() or (assets / n).stat().st_size < 100
+        ]
+        assert missing == []
+
+    def test_auth_status_sees_the_helix_credentials_file(self, tmp_path, monkeypatch):
+        from core import ops_health
+        cred = tmp_path / ".credentials.json"
+        cred.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(ops_health, "CREDENTIALS", cred)
+        monkeypatch.setattr(ops_health, "get_secret", lambda key: "")
+        status = ops_health.auth_status()
+        assert status["credentials_file"] is True
+        assert status["oauth_token"] is False
+        assert status["ready"] is True
 
     def test_insights_subject_lists_the_opening_lines(self, monkeypatch, tmp_path):
         import importlib

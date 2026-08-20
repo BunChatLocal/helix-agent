@@ -409,7 +409,8 @@ async def handle_slash(
             # Run through agent loop
             response_parts = []
             async for chunk in agent_loop.run(channel, peer, injected):
-                response_parts.append(chunk)
+                if isinstance(chunk, str):
+                    response_parts.append(chunk)
             full = "".join(response_parts)
             if full.strip() and full.strip() != "NO_REPLY":
                 await send_fn(full)

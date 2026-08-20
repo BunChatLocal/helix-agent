@@ -17,7 +17,7 @@ import shutil
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Awaitable, Callable, Optional, Tuple
 
 logger = logging.getLogger("helix.cli_backend")
 
@@ -425,6 +425,141 @@ async def _invoke(
     return data.get("result", ""), data.get("session_id", ""), _usage_from(data, model)
 
 
+OnWait = Callable[[int, int], Awaitable[None]]
+
+
+class _WaitTicket:
+    """One place in the Claude process line."""
+
+    def __init__(self) -> None:
+        self.ready = asyncio.Event()
+        self.update = asyncio.Event()
+        self.position = 0
+        self.held = False
+
+
+class ClaudeQueue:
+    """FIFO cap on in-flight `claude` processes, with a live place in line.
+
+    `position` is 1-based among people still waiting: 1 means next to run,
+    0 means this ticket already holds a slot.
+    """
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.in_flight = 0
+        self.waiters: list[_WaitTicket] = []
+        self._mu = asyncio.Lock()
+
+    def busy(self) -> bool:
+        return self.in_flight >= self.limit or bool(self.waiters)
+
+    def _assign_positions(self) -> None:
+        for i, ticket in enumerate(self.waiters):
+            ticket.position = i + 1
+
+    def _wake_waiters(self) -> None:
+        self._assign_positions()
+        for ticket in self.waiters:
+            ticket.update.set()
+
+    def _grant_next(self) -> None:
+        while self.waiters and self.in_flight < self.limit:
+            nxt = self.waiters.pop(0)
+            self.in_flight += 1
+            nxt.held = True
+            nxt.position = 0
+            nxt.ready.set()
+            nxt.update.set()
+        self._wake_waiters()
+
+    async def acquire(self, on_wait: Optional[OnWait] = None) -> _WaitTicket:
+        ticket = _WaitTicket()
+        async with self._mu:
+            if self.in_flight < self.limit and not self.waiters:
+                self.in_flight += 1
+                ticket.held = True
+                ticket.ready.set()
+                return ticket
+            self.waiters.append(ticket)
+            self._grant_next()
+
+        last_sent: Optional[int] = None
+        try:
+            while not ticket.ready.is_set():
+                async with self._mu:
+                    pos = ticket.position
+                    waiting = len(self.waiters)
+                if on_wait and pos and pos != last_sent:
+                    await on_wait(pos, waiting)
+                    last_sent = pos
+                ticket.update.clear()
+                if ticket.ready.is_set():
+                    break
+                await ticket.update.wait()
+            if on_wait and last_sent is not None:
+                await on_wait(0, 0)
+            return ticket
+        except BaseException:
+            await self._drop(ticket)
+            raise
+
+    async def _drop(self, ticket: _WaitTicket) -> None:
+        async with self._mu:
+            if ticket in self.waiters:
+                self.waiters.remove(ticket)
+                self._wake_waiters()
+            elif ticket.held:
+                ticket.held = False
+                self.in_flight = max(0, self.in_flight - 1)
+                self._grant_next()
+
+    async def release(self, ticket: _WaitTicket) -> None:
+        async with self._mu:
+            if not ticket.held:
+                return
+            ticket.held = False
+            self.in_flight = max(0, self.in_flight - 1)
+            self._grant_next()
+
+
+_QUEUE: Optional[ClaudeQueue] = None
+_QUEUE_N = -1
+
+
+def _claude_limit() -> int:
+    try:
+        from core.config import get_config
+        n = int(get_config().security.max_concurrent_claude)
+    except Exception:
+        n = 50
+    if n <= 0:
+        return 10_000
+    return n
+
+
+def _claude_queue() -> ClaudeQueue:
+    """Shared cap on in-flight `claude` processes. Lazy so tests can reset it."""
+    global _QUEUE, _QUEUE_N
+    n = _claude_limit()
+    if _QUEUE is None or _QUEUE_N != n:
+        _QUEUE = ClaudeQueue(n)
+        _QUEUE_N = n
+    return _QUEUE
+
+
+def claude_slots_busy() -> bool:
+    """True when a new turn would have to wait for a slot."""
+    return _claude_queue().busy()
+
+
+def reset_claude_gate() -> None:
+    """Test helper: drop the cached queue."""
+    global _QUEUE, _QUEUE_N
+    _QUEUE = None
+    _QUEUE_N = -1
+
+
 async def call_claude(
     model: str,
     system: str,
@@ -434,6 +569,7 @@ async def call_claude(
     timeout: int = DEFAULT_TIMEOUT,
     tier: str = "staff",
     images: Optional[list[Path]] = None,
+    on_wait: Optional[OnWait] = None,
 ) -> Tuple[str, str, dict]:
     """
     Call claude CLI. Returns (response_text, claude_session_id_used, usage_dict).
@@ -444,16 +580,43 @@ async def call_claude(
     - New session (is_new_session=True or no claude_session_id): --session-id <new_uuid>
     - Resume: --resume <claude_session_id>
     - If resume fails for any reason, falls back to a fresh --session-id
+    - on_wait(position, waiting) fires while this turn is queued; position 0
+      means a slot was granted. Not called at all if we never waited.
     """
+    queue = _claude_queue()
+    ticket = await queue.acquire(on_wait=on_wait)
+    try:
+        try:
+            return await _call_claude_once(
+                model, system, user_message, claude_session_id,
+                is_new_session, timeout, tier, images,
+            )
+        except AuthExpiredError:
+            raise
+        except Exception as e:
+            logger.warning(f"claude CLI failed, retrying once: {e}")
+            await asyncio.sleep(2)
+            return await _call_claude_once(
+                model, system, user_message, None, True, timeout, tier, images,
+            )
+    finally:
+        await queue.release(ticket)
+
+
+async def _call_claude_once(
+    model, system, user_message, claude_session_id, is_new_session,
+    timeout, tier, images,
+) -> Tuple[str, str, dict]:
     if is_new_session or not claude_session_id:
         new_id = str(uuid.uuid4())
         logger.info(f"Starting new Claude session: {new_id} ({tier})")
         return await _invoke(model, system, user_message, ["--session-id", new_id], timeout, tier, images)
 
-    # Try resume
     try:
         logger.debug(f"Resuming Claude session: {claude_session_id}")
         return await _invoke(model, system, user_message, ["--resume", claude_session_id], timeout, tier, images)
+    except AuthExpiredError:
+        raise
     except Exception as e:
         logger.warning(f"Resume failed for session {claude_session_id}, falling back to new session: {e}")
         new_id = str(uuid.uuid4())

@@ -12,7 +12,7 @@ import re
 import traceback
 import weakref
 from pathlib import Path
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, Union
 
 from core.config import get_config, TIER_STAFF, TIER_STUDENT
 from core.session_manager import SessionManager
@@ -57,9 +57,10 @@ class AgentLoop:
         model_override: Optional[str] = None,
         caller_name: str = "",
         caller_email: str = "",
-    ) -> AsyncGenerator[str, None]:
+    ) -> AsyncGenerator[Union[str, dict], None]:
         """
-        Main agent turn. Yields response text.
+        Main agent turn. Yields response text, or a status dict the web
+        socket forwards without saving (queue place-in-line).
         Yields NO_REPLY sentinel if response should be suppressed.
         """
         get_config()
@@ -101,7 +102,10 @@ class AgentLoop:
                     prompt_message, images = _extract_images(user_message)
                     prompt_message = f"{STUDENT_TURN_MARKER}\n\n{prompt_message}"
 
-                response_text, used_session_id, usage = await call_claude(
+                # Overflow waits for a slot rather than launching another
+                # claude.exe. Web gets live place-in-line events (not saved);
+                # heartbeat/cron just wait.
+                claude_kwargs = dict(
                     model=model_id,
                     system=system,
                     user_message=prompt_message,
@@ -110,6 +114,52 @@ class AgentLoop:
                     tier=tier,
                     images=images,
                 )
+                if channel == "web":
+                    progress: asyncio.Queue = asyncio.Queue()
+
+                    async def on_wait(position: int, waiting: int) -> None:
+                        await progress.put({
+                            "type": "queue",
+                            "position": position,
+                            "waiting": waiting,
+                        })
+
+                    work = asyncio.create_task(
+                        call_claude(on_wait=on_wait, **claude_kwargs)
+                    )
+                    try:
+                        while not work.done():
+                            getter = asyncio.create_task(progress.get())
+                            done, _pending = await asyncio.wait(
+                                {work, getter},
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+                            if getter in done:
+                                yield getter.result()
+                            else:
+                                getter.cancel()
+                                try:
+                                    await getter
+                                except (asyncio.CancelledError, Exception):
+                                    pass
+                        while True:
+                            try:
+                                yield progress.get_nowait()
+                            except asyncio.QueueEmpty:
+                                break
+                        response_text, used_session_id, usage = work.result()
+                    except BaseException:
+                        if not work.done():
+                            work.cancel()
+                            try:
+                                await work
+                            except (asyncio.CancelledError, Exception):
+                                pass
+                        raise
+                else:
+                    response_text, used_session_id, usage = await call_claude(
+                        **claude_kwargs
+                    )
 
                 # Persist claude_session_id if new or changed (fresh start or resume fallback)
                 if used_session_id and used_session_id != claude_session_id:
@@ -146,7 +196,8 @@ class AgentLoop:
         try:
             parts = []
             async for chunk in self.run(channel, peer, message, model_override=model):
-                parts.append(chunk)
+                if isinstance(chunk, str):
+                    parts.append(chunk)
             full = "".join(parts)
             if not full.strip() or full.strip().startswith(NO_REPLY) or "Something went wrong" in full:
                 return None

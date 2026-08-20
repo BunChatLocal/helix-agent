@@ -246,7 +246,8 @@ class TelegramAdapter(ChannelAdapter):
         try:
             response_parts = []
             async for chunk in self.agent_loop.run(channel, peer, clean_content):
-                response_parts.append(chunk)
+                if isinstance(chunk, str):
+                    response_parts.append(chunk)
             full_response = "".join(response_parts)
             if full_response.strip() and full_response.strip() != "NO_REPLY":
                 await send_reply(full_response)

@@ -91,6 +91,10 @@ class SecurityConfig(BaseModel):
     web_fetch_domain_allowlist: list[str] = Field(default_factory=list)  # empty = all allowed
     inject_detection_enabled: bool = True
     audit_log_max_mb: int = 100
+    # One Claude Code process per in-flight turn. 50 concurrent was clean on
+    # this machine; 100 started failing with CLI exit 1. Overflow waits in
+    # line instead of all launching at once. 0 = no cap.
+    max_concurrent_claude: int = 50
 
 
 
