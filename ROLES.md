@@ -763,16 +763,12 @@ wrong.
 
 ### Still open
 
-The shared-core split is done — see *The shared core had to earn the name* above.
-Two smaller things surfaced while doing it and are not fixed:
+The pupil Visma guide is split out (`skills/visma-inschool/PUPIL.md`) and is
+what a pupil's prompt inlines. The staff file still holds role/permission
+scoping and the Entra pointer.
 
-- `skills/visma-inschool/SKILL.md` is 10,954 characters, a third of a pupil's
-  prompt, and it is written for staff: it asks which role the user holds, reasons
-  about permission scope, and points at `skills/entra-azure/SKILL.md` by name. A
-  pupil cannot follow that pointer, but it is the largest and least pupil-shaped
-  thing in their prompt. Splitting the pupil-relevant procedures out is the fix.
-- `m365-office` and `windows-endpoint` still hold nothing verified. The coverage
-  view says so; filling them needs a real source rather than a plausible one.
+`m365-office` and `windows-endpoint` still hold nothing verified. The coverage
+view says so; filling them needs a real source rather than a plausible one.
 
 Every decision recorded here has code behind it.
 

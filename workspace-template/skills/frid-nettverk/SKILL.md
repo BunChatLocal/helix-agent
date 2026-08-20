@@ -72,13 +72,14 @@ their school.
 **First-time activation is a long procedure and it is written down — do not
 improvise it.** The full step-by-step for `brukerkonto.afk.no`, including the
 temporary access pass and its 60-minute limit, Authenticator enrolment, the
-passkey step, the "looks finished but isn't" screen, and the password rules, is
-in `skills/visma-inschool/SKILL.md` under **"Aktivere ny brukerkonto"**. Read it
-and walk them through it in batches, as that entry instructs.
+passkey step, the "looks finished but isn't" screen, and the password rules,
+lives under **"Aktivere ny brukerkonto"** in the Visma InSchool pupil guide
+(already included when you are talking to a pupil). Talking to a colleague:
+the same steps are in `skills/visma-inschool/SKILL.md`. Walk them through it
+in batches.
 
-Signing in to Visma InSchool afterwards is a different thing and also documented
-there, under **"Logge inn i Visma InSchool (Akershus)"** — pupils use Feide, never
-ID-porten.
+Signing in to Visma InSchool afterwards is a different thing, under
+**"Logge inn i Visma InSchool (Akershus)"** — pupils use Feide, never ID-porten.
 
 ## Two-factor / Microsoft Authenticator
 

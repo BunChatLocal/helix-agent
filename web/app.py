@@ -1027,6 +1027,7 @@ async def whoami(claims: dict = Depends(require_auth)):
     return {
         "name": claims.get("name") or "",
         "role": claims.get("role") or "user",
+        "tier": _tier(claims),
         "test_mode": _dev_login_available(cfg),
         "retention_days": _retention_days(_tier(claims)),
     }
@@ -1154,7 +1155,7 @@ async def health():
 
 @app.get("/api/status", dependencies=[Depends(require_admin)])
 async def api_status():
-    """Authenticated operational status — includes session count and active channels."""
+    """Authenticated operational status — CLI, auth, prompt size, drift."""
     cfg = get_config()
     sessions = []
     if _session_manager:
@@ -1162,8 +1163,13 @@ async def api_status():
             sessions = await _session_manager.list_sessions()
         except Exception:
             pass
+    from core.ops_health import report as ops_report
+    from core.workspace_sync import drift_report
+    ops = ops_report(_read_audit_events(7))
+    drift = drift_report()
+    ready = ops["claude_cli"]["found"] and ops["auth"]["ready"]
     return {
-        "status": "ok",
+        "status": "ok" if ready else "degraded",
         "uptime": int(time.time() - _START_TIME),
         "sessions": len(sessions),
         "channels": [
@@ -1172,6 +1178,13 @@ async def api_status():
                 ("telegram", cfg.telegram.enabled),
             ] if enabled
         ],
+        **ops,
+        "drift": {
+            "ok": drift["ok"],
+            "diverged": drift["diverged"],
+            "missing_in_live": drift["missing_in_live"],
+            "only_in_live": drift["only_in_live"],
+        },
     }
 
 _START_TIME = time.time()
@@ -1798,6 +1811,59 @@ async def chat_insights(days: int = 30, recent: int = 50):
             for e in sorted(refusals, key=lambda e: e.get("ts") or 0, reverse=True)[:recent]
         ],
     }
+
+
+@app.get("/api/insights/subject", dependencies=[Depends(require_admin)])
+async def insight_subject(key: str, days: int = 30):
+    """Opening lines that clustered into one Insights subject."""
+    key = (key or "").strip()
+    if not key:
+        raise HTTPException(400, "key is required")
+    days = min(max(days, 1), 365)
+    from core.subjects import CATALOG_PATH, resolve_subject, _load
+    catalog = _load(CATALOG_PATH)
+    rows = []
+    for e in _read_audit_events(days):
+        if e.get("event") != "chat_started":
+            continue
+        label = resolve_subject(
+            e.get("content_preview") or "", e.get("subject") or "", catalog
+        )
+        if label != key:
+            continue
+        rows.append({
+            "ts": e.get("ts"),
+            "title": e.get("content_preview"),
+            "tier": e.get("tier"),
+            "topic": e.get("topic"),
+            "name": e.get("name"),
+            "email": e.get("sender_id"),
+        })
+    rows.sort(key=lambda r: r.get("ts") or 0, reverse=True)
+    return {"key": key, "conversations": rows[:200]}
+
+
+@app.post("/api/insights/promote", dependencies=[Depends(require_admin)])
+async def promote_insight(body: dict):
+    """Append a draft verified-procedure stub to a skill file."""
+    from core.skill_promote import promote
+    skill = (body.get("skill") or "").strip()
+    title = (body.get("title") or "").strip()
+    preview = (body.get("preview") or "").strip()
+    if not skill or not title:
+        raise HTTPException(400, "skill and title are required")
+    try:
+        return promote(get_config().workspace_path, skill, title, preview)
+    except FileNotFoundError:
+        raise HTTPException(404, "Skill not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.get("/api/workspace/drift", dependencies=[Depends(require_admin)])
+async def workspace_drift():
+    from core.workspace_sync import drift_report
+    return drift_report()
 
 
 @app.get("/api/logs/operational", dependencies=[Depends(require_admin)])

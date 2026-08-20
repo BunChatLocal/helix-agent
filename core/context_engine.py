@@ -62,7 +62,7 @@ TIER_BOOTSTRAP = {
 # which belongs in front of a sixteen-year-old.
 PUPIL_KNOWLEDGE = [
     "skills/frid-nettverk/SKILL.md",
-    "skills/visma-inschool/SKILL.md",
+    "skills/visma-inschool/PUPIL.md",
 ]
 
 FILE_CHAR_LIMIT = 20_000

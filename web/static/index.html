@@ -4,17 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Zork Admin</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script src="/static/vendor/tailwind.js"></script>
+<script defer src="/static/vendor/alpine.min.js"></script>
 <script>
   tailwind.config = {
     darkMode: 'class',
     theme: {
       extend: {
-        fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+        fontFamily: { sans: ['ui-sans-serif', 'system-ui', 'sans-serif'] }
       }
     }
   }
@@ -27,7 +24,7 @@
   [x-cloak] { display: none !important; }
   pre { white-space: pre-wrap; word-break: break-word; font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; }
 
-  body { font-family: 'Inter', system-ui, sans-serif; }
+  body { font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif; }
 
   /* ================================================================
      THEME VARIABLES  (applied via data-theme attribute on <html>)
@@ -630,7 +627,7 @@
     </div>
 
     <!-- Navigation -->
-    <nav class="flex-1 p-2 space-y-0.5 mt-1">
+    <nav class="flex-1 p-2 space-y-0.5 mt-1 overflow-y-auto">
       <template x-for="page in pages" :key="page.id">
         <button
           @click="currentPage = page.id; onPageChange(page.id)"
@@ -640,6 +637,25 @@
           <span class="text-base leading-none" x-text="page.icon"></span>
           <span x-text="page.label"></span>
         </button>
+      </template>
+      <button @click="showAdvanced = !showAdvanced"
+        class="nav-item w-full text-left px-3 py-2.5 text-sm font-medium rounded-lg flex items-center gap-2.5 text-slate-600 mt-2">
+        <span class="text-base leading-none">▾</span>
+        <span x-text="showAdvanced ? 'Advanced' : 'Advanced'"></span>
+      </button>
+      <template x-if="showAdvanced">
+        <div class="space-y-0.5">
+          <template x-for="page in advancedPages" :key="page.id">
+            <button
+              @click="currentPage = page.id; onPageChange(page.id)"
+              :class="currentPage === page.id ? 'nav-active' : 'text-slate-500'"
+              class="nav-item w-full text-left px-3 py-2.5 text-sm font-medium rounded-lg flex items-center gap-2.5"
+            >
+              <span class="text-base leading-none" x-text="page.icon"></span>
+              <span x-text="page.label"></span>
+            </button>
+          </template>
+        </div>
       </template>
     </nav>
 
@@ -696,9 +712,11 @@
           <h2 class="section-title">System Status</h2>
           <p class="text-slate-600 text-sm mt-0.5">Live overview of your Zork instance</p>
         </div>
-        <div class="flex items-center gap-2 text-xs text-slate-600 bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2">
-          <span class="dot-green"></span>
-          <span x-text="health.status === 'ok' ? 'All systems operational' : (health.status || 'Checking...')"></span>
+        <div class="flex items-center gap-2 text-xs rounded-lg px-3 py-2"
+             :class="health.status === 'ok' ? 'text-slate-600 bg-white/[0.03] border border-white/5' : 'text-amber-400 bg-amber-500/10 border border-amber-500/20'">
+          <span :class="health.status === 'ok' ? 'dot-green' : 'dot-green'"
+                :style="health.status === 'ok' ? '' : 'background:#f59e0b'"></span>
+          <span x-text="health.status === 'ok' ? 'All systems operational' : (health.status === 'degraded' ? 'Needs attention' : (health.status || 'Checking...'))"></span>
         </div>
       </div>
 
@@ -710,7 +728,7 @@
             <span class="dot-green"></span>
             <span class="text-xl font-bold" :class="health.status === 'ok' ? 'text-emerald-400' : 'text-red-400'" x-text="health.status || '...'"></span>
           </div>
-          <div class="text-xs text-slate-700 mt-2">All services healthy</div>
+          <div class="text-xs text-slate-700 mt-2" x-text="health.status === 'ok' ? 'Claude CLI and login look fine' : 'Check Claude login or CLI below'"></div>
         </div>
         <div class="card stat-card p-5">
           <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Sessions</div>
@@ -729,6 +747,56 @@
             </template>
             <span x-show="!(health.channels || []).length" class="text-slate-600 text-sm">none</span>
           </div>
+        </div>
+      </div>
+
+      <div x-show="health.auth && !health.auth.ready"
+           class="card p-4 mb-5 border border-amber-500/30 bg-amber-500/5">
+        <div class="text-sm font-medium text-amber-300">Claude login missing</div>
+        <p class="text-xs text-slate-400 mt-1">
+          Unattended /chat will fail overnight. Store a yearly token with
+          <span class="font-mono">python main.py secrets set CLAUDE_CODE_OAUTH_TOKEN</span>
+          or copy the Claude Code login into <span class="font-mono">~/.helix/claude/</span>.
+        </p>
+      </div>
+      <div x-show="health.claude_cli && !health.claude_cli.found"
+           class="card p-4 mb-5 border border-amber-500/30 bg-amber-500/5">
+        <div class="text-sm font-medium text-amber-300">Claude CLI not found</div>
+        <p class="text-xs text-slate-400 mt-1">Install Claude Code so Zork can answer.</p>
+      </div>
+      <div x-show="health.drift && !health.drift.ok"
+           class="card p-4 mb-5 border border-amber-500/30 bg-amber-500/5">
+        <div class="text-sm font-medium text-amber-300">Live workspace differs from git</div>
+        <p class="text-xs text-slate-400 mt-1">
+          Skills edited here live in <span class="font-mono">~/.helix/workspace</span>,
+          not in the repo. Copy them back to <span class="font-mono">workspace-template/</span>
+          if you want them on GitHub.
+        </p>
+        <p class="text-xs text-slate-500 mt-2 font-mono"
+           x-text="(health.drift.diverged || []).concat(health.drift.missing_in_live || []).slice(0,8).join(', ') || ''"></p>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-7">
+        <div class="card p-5">
+          <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Claude CLI</div>
+          <div class="text-lg font-semibold" :class="health.claude_cli?.found ? 'text-emerald-400' : 'text-amber-400'"
+               x-text="health.claude_cli?.found ? 'found' : 'missing'"></div>
+          <div class="text-xs text-slate-700 mt-2 truncate" x-text="health.claude_cli?.path || ''"></div>
+        </div>
+        <div class="card p-5">
+          <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Claude login</div>
+          <div class="text-lg font-semibold" :class="health.auth?.ready ? 'text-emerald-400' : 'text-amber-400'"
+               x-text="health.auth?.oauth_token ? 'yearly token' : (health.auth?.credentials_file ? 'file login' : 'none')"></div>
+        </div>
+        <div class="card p-5">
+          <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Pupil prompt</div>
+          <div class="text-lg font-semibold text-slate-200"
+               x-text="health.prompts?.student != null ? (Math.round(health.prompts.student/1000) + 'k chars') : '–'"></div>
+        </div>
+        <div class="card p-5">
+          <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Staff prompt</div>
+          <div class="text-lg font-semibold text-slate-200"
+               x-text="health.prompts?.staff != null ? (Math.round(health.prompts.staff/1000) + 'k chars') : '–'"></div>
         </div>
       </div>
 
@@ -754,6 +822,11 @@
 
     <!-- ================================ CHAT ================================ -->
     <div x-show="currentPage === 'chat'" class="flex-1 flex flex-col overflow-hidden">
+      <div class="px-6 py-3 text-xs leading-relaxed text-amber-200/90 bg-amber-500/10 border-b border-amber-500/20">
+        Operator sandbox — this is you, on this machine, not a colleague or a pupil.
+        To test /chat as they see it, open <a href="/chat" class="underline">/chat</a>
+        and sign in as a test user.
+      </div>
       <!-- Chat header -->
       <div class="flex items-center gap-4 px-6 py-4" style="border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.15);">
         <div class="flex items-center gap-2">
@@ -1252,13 +1325,15 @@
             </template>
             <div class="space-y-2">
               <template x-for="w in (insights?.by_subject || [])" :key="w.key">
-                <div class="flex items-start gap-3">
+                <button type="button" @click="openSubject(w.key)"
+                  class="flex items-start gap-3 w-full text-left rounded px-1 py-0.5 hover:bg-white/[0.03]"
+                  :class="insightSubject === w.key ? 'bg-white/[0.04]' : ''">
                   <span class="text-sm text-slate-300 flex-1 leading-snug" x-text="w.key"></span>
                   <div class="w-24 shrink-0 h-2 rounded-full bg-white/5 overflow-hidden mt-1.5">
                     <div class="h-full rounded-full" :style="'width:' + barPct(w.count, insights.by_subject) + '%; background: var(--accent-light);'"></div>
                   </div>
                   <span class="text-xs text-slate-500 w-8 text-right mt-0.5" x-text="w.count"></span>
-                </div>
+                </button>
               </template>
             </div>
           </div>
@@ -1303,6 +1378,40 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div x-show="insightSubject" class="card p-5">
+          <div class="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-300">Conversations</h3>
+              <p class="text-xs text-slate-500 mt-0.5" x-text="insightSubject"></p>
+            </div>
+            <button type="button" @click="insightSubject = ''; insightRows = []"
+              class="text-xs text-slate-500 hover:text-slate-300">Close</button>
+          </div>
+          <p x-show="insightLoading" class="text-sm text-slate-600">Loading…</p>
+          <div class="space-y-2">
+            <template x-for="(c, i) in insightRows" :key="i">
+              <div class="flex items-start gap-3 py-2 border-b border-white/5">
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm text-slate-300" x-text="c.title"></div>
+                  <div class="text-xs text-slate-600 mt-0.5">
+                    <span x-text="c.tier"></span>
+                    ·
+                    <span x-text="c.topic || 'unclassified'"></span>
+                    ·
+                    <span x-text="new Date((c.ts || 0) * 1000).toLocaleString()"></span>
+                  </div>
+                </div>
+                <button type="button"
+                  @click="promoteInsight(c)"
+                  :disabled="!c.topic || insightPromoting"
+                  class="btn-primary px-2 py-1 text-[11px] disabled:opacity-40"
+                  x-text="c.topic ? 'Draft in ' + c.topic : 'No skill'"></button>
+              </div>
+            </template>
+          </div>
+          <p x-show="insightPromoteMsg" class="text-xs text-emerald-400 mt-3" x-text="insightPromoteMsg"></p>
         </div>
 
         <!-- Recent conversations -->
@@ -1415,15 +1524,26 @@
 
           <textarea
             x-model="skillContent"
-            @input="skillUnsaved = true; skillSaved = false"
+            @input="skillUnsaved = true; skillSaved = false; refreshSkillPreview()"
             @keydown.ctrl.s.prevent="saveSkill()"
             @keydown.meta.s.prevent="saveSkill()"
             spellcheck="false"
             autocomplete="off"
             placeholder="Skill content…"
             class="flex-1 resize-none outline-none font-mono text-xs leading-relaxed p-4 editor-surface"
-            style="border:none; tab-size:2;"
-          ></textarea>
+            style="border:none; tab-size:2; min-height:40%;"></textarea>
+          <div x-show="skillPreview.length" class="flex-shrink-0 px-4 py-3 border-t border-white/5 overflow-x-auto"
+               style="max-height:28%;">
+            <div class="text-[11px] uppercase tracking-wide text-slate-600 mb-2">Screenshots in this skill</div>
+            <div class="flex gap-3">
+              <template x-for="img in skillPreview" :key="img.name">
+                <div class="flex-shrink-0">
+                  <img :src="img.url" :alt="img.name" class="h-24 rounded border border-white/10 object-contain bg-black/30">
+                  <div class="text-[10px] font-mono text-slate-600 mt-1" x-text="img.name"></div>
+                </div>
+              </template>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1538,17 +1658,20 @@ function helixApp() {
     loginError: '',
     token: localStorage.getItem('helix_token') || '',
     currentPage: 'home',
+    showAdvanced: false,
     pages: [
       { id: 'home',     label: 'Home',     icon: '◈' },
-      { id: 'chat',     label: 'Chat',     icon: '◎' },
-      { id: 'sessions', label: 'Sessions', icon: '◻' },
-      { id: 'memory',   label: 'Memory',   icon: '⬡' },
-      { id: 'config',   label: 'Config',   icon: '◉' },
-      { id: 'crons',    label: 'Crons',    icon: '◷' },
       { id: 'insights', label: 'Insights', icon: '◔' },
-      { id: 'logs',     label: 'Logs',     icon: '≡' },
       { id: 'skills',   label: 'Skills',   icon: '🧠' },
       { id: 'files',    label: 'Files',    icon: '⊞' },
+      { id: 'sessions', label: 'Sessions', icon: '◻' },
+      { id: 'logs',     label: 'Logs',     icon: '≡' },
+    ],
+    advancedPages: [
+      { id: 'chat',   label: 'Operator chat', icon: '◎' },
+      { id: 'memory', label: 'Memory',        icon: '⬡' },
+      { id: 'config', label: 'Config',        icon: '◉' },
+      { id: 'crons',  label: 'Crons',         icon: '◷' },
     ],
     health: {},
     config: { discord: {}, telegram: {}, models: { roster: [] } },
@@ -1562,6 +1685,12 @@ function helixApp() {
     ws: null,
     insights: null,
     insightsDays: 30,
+    insightSubject: '',
+    insightRows: [],
+    insightLoading: false,
+    insightPromoting: false,
+    insightPromoteMsg: '',
+    skillPreview: [],
     memoryQuery: '',
     memorySearchMode: 'vsearch',
     memoryResults: '',
@@ -1691,8 +1820,53 @@ function helixApp() {
     async openCoverageFile(row) {
       if (!row || !row.skill) return;
       this.currentPage = 'skills';
+      this.showAdvanced = false;
       await this.loadSkills();
       await this.openSkill(row.skill);
+    },
+
+    async openSubject(key) {
+      this.insightSubject = key;
+      this.insightRows = [];
+      this.insightPromoteMsg = '';
+      this.insightLoading = true;
+      try {
+        const r = await this.api('/api/insights/subject?key=' + encodeURIComponent(key) + '&days=' + this.insightsDays);
+        if (r.ok) {
+          const data = await r.json();
+          this.insightRows = data.conversations || [];
+        }
+      } catch (e) { this.insightRows = []; }
+      finally { this.insightLoading = false; }
+    },
+
+    async promoteInsight(row) {
+      if (!row || !row.topic || this.insightPromoting) return;
+      this.insightPromoting = true;
+      this.insightPromoteMsg = '';
+      try {
+        const r = await this.api('/api/insights/promote', {
+          method: 'POST',
+          body: JSON.stringify({
+            skill: row.topic,
+            title: row.title || this.insightSubject,
+            preview: row.title || '',
+          }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) {
+          this.insightPromoteMsg = data.already
+            ? 'Already in ' + row.topic
+            : 'Draft added to ' + row.topic;
+          this.currentPage = 'skills';
+          await this.loadSkills();
+          await this.openSkill(row.topic);
+        } else {
+          this.insightPromoteMsg = data.detail || 'Could not add draft';
+        }
+      } catch (e) {
+        this.insightPromoteMsg = e.message;
+      } finally { this.insightPromoting = false; }
     },
 
     async checkAuth() {
@@ -1750,8 +1924,8 @@ function helixApp() {
 
     async loadHealth() {
       try {
-        const r = await fetch('/health');
-        this.health = await r.json();
+        const r = await this.api('/api/status');
+        if (r.ok) this.health = await r.json();
       } catch {}
     },
 
@@ -1962,6 +2136,7 @@ function helixApp() {
           this.selectedSkillPath = data.path;
           this.skillContent = data.content;
           this.skillOriginalContent = data.content;
+          await this.refreshSkillPreview();
         } else {
           const data = await r.json().catch(() => ({}));
           this.skillError = data.detail || 'Failed to load skill';
@@ -1969,6 +2144,23 @@ function helixApp() {
       } catch (e) {
         this.skillError = e.message;
       }
+    },
+
+    async refreshSkillPreview() {
+      (this.skillPreview || []).forEach(img => {
+        if (img.url) URL.revokeObjectURL(img.url);
+      });
+      const names = [...(this.skillContent || '').matchAll(/asset:([A-Za-z0-9._-]+)/g)].map(m => m[1]);
+      const unique = [...new Set(names)].slice(0, 8);
+      const out = [];
+      for (const name of unique) {
+        try {
+          const r = await this.api('/api/assets/' + encodeURIComponent(name));
+          if (!r.ok) continue;
+          out.push({ name, url: URL.createObjectURL(await r.blob()) });
+        } catch {}
+      }
+      this.skillPreview = out;
     },
 
     async createSkill() {

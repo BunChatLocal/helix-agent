@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>IT-hjelp</title>
+<title>Zork</title>
 <style>
   :root{
     --bg:#faf9f7; --panel:#f2efea; --panel-2:#e9e5df; --line:#e0dbd3;
@@ -39,8 +39,9 @@
   .logo{
     width:52px;height:52px;border-radius:15px;background:var(--accent);
     display:grid;place-items:center;margin:0 auto 20px;
-    font-size:26px;line-height:1;
+    overflow:hidden;
   }
+  .logo img{width:36px;height:42px;object-fit:contain;display:block}
   .card h1{margin:0 0 8px;font-size:22px;letter-spacing:-.01em}
   .card p{margin:0 0 28px;color:var(--muted);font-size:15px}
   .ms-btn{
@@ -173,6 +174,9 @@
   }
   .send:disabled{opacity:.4;cursor:default}
   .hint{margin:9px 2px 0;font-size:12px;color:var(--muted);text-align:center}
+  .pii{margin:6px 2px 0;font-size:12px;color:var(--muted);text-align:center;line-height:1.45}
+  body.pupil #meter{display:none !important}
+  body.pupil #compactBtn{display:none}
   .offline{
     display:none;margin:0 auto 10px;max-width:760px;padding:9px 13px;border-radius:9px;
     font-size:13.5px;background:color-mix(in srgb,var(--danger) 12%,transparent);
@@ -306,9 +310,9 @@
 <!-- ============ Sign in ============ -->
 <div id="signin">
   <div class="card">
-    <div class="logo">🛟</div>
-    <h1 data-t="title">IT-hjelp</h1>
-    <p data-t="sub">Logg inn med jobbkontoen din for å komme i gang.</p>
+    <div class="logo"><img src="/static/logo.png" width="36" height="42" alt=""></div>
+    <h1 data-t="title">Zork</h1>
+    <p data-t="sub">Logg inn med kontoen din for å få IT-hjelp.</p>
     <button class="ms-btn" id="msBtn">
       <svg width="17" height="17" viewBox="0 0 23 23" aria-hidden="true">
         <path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/>
@@ -370,7 +374,7 @@
     <div id="testBar" data-t="testbar">TESTMODUS — innlogging er ikke verifisert</div>
     <div class="top">
       <button class="burger" id="burger">☰</button>
-      <strong style="font-size:15px" data-t="title">IT-hjelp</strong>
+      <strong style="font-size:15px" data-t="title">Zork</strong>
     </div>
 
     <div class="thread" id="thread">
@@ -416,6 +420,7 @@
           <button class="send" id="send" disabled>↑</button>
         </div>
         <div class="hint" id="hint" data-t="hint">Enter sender · Shift+Enter gir ny linje</div>
+        <div class="pii" data-t="pii">Ikke lim inn fødselsnummer, fulle navn eller passord.</div>
       </div>
     </div>
   </main>
@@ -443,14 +448,19 @@ window.addEventListener("error", ev => {
 /* ---------------- i18n ---------------- */
 const I18N = {
   nb:{
-    title:"IT-hjelp",
-    sub:"Logg inn med jobbkontoen din for å komme i gang.",
+    title:"Zork",
+    sub:"Logg inn med kontoen din for å få IT-hjelp.",
     signin:"Logg inn med Microsoft",
     new:"Ny samtale", recent:"Samtaler",
     greet:"Hei! Hva kan jeg hjelpe deg med?",
     greetsub:"Beskriv problemet med dine egne ord — du trenger ikke vite hva det heter.",
     ex1:"Jeg får ikke opp e-posten min", ex2:"PC-en er treg",
     ex3:"Jeg får ikke logget inn", ex4:"Skriveren virker ikke",
+    p1:"Jeg kommer ikke på wifi", p2:"Jeg får ikke logget inn",
+    p3:"Skriveren virker ikke", p4:"Jeg kommer ikke inn i InSchool",
+    s1:"Noen trenger MFA-reset", s2:"Lisens mangler",
+    s3:"Visma InSchool", s4:"Skriveren virker ikke",
+    pii:"Ikke lim inn fødselsnummer, fulle navn eller passord.",
     ph:"Skriv meldingen din…",
     hint:"Enter sender · Shift+Enter gir ny linje",
     offline:"Frakoblet — prøver å koble til igjen…",
@@ -487,14 +497,19 @@ const I18N = {
     imgmissing:"Bildet er ikke tilgjengelig"
   },
   en:{
-    title:"IT Support",
-    sub:"Sign in with your work account to get started.",
+    title:"Zork",
+    sub:"Sign in with your account for IT help.",
     signin:"Sign in with Microsoft",
     new:"New chat", recent:"Chats",
     greet:"Hi! What can I help you with?",
     greetsub:"Describe the problem in your own words — you don't need to know what it's called.",
     ex1:"I can't open my email", ex2:"My PC is slow",
     ex3:"I can't sign in", ex4:"The printer isn't working",
+    p1:"I can't get on wifi", p2:"I can't sign in",
+    p3:"The printer isn't working", p4:"I can't get into InSchool",
+    s1:"Someone needs an MFA reset", s2:"A licence is missing",
+    s3:"Visma InSchool", s4:"The printer isn't working",
+    pii:"Don't paste national ID numbers, full names, or passwords.",
     ph:"Type your message…",
     hint:"Enter to send · Shift+Enter for a new line",
     offline:"Disconnected — trying to reconnect…",
@@ -553,6 +568,7 @@ function applyLang(){
   langB.textContent = lang === "nb" ? "EN" : "NO";
   localStorage.setItem("helix_lang", lang);
   renderConvs();
+  applyChips();
 }
 function toggleLang(){ lang = lang === "nb" ? "en" : "nb"; applyLang(); }
 
@@ -687,6 +703,9 @@ async function start(){
       retentionDays = me.retention_days;
       $("hint").title = t("retention", me.retention_days);
     }
+    isPupil = me.tier === "student";
+    document.body.classList.toggle("pupil", isPupil);
+    applyChips();
   }catch(_){}
   await loadConvs();
   convId = convs.length ? convs[0].id : await newId();
@@ -705,6 +724,8 @@ async function api(path, opts={}){
 }
 function signOut(){
   sessionStorage.removeItem("helix_token"); token = null;
+  isPupil = false;
+  document.body.classList.remove("pupil");
   $("app").classList.remove("on"); $("signin").style.display = "grid";
 }
 
@@ -839,6 +860,15 @@ let ctxBlocked = false;
 
 function showCtx(st){
   const m = $("meter");
+  if(isPupil){
+    m.classList.remove("on");
+    ctxBlocked = !!(st && st.blocked);
+    $("fullNotice").classList.toggle("on", ctxBlocked);
+    input.disabled = ctxBlocked;
+    input.placeholder = ctxBlocked ? "" : t("ph");
+    $("send").disabled = ctxBlocked || busy || !input.value.trim();
+    return;
+  }
   if(!st || !st.window || !st.percent){ m.classList.remove("on"); return; }
   const p = Math.min(st.percent, 100);
   m.classList.add("on");
@@ -1105,6 +1135,14 @@ document.addEventListener("drop", e => {
   const files = [...(e.dataTransfer?.files || [])].filter(f => f.type.startsWith("image/"));
   files.forEach(upload);
 });
+
+let isPupil = false;
+function applyChips(){
+  const keys = isPupil ? ["p1","p2","p3","p4"] : ["s1","s2","s3","s4"];
+  document.querySelectorAll(".chip").forEach((c, i) => {
+    if(keys[i]) c.textContent = t(keys[i]);
+  });
+}
 
 document.querySelectorAll(".chip").forEach(c => c.onclick = () => {
   input.value = c.textContent; input.oninput(); input.focus();

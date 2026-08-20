@@ -519,12 +519,39 @@ class TestPupilKnowledgeIsInlined:
     def test_the_azure_material_is_never_inlined_for_a_pupil(self):
         """It holds the cadm convention, BitLocker access and the PIM procedure."""
         from core.context_engine import bootstrap_files
-        assert not any("entra-azure" in f for f in bootstrap_files("student"))
+        files = bootstrap_files("student")
+        assert not any("entra-azure" in f for f in files)
+        assert not any(f.endswith("/SKILL.md") and "visma-inschool" in f for f in files)
+        assert "skills/visma-inschool/PUPIL.md" in files
 
     def test_staff_still_read_skills_from_disk(self):
         """Staff keep file tools, so inlining their whole knowledge base would be waste."""
         from core.context_engine import bootstrap_files
         assert not any(f.startswith("skills/") for f in bootstrap_files("staff"))
+
+    def test_pupil_prompt_uses_the_pupil_visma_guide(self, tmp_path):
+        """The staff VIS file points at entra-azure. That must not reach a pupil."""
+        cfg = TestTieredPrompt()._workspace(tmp_path)
+        visma = tmp_path / "skills" / "visma-inschool"
+        visma.mkdir(parents=True)
+        (visma / "SKILL.md").write_text(
+            "Ask which role the user holds. See skills/entra-azure/SKILL.md",
+            encoding="utf-8",
+        )
+        (visma / "PUPIL.md").write_text(
+            "Logg inn med Feide.",
+            encoding="utf-8",
+        )
+        net = tmp_path / "skills" / "frid-nettverk"
+        net.mkdir(parents=True)
+        (net / "SKILL.md").write_text("FRID-iot", encoding="utf-8")
+        with patch("core.context_engine.get_config", return_value=cfg):
+            from core.context_engine import build_system_prompt
+            prompt = build_system_prompt(is_new_session=True, tier="student")
+        assert "Logg inn med Feide" in prompt
+        assert "FRID-iot" in prompt
+        assert "entra-azure" not in prompt
+        assert "which role the user holds" not in prompt
 
     def test_pupil_prompt_says_there_are_no_files(self):
         """An agent that thinks it can look something up will promise to go and look."""
@@ -1959,7 +1986,7 @@ class TestWebSocketAuth:
 
         agent_loop = MagicMock()
 
-        async def fake_run(channel, peer, message):
+        async def fake_run(channel, peer, message, **kwargs):
             yield "pong"
 
         agent_loop.run = fake_run
@@ -2041,15 +2068,21 @@ class TestCommandTierGate:
             await send_fn("kommando kjørt")
             return True
 
-        async def fake_run(channel, peer, message):
+        async def fake_run(channel, peer, message, **kwargs):
             seen["agent"].append(message)
             yield "svar"
 
         agent_loop = MagicMock()
         agent_loop.run = fake_run
+        sm = MagicMock()
+        sm.get_or_create = AsyncMock(return_value={"session_id": "s"})
+        sm.async_read_transcript = AsyncMock(return_value=[])
+        sm.context_status = AsyncMock(return_value={
+            "blocked": False, "percent": 0, "window": 0, "used": 0,
+        })
         monkeypatch.setattr(app_mod, "handle_slash", fake_slash)
         monkeypatch.setattr(app_mod, "_agent_loop", agent_loop)
-        monkeypatch.setattr(app_mod, "_session_manager", MagicMock())
+        monkeypatch.setattr(app_mod, "_session_manager", sm)
 
         return _RealTestClient(app_mod.app), seen
 
@@ -2130,7 +2163,7 @@ class TestChatAuditRecords:
             lambda token: dict(claims) if token == "tok" else None,
         )
 
-        async def fake_run(channel, peer, message):
+        async def fake_run(channel, peer, message, **kwargs):
             yield reply
 
         agent_loop = MagicMock()
@@ -2432,7 +2465,7 @@ class TestPupilImagesAreNotPermanent:
 
         seen = []
 
-        async def fake_run(channel, peer, message):
+        async def fake_run(channel, peer, message, **kwargs):
             seen.append(message)
             yield "svar"
 
@@ -2522,8 +2555,11 @@ class TestPupilAssetBoundary:
         (workspace / "skills" / "frid-nettverk" / "SKILL.md").write_text(
             "![wifi](asset:wifi-steg-1.png)", encoding="utf-8"
         )
-        (workspace / "skills" / "visma-inschool" / "SKILL.md").write_text(
+        (workspace / "skills" / "visma-inschool" / "PUPIL.md").write_text(
             "![konto](asset:kontoaktivering-start.png)", encoding="utf-8"
+        )
+        (workspace / "skills" / "visma-inschool" / "SKILL.md").write_text(
+            "staff only ![azure](asset:azure-pim-aktiver-rollen.png)", encoding="utf-8"
         )
 
         assets = workspace / "assets"
@@ -2660,7 +2696,7 @@ class TestRateLimitIsPerUserOverWebsocket:
                            "role": "user", "tier": tier},
         )
 
-        async def fake_run(channel, peer, message):
+        async def fake_run(channel, peer, message, **kwargs):
             yield "svar"
 
         agent_loop = MagicMock()
@@ -2903,3 +2939,96 @@ class TestChatInsights:
         """The view names pupils, so it stays behind the operator login."""
         r = self._get(monkeypatch, tmp_path, [self._started("wifi")], role="user")
         assert r.status_code == 403
+
+
+class TestOperatorConsole:
+    """Health, workspace drift, Insights drill-down, promote-to-skill."""
+
+    def test_pii_is_stripped_from_a_draft(self):
+        from core.skill_promote import strip_pii, draft_block
+        text = strip_pii("Ring 99887766 or mail ola@afk.no, fnr 01010112345")
+        assert "@" not in text
+        assert "99887766" not in text
+        assert "01010112345" not in text
+        block = draft_block("MFA reset for ola@afk.no", "kontoen til ola@afk.no")
+        assert "ola@afk.no" not in block
+        assert "### " in block
+
+    def test_promote_appends_a_stub_once(self, tmp_path):
+        from core.skill_promote import promote
+        skill = tmp_path / "skills" / "windows-endpoint"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(
+            "# Windows\n\n## Verified procedures\n", encoding="utf-8"
+        )
+        first = promote(str(tmp_path), "windows-endpoint", "PC-en er treg")
+        assert first["already"] is False
+        second = promote(str(tmp_path), "windows-endpoint", "PC-en er treg")
+        assert second["already"] is True
+        body = (skill / "SKILL.md").read_text(encoding="utf-8")
+        assert body.count("### PC-en er treg") == 1
+
+    def test_drift_sees_a_diverged_skill(self, tmp_path):
+        from core.workspace_sync import drift_report
+        tmpl = tmp_path / "template"
+        live = tmp_path / "live"
+        (tmpl / "skills" / "a").mkdir(parents=True)
+        (live / "skills" / "a").mkdir(parents=True)
+        (tmpl / "skills" / "a" / "SKILL.md").write_text("template", encoding="utf-8")
+        (live / "skills" / "a" / "SKILL.md").write_text("edited", encoding="utf-8")
+        (tmpl / "AGENTS.md").write_text("same", encoding="utf-8")
+        (live / "AGENTS.md").write_text("same", encoding="utf-8")
+        report = drift_report(workspace=live, template=tmpl)
+        assert "skills/a/SKILL.md" in report["diverged"]
+        assert report["ok"] is False
+
+    def test_pupil_visma_file_does_not_name_entra(self):
+        from pathlib import Path
+        pupil = Path("workspace-template/skills/visma-inschool/PUPIL.md").read_text(
+            encoding="utf-8"
+        )
+        staff = Path("workspace-template/skills/visma-inschool/SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert "entra-azure" not in pupil
+        assert "colleague in the same role" not in pupil
+        assert "entra-azure" in staff
+
+    def test_insights_subject_lists_the_opening_lines(self, monkeypatch, tmp_path):
+        import importlib
+        import json
+        import web.app as app_mod
+        importlib.reload(app_mod)
+        log = tmp_path / "audit.log"
+        now = time.time()
+        events = [
+            {
+                "event": "chat_started", "ts": now - 60,
+                "content_preview": "Jeg kommer ikke på wifi",
+                "subject": "Jeg kommer ikke på wifi",
+                "topic": "frid-nettverk", "tier": "student",
+                "sender_id": "elev@afk.no", "name": "Elev",
+            },
+            {
+                "event": "chat_started", "ts": now - 30,
+                "content_preview": "MFA reset",
+                "subject": "MFA reset",
+                "topic": "entra-azure", "tier": "staff",
+                "sender_id": "it@frid.no", "name": "IT",
+            },
+        ]
+        log.write_text("\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8")
+        monkeypatch.setattr(app_mod, "_audit_log_path", lambda: log)
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: {"sub": "admin", "role": "admin"} if token == "tok" else None,
+        )
+        client = _RealTestClient(app_mod.app)
+        r = client.get(
+            "/api/insights/subject?key=Jeg kommer ikke på wifi",
+            headers={"Authorization": "Bearer tok"},
+        )
+        assert r.status_code == 200
+        rows = r.json()["conversations"]
+        assert len(rows) == 1
+        assert rows[0]["topic"] == "frid-nettverk"
