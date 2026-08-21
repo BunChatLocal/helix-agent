@@ -32,7 +32,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from core.config import get_config, save_config, TIER_STAFF, TIER_STUDENT
+from core.config import get_config, save_config, TIER_STAFF, TIER_STUDENT, ACCESS_BLOCKED
+from core import dev_passwords as dev_pw
 from core.skill_manager import create_skill, list_skills, read_skill, write_skill
 from security.auth import RateLimiter
 from security.secrets import get_secret, set_secret
@@ -180,6 +181,37 @@ def _tier(claims: dict) -> str:
     """
     tier = claims.get("tier")
     return tier if tier in (TIER_STAFF, TIER_STUDENT) else TIER_STUDENT
+
+
+def _claims_email(claims: dict) -> str:
+    email = (claims.get("email") or "").strip().lower()
+    if email:
+        return email
+    sub = str(claims.get("sub") or "")
+    if sub.startswith("dev:"):
+        return sub[4:].split("|", 1)[0].strip().lower()
+    return ""
+
+
+def _live_access(claims: dict) -> tuple[str, bool]:
+    """(tier, blocked) using operator overrides, then the token's own tier.
+
+    An override takes effect on the next chat turn without waiting for the JWT
+    to expire. The operator (role=admin) is never blocked from this list.
+    """
+    if claims.get("role") == "admin":
+        return TIER_STAFF, False
+    ov = get_config().tiers.override_for(_claims_email(claims))
+    if ov == ACCESS_BLOCKED:
+        return TIER_STUDENT, True
+    if ov in (TIER_STAFF, TIER_STUDENT):
+        return ov, False
+    return _tier(claims), False
+
+
+_CHAT_BLOCKED_MSG = (
+    "Du har ikke tilgang til Zork. Hvis du trenger hjelp, snakk med IT-avdelingen."
+)
 
 
 def _decode_token(token: str) -> Optional[dict]:
@@ -401,17 +433,21 @@ async def entra_callback(request: Request):
     if claims.get("aud") and claims["aud"] != cfg.entra.client_id:
         logger.warning("Entra sign-in rejected: audience mismatch")
         return _entra_error(1)
-    # The tenant decides the tier, and an unlisted tenant gets no tier and no
-    # entry. This check is what makes the multi-tenant authority safe, so it runs
-    # whenever tiers are configured, whatever restrict_to_tenant says.
-    tier = cfg.tiers.for_tenant(tid)
-    if cfg.tiers.tenant_ids:
-        if not tier:
+    # Override first, then tenant. An unlisted tenant with no override is refused.
+    access = cfg.tiers.access_for(email=upn, tid=tid)
+    if access == ACCESS_BLOCKED:
+        logger.warning(f"Entra sign-in rejected: {upn} is blocked")
+        return _entra_error(2)
+    if cfg.tiers.tenant_ids or cfg.tiers.user_overrides:
+        if not access or access not in (TIER_STAFF, TIER_STUDENT):
             logger.warning(f"Entra sign-in rejected: tenant {tid} is not admitted")
             return _entra_error(2)
+        tier = access
     elif cfg.entra.restrict_to_tenant and tid != cfg.entra.tenant_id:
         logger.warning(f"Entra sign-in rejected: foreign tenant {tid}")
         return _entra_error(1)
+    else:
+        tier = access or TIER_STAFF
 
     if cfg.entra.allowed_group_ids:
         groups = claims.get("groups") or []
@@ -420,35 +456,66 @@ async def entra_callback(request: Request):
             return _entra_error(2)
 
     token = _create_token(
-        sub=f"entra:{oid}", role="user", name=name, tier=tier or TIER_STAFF,
+        sub=f"entra:{oid}", role="user", name=name, tier=tier,
         email=upn,
     )
-    logger.info(f"Entra sign-in: {name} <{upn}> as {tier or TIER_STAFF}")
+    logger.info(f"Entra sign-in: {name} <{upn}> as {tier}")
     # Hand the token to the SPA via the fragment so it never lands in server
     # logs or the Referer header.
     return _entra_success(token)
 
 
-# ─── Test sign-in (no verification) ───────────────────────────────────────────
+# ─── Test sign-in ─────────────────────────────────────────────────────────────
 #
 # Lets you use the staff chat as an ordinary user before the Entra app
-# registration exists. It verifies NOTHING — anyone who can reach the endpoint
-# can become any identity. Guards, in order:
+# registration exists. Identity is still just an email you type, but a real
+# person must choose a password the first time they sign in. Stress accounts
+# (loadtest…) skip that so probes can still fire. Guards, in order:
 #   * off unless web.dev_login is explicitly true
 #   * refused outright whenever Entra SSO is enabled, so the two can never be
 #     live at once and this cannot linger after the real thing is wired up
+#   * password required after first login, except stress accounts
 #   * every use is logged, and the page shows a permanent TESTMODUS badge
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_PW_MIN = dev_pw.MIN_LENGTH
+
+
+def _login_detail(code: str, message: str) -> dict:
+    return {"code": code, "message": message}
 
 
 def _dev_login_available(cfg) -> bool:
     return bool(cfg.web.dev_login) and not cfg.entra.enabled
 
 
+def _needs_set_password(email: str, cfg) -> bool:
+    if _is_stress_account(email):
+        return False
+    access = cfg.tiers.access_for(email=email)
+    if access not in (TIER_STAFF, TIER_STUDENT):
+        return False
+    return dev_pw.get_hash(email) is None
+
+
 @app.get("/api/auth/dev-login/enabled")
 async def dev_login_enabled():
     return {"enabled": _dev_login_available(get_config())}
+
+
+@app.get("/api/auth/dev-login/status")
+async def dev_login_status(request: Request, email: str = ""):
+    """Whether this email must choose a password. Stress accounts never do."""
+    cfg = get_config()
+    if not _dev_login_available(cfg):
+        raise HTTPException(404, "Not found")
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_login_rate(client_ip):
+        raise HTTPException(429, "Too many attempts. Try again later.")
+    key = (email or "").strip().lower()
+    if not _EMAIL_RE.match(key) or len(key) > 254:
+        return {"set_password": False}
+    return {"set_password": _needs_set_password(key, cfg)}
 
 
 @app.post("/api/auth/dev-login")
@@ -472,12 +539,12 @@ async def dev_login(request: Request, body: dict):
         _record_login_failure(client_ip)
         raise HTTPException(400, "Enter a valid email address")
 
-    # The domain decides the tier, exactly as the tenant does in production, and
-    # an unknown domain is refused exactly as an unknown tenant is. Testing then
-    # exercises the real decision path, refusal included, instead of meeting it
-    # for the first time on the day SSO goes live.
-    tier = cfg.tiers.for_email(email)
-    if not tier:
+    # Override first, then domain. An unknown domain with no override is refused.
+    access = cfg.tiers.access_for(email=email)
+    if access == ACCESS_BLOCKED:
+        _record_login_failure(client_ip)
+        raise HTTPException(403, "Denne kontoen er stengt for Zork.")
+    if not access or access not in (TIER_STAFF, TIER_STUDENT):
         _record_login_failure(client_ip)
         staff = ", ".join(f"@{d}" for d in cfg.tiers.staff_domains)
         student = ", ".join(f"@{d}" for d in cfg.tiers.student_domains)
@@ -486,6 +553,47 @@ async def dev_login(request: Request, body: dict):
             f"Ukjent domene. Bruk {staff} for å teste som ansatt, "
             f"eller {student} for å teste som elev.",
         )
+    tier = access
+
+    if not _is_stress_account(email):
+        password = body.get("password") if isinstance(body.get("password"), str) else ""
+        confirm = body.get("password_confirm") if isinstance(body.get("password_confirm"), str) else ""
+        stored = dev_pw.get_hash(email)
+        if stored is None:
+            if not password:
+                raise HTTPException(
+                    403,
+                    _login_detail(
+                        "set_password",
+                        f"Velg et passord første gang du logger inn (minst {_PW_MIN} tegn).",
+                    ),
+                )
+            if len(password) < _PW_MIN or len(password) > 128:
+                raise HTTPException(
+                    400,
+                    _login_detail(
+                        "weak_password",
+                        f"Passordet må ha minst {_PW_MIN} tegn.",
+                    ),
+                )
+            if confirm != password:
+                raise HTTPException(
+                    400,
+                    _login_detail("confirm_mismatch", "Passordene er ikke like."),
+                )
+            dev_pw.set_password(email, password)
+        else:
+            if not password:
+                raise HTTPException(
+                    401,
+                    _login_detail("need_password", "Skriv inn passordet ditt."),
+                )
+            if not dev_pw.verify_password(password, stored):
+                _record_login_failure(client_ip)
+                raise HTTPException(
+                    401,
+                    _login_detail("bad_password", "Feil passord."),
+                )
 
     name = body.get("name") or email.split("@")[0].replace(".", " ").title()
     logger.warning(
@@ -1356,6 +1464,146 @@ async def add_model(body: dict):
     cfg.models.roster.append(entry)
     save_config(cfg)
     return {"status": "added", "model": entry.model_dump()}
+
+
+_PERM_ACCESS = {TIER_STAFF, TIER_STUDENT, ACCESS_BLOCKED}
+_STRESS_LOCAL = re.compile(r"^loadtest", re.I)
+
+
+def _is_stress_account(email: str, name: str = "") -> bool:
+    """Load-test identities (loadtest-p01-n00, …) belong on Stress accounts."""
+    local = (email or "").split("@", 1)[0].strip()
+    if _STRESS_LOCAL.match(local):
+        return True
+    return bool(_STRESS_LOCAL.match((name or "").strip()))
+
+
+def _permissions_payload(cfg=None) -> dict:
+    from core.config import load_config
+    if cfg is None:
+        cfg = load_config(force_reload=True)
+    overrides = [o.model_dump() for o in cfg.tiers.user_overrides]
+    by_email = {o["email"]: o for o in overrides}
+    people: dict[str, dict] = {}
+    for e in _read_audit_events(90):
+        if e.get("event") != "chat_started":
+            continue
+        email = (e.get("sender_id") or "").strip().lower()
+        if not email or "@" not in email:
+            continue
+        row = people.get(email) or {
+            "email": email,
+            "name": "",
+            "last_seen": 0,
+            "default_access": cfg.tiers.for_email(email),
+        }
+        if e.get("name"):
+            row["name"] = e["name"]
+        ts = e.get("ts") or 0
+        if ts >= row["last_seen"]:
+            row["last_seen"] = ts
+        people[email] = row
+    for ov in overrides:
+        email = ov["email"]
+        if email not in people:
+            people[email] = {
+                "email": email,
+                "name": "",
+                "last_seen": 0,
+                "default_access": cfg.tiers.for_email(email),
+            }
+    known_pw = dev_pw.load()
+    for email in known_pw:
+        if email not in people:
+            local = email.split("@", 1)[0]
+            people[email] = {
+                "email": email,
+                "name": local.replace(".", " ").title(),
+                "last_seen": 0,
+                "default_access": cfg.tiers.for_email(email),
+            }
+    out = []
+    for row in people.values():
+        ov = by_email.get(row["email"])
+        row["override"] = ov["access"] if ov else None
+        row["note"] = ov.get("note", "") if ov else ""
+        row["effective"] = ov["access"] if ov else row["default_access"]
+        row["has_password"] = row["email"] in known_pw
+        out.append(row)
+    out.sort(key=lambda r: (-(r["last_seen"] or 0), r["email"]))
+    listed = []
+    stress = []
+    for r in out:
+        if _is_stress_account(r["email"], r.get("name") or ""):
+            stress.append(r)
+        else:
+            listed.append(r)
+    return {
+        "defaults": {
+            "staff_domains": list(cfg.tiers.staff_domains),
+            "student_domains": list(cfg.tiers.student_domains),
+        },
+        "overrides": overrides,
+        "people": listed,
+        "stress": stress,
+    }
+
+
+@app.get("/api/permissions", dependencies=[Depends(require_admin)])
+async def get_permissions():
+    """Who may use Zork, and as what."""
+    return _permissions_payload()
+
+
+@app.put("/api/permissions", dependencies=[Depends(require_admin)])
+async def put_permission(body: dict):
+    """Set or replace one person's access. access=null removes the override."""
+    from core.config import UserAccessOverride, load_config
+
+    email = (body.get("email") or "").strip().lower()
+    if not _EMAIL_RE.match(email) or len(email) > 254:
+        raise HTTPException(400, "Enter a valid email address")
+    access = body.get("access")
+    if access is not None:
+        access = str(access).strip().lower()
+        if access not in _PERM_ACCESS:
+            raise HTTPException(400, "access must be staff, student or blocked")
+    note = (body.get("note") or "").strip()[:200]
+    cfg = load_config(force_reload=True)
+    cfg.tiers.user_overrides = [
+        o for o in cfg.tiers.user_overrides if o.email != email
+    ]
+    if access:
+        if len(cfg.tiers.user_overrides) >= 500:
+            raise HTTPException(400, "Too many overrides")
+        cfg.tiers.user_overrides.append(
+            UserAccessOverride(email=email, access=access, note=note)
+        )
+    save_config(cfg)
+    return _permissions_payload(cfg)
+
+
+@app.delete("/api/permissions/{email}/password", dependencies=[Depends(require_admin)])
+async def reset_dev_password(email: str):
+    """Forget their test-login password so they choose a new one next time."""
+    key = (email or "").strip().lower()
+    if not _EMAIL_RE.match(key):
+        raise HTTPException(400, "Enter a valid email address")
+    dev_pw.clear_password(key)
+    return _permissions_payload()
+
+
+@app.delete("/api/permissions/{email}", dependencies=[Depends(require_admin)])
+async def delete_permission(email: str):
+    from core.config import load_config
+
+    key = (email or "").strip().lower()
+    cfg = load_config(force_reload=True)
+    cfg.tiers.user_overrides = [
+        o for o in cfg.tiers.user_overrides if o.email != key
+    ]
+    save_config(cfg)
+    return _permissions_payload(cfg)
 
 
 # ─── Task Queue API ───────────────────────────────────────────────────────────
@@ -2353,7 +2601,11 @@ async def ws_chat(websocket: WebSocket):
     else:
         peer = claims.get("sub") or "admin"
     display_name = claims.get("name") or peer
-    tier = _tier(claims)
+    tier, blocked = _live_access(claims)
+    if blocked:
+        await websocket.send_json({"error": _CHAT_BLOCKED_MSG, "code": "forbidden"})
+        await websocket.close()
+        return
     # Commands are staff-only — see ROLES.md. This websocket is the only route
     # to handle_slash for a signed-in person; every other command-shaped endpoint
     # is admin-only or confined to the caller's own conversation.
@@ -2388,6 +2640,13 @@ async def ws_chat(websocket: WebSocket):
             attachment_ids = data.get("attachments") or []
             if not message and not attachment_ids:
                 continue
+
+            tier, blocked = _live_access(claims)
+            if blocked:
+                await websocket.send_json({"error": _CHAT_BLOCKED_MSG, "code": "forbidden"})
+                await websocket.close()
+                return
+            commands_allowed = tier == TIER_STAFF
 
             # Rate limit, per person across every connection they hold.
             rate_key = f"web:{claims.get('sub')}"

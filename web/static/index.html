@@ -954,6 +954,94 @@
       </div>
     </div>
 
+    <!-- ================================ USERS ================================ -->
+    <div x-show="currentPage === 'permissions'" class="flex-1 overflow-y-auto p-7">
+      <h2 class="section-title mb-1">Users</h2>
+      <p class="text-slate-600 text-sm mb-6">Who may use Zork, and as staff or pupil. An override beats the domain default and applies on their next message.</p>
+
+      <div class="card p-5 mb-5">
+        <h3 class="font-semibold text-slate-300 mb-3">Defaults</h3>
+        <div class="grid md:grid-cols-2 gap-3 text-sm">
+          <div class="bg-white/[0.02] rounded-lg p-3">
+            <div class="text-xs text-slate-600 mb-1">Staff</div>
+            <div class="text-slate-300" x-text="(permissions.defaults.staff_domains || []).map(d => '@' + d).join(', ') || '—'"></div>
+          </div>
+          <div class="bg-white/[0.02] rounded-lg p-3">
+            <div class="text-xs text-slate-600 mb-1">Pupils</div>
+            <div class="text-slate-300" x-text="(permissions.defaults.student_domains || []).map(d => '@' + d).join(', ') || '—'"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card p-5 mb-5">
+        <h3 class="font-semibold text-slate-300 mb-3">Add or change a person</h3>
+        <div class="flex flex-wrap gap-2 items-end">
+          <label class="flex-1 min-w-[12rem]">
+            <span class="block text-xs text-slate-600 mb-1.5 font-medium">Email</span>
+            <input x-model="permEmail" placeholder="navn@frid.no" class="input-base w-full px-3 py-2.5 text-sm">
+          </label>
+          <label>
+            <span class="block text-xs text-slate-600 mb-1.5 font-medium">Access</span>
+            <select x-model="permAccess" class="input-base px-3 py-2.5 text-sm text-slate-300 cursor-pointer">
+              <option value="staff">Staff</option>
+              <option value="student">Pupil</option>
+              <option value="blocked">Blocked</option>
+            </select>
+          </label>
+          <button @click="savePermission()" class="btn-primary px-4 py-2.5 text-sm">Save</button>
+        </div>
+        <p x-show="permMsg" class="text-xs mt-2" :class="permOk ? 'text-emerald-400' : 'text-red-400'" x-text="permMsg"></p>
+      </div>
+
+      <div class="flex gap-2 mb-4">
+        <button @click="permTab = 'afk'" :class="permTab === 'afk' ? 'tab-active' : 'tab-inactive'" class="px-4 py-2 rounded-lg text-sm font-medium">
+          AFK
+          <span class="opacity-70" x-text="filteredAfk().length ? '(' + filteredAfk().length + ')' : ''"></span>
+        </button>
+        <button @click="permTab = 'frid'" :class="permTab === 'frid' ? 'tab-active' : 'tab-inactive'" class="px-4 py-2 rounded-lg text-sm font-medium">
+          FRID-IKS
+          <span class="opacity-70" x-text="filteredFrid().length ? '(' + filteredFrid().length + ')' : ''"></span>
+        </button>
+        <button @click="permTab = 'stress'" :class="permTab === 'stress' ? 'tab-active' : 'tab-inactive'" class="px-4 py-2 rounded-lg text-sm font-medium">
+          Stress accounts
+          <span class="opacity-70" x-text="filteredStress().length ? '(' + filteredStress().length + ')' : ''"></span>
+        </button>
+      </div>
+      <div class="flex gap-3 mb-4">
+        <input x-model="permQuery" placeholder="Search email…" class="input-base flex-1 px-3 py-2.5 text-sm">
+      </div>
+
+      <div x-show="filteredPermList().length === 0" class="text-slate-500 text-sm" x-text="permEmptyMsg()"></div>
+      <div class="space-y-2">
+        <template x-for="p in filteredPermList()" :key="p.email">
+          <div class="card p-4 flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[12rem]">
+              <div class="text-sm text-slate-200 font-medium" x-text="p.email"></div>
+              <div class="text-xs text-slate-600 mt-0.5">
+                <span x-text="p.name || ''"></span>
+                <span x-show="p.last_seen"> · last seen <span x-text="formatPermSeen(p.last_seen)"></span></span>
+                <span x-show="!p.override"> · default <span x-text="permLabel(p.default_access)"></span></span>
+              </div>
+            </div>
+              <select
+                class="input-base px-3 py-2 text-sm text-slate-300 cursor-pointer"
+                :value="p.override || ''"
+                @change="setPermission(p.email, $event.target.value)"
+              >
+                <option value="">Default</option>
+                <option value="staff">Staff</option>
+                <option value="student">Pupil</option>
+                <option value="blocked">Blocked</option>
+              </select>
+              <button
+                @click="resetPassword(p.email)"
+                class="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/5"
+              >Reset</button>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- ================================ MEMORY ================================ -->
     <div x-show="currentPage === 'memory'" class="flex-1 overflow-y-auto p-7">
       <h2 class="section-title mb-1">Memory</h2>
@@ -1697,6 +1785,7 @@ function helixApp() {
       { id: 'skills',   label: 'Skills',   icon: '🧠' },
       { id: 'files',    label: 'Files',    icon: '⊞' },
       { id: 'sessions', label: 'Sessions', icon: '◻' },
+      { id: 'permissions', label: 'Users', icon: '☑' },
       { id: 'logs',     label: 'Logs',     icon: '≡' },
     ],
     advancedPages: [
@@ -1708,6 +1797,13 @@ function helixApp() {
     health: {},
     config: { discord: {}, telegram: {}, models: { roster: [] } },
     sessions: [],
+    permissions: { defaults: { staff_domains: [], student_domains: [] }, overrides: [], people: [], stress: [] },
+    permQuery: '',
+    permEmail: '',
+    permAccess: 'staff',
+    permMsg: '',
+    permOk: true,
+    permTab: 'afk',
     transcript: {},
     chatMessages: [],
     chatInput: '',
@@ -1833,6 +1929,7 @@ function helixApp() {
       if (pageId === 'skills') this.loadSkills();
       if (pageId === 'files') this.loadFileTree();
       if (pageId === 'insights') this.loadInsights();
+      if (pageId === 'permissions') this.loadPermissions();
     },
 
     async loadInsights() {
@@ -1993,6 +2090,112 @@ function helixApp() {
           }
         }
       } catch {}
+    },
+
+    async loadPermissions() {
+      try {
+        const r = await this.api('/api/permissions');
+        if (r.ok) this.permissions = await r.json();
+      } catch {}
+    },
+
+    permDomain(email) {
+      const at = (email || '').lastIndexOf('@');
+      return at >= 0 ? email.slice(at + 1).toLowerCase() : '';
+    },
+
+    isAfkPerson(p) {
+      const d = this.permDomain(p.email);
+      const students = (this.permissions.defaults.student_domains || []).map(x => String(x).toLowerCase());
+      return students.includes(d);
+    },
+
+    filteredPeople() {
+      const q = (this.permQuery || '').toLowerCase();
+      return (this.permissions.people || []).filter(p =>
+        !q || (p.email || '').includes(q) || (p.name || '').toLowerCase().includes(q)
+      );
+    },
+
+    filteredAfk() {
+      return this.filteredPeople().filter(p => this.isAfkPerson(p));
+    },
+
+    filteredFrid() {
+      return this.filteredPeople().filter(p => !this.isAfkPerson(p));
+    },
+
+    filteredStress() {
+      const q = (this.permQuery || '').toLowerCase();
+      return (this.permissions.stress || []).filter(p =>
+        !q || (p.email || '').includes(q) || (p.name || '').toLowerCase().includes(q)
+      );
+    },
+
+    filteredPermList() {
+      if (this.permTab === 'stress') return this.filteredStress();
+      if (this.permTab === 'afk') return this.filteredAfk();
+      return this.filteredFrid();
+    },
+
+    permEmptyMsg() {
+      if (this.permTab === 'stress') return 'No load-test accounts yet. They appear after a concurrency probe has used /chat.';
+      if (this.permTab === 'afk') return 'No AFK accounts yet. People appear after they have used /chat, or when you add an override above.';
+      return 'No FRID IKS accounts yet. People appear after they have used /chat, or when you add an override above.';
+    },
+
+    permLabel(access) {
+      if (access === 'staff') return 'staff';
+      if (access === 'student') return 'pupil';
+      if (access === 'blocked') return 'blocked';
+      return 'none';
+    },
+
+    formatPermSeen(ts) {
+      if (!ts) return '';
+      const d = new Date((ts > 1e12 ? ts : ts * 1000));
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString();
+    },
+
+    async setPermission(email, access) {
+      this.permMsg = '';
+      const r = access
+        ? await this.api('/api/permissions', { method: 'PUT', body: JSON.stringify({ email, access }) })
+        : await this.api('/api/permissions/' + encodeURIComponent(email), { method: 'DELETE' });
+      if (!r.ok) {
+        this.permOk = false;
+        this.permMsg = (await r.text()) || 'Could not save';
+        return;
+      }
+      this.permissions = await r.json();
+      this.permOk = true;
+      this.permMsg = 'Saved';
+    },
+
+    async savePermission() {
+      const email = (this.permEmail || '').trim();
+      if (!email) {
+        this.permOk = false;
+        this.permMsg = 'Enter an email address';
+        return;
+      }
+      await this.setPermission(email, this.permAccess);
+      if (this.permOk) this.permEmail = '';
+    },
+
+    async resetPassword(email) {
+      if (!confirm('They will have to choose a new password the next time they sign in.')) return;
+      this.permMsg = '';
+      const r = await this.api('/api/permissions/' + encodeURIComponent(email) + '/password', { method: 'DELETE' });
+      if (!r.ok) {
+        this.permOk = false;
+        this.permMsg = (await r.text()) || 'Could not reset';
+        return;
+      }
+      this.permissions = await r.json();
+      this.permOk = true;
+      this.permMsg = 'Password reset — they choose a new one next sign-in';
     },
 
     async loadTranscript(sid) {

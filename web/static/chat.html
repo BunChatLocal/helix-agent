@@ -55,6 +55,13 @@
     margin-top:18px;padding:11px 14px;border-radius:10px;font-size:14px;
     background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger);
   }
+  .card .field{
+    width:100%;margin:10px 0 0;padding:12px 14px;border-radius:10px;
+    border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;
+  }
+  .card .field-hint{
+    margin:10px 0 0;font-size:12.5px;color:var(--muted);text-align:left;line-height:1.45;
+  }
 
   /* ---------- Shell ---------- */
   #app{display:none;height:100%}
@@ -332,18 +339,20 @@
       </svg>
       <span data-t="signin">Logg inn med Microsoft</span>
     </button>
-    <div id="devWrap" style="display:none;margin-top:22px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <div id="devWrap" style="display:none">
+      <div id="devOr" style="display:flex;align-items:center;gap:10px;margin:22px 0 14px">
         <div style="flex:1;height:1px;background:var(--line)"></div>
         <span style="font-size:12px;color:var(--muted)" data-t="or">eller</span>
         <div style="flex:1;height:1px;background:var(--line)"></div>
       </div>
       <div class="testbadge" data-t="testmode">TESTMODUS — ingen verifisering</div>
-      <input id="devEmail" type="email" autocomplete="email"
-             data-t-ph="emailph" placeholder="navn@frid.no"
-             style="width:100%;margin:10px 0;padding:12px 14px;border-radius:10px;
-                    border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit">
-      <button class="ms-btn" id="devBtn"><span data-t="testsignin">Logg inn for testing</span></button>
+      <input id="devEmail" type="email" autocomplete="username"
+             data-t-ph="emailph" placeholder="navn@eksempel.no" class="field">
+      <input id="devPassword" type="password" autocomplete="current-password"
+             placeholder="passord" class="field">
+      <input id="devConfirm" type="password" autocomplete="new-password"
+             placeholder="bekreft passord" class="field" style="display:none">
+      <button class="ms-btn" id="devBtn" style="margin-top:14px"><span data-t="testsignin">Logg inn</span></button>
     </div>
     <div class="err" id="signinErr" style="display:none"></div>
     <button class="lang" id="langA" style="margin:22px auto 0">English</button>
@@ -488,7 +497,9 @@ const I18N = {
     untitled:"Ny samtale", other:"English",
     or:"eller", testmode:"TESTMODUS — ingen verifisering",
     testbar:"TESTMODUS — innlogging er ikke verifisert",
-    testsignin:"Logg inn for testing", emailph:"navn@frid.no",
+    testsignin:"Logg inn", emailph:"navn@eksempel.no",
+    pwph:"passord", pwset:"lag passord", pwconfirm:"bekreft passord",
+    err_pw_mismatch:"Passordene er ikke like.",
     logout:"Logg ut",
     err_email:"Skriv inn en gyldig e-postadresse.",
     ctx:"Kontekst",
@@ -540,7 +551,9 @@ const I18N = {
     untitled:"New chat", other:"Norsk",
     or:"or", testmode:"TEST MODE — no verification",
     testbar:"TEST MODE — sign-in is not verified",
-    testsignin:"Sign in for testing", emailph:"name@frid.no",
+    testsignin:"Sign in", emailph:"name@example.com",
+    pwph:"password", pwset:"create password", pwconfirm:"confirm password",
+    err_pw_mismatch:"The passwords do not match.",
     logout:"Sign out",
     err_email:"Enter a valid email address.",
     ctx:"Context",
@@ -591,6 +604,7 @@ function applyLang(){
   localStorage.setItem("helix_lang", lang);
   renderConvs();
   applyChips();
+  applyPwMode();
 }
 function toggleLang(){ lang = lang === "nb" ? "en" : "nb"; applyLang(); }
 
@@ -638,6 +652,19 @@ function render(text){
 let token = null, ws = null, convId = null, convs = [], busy = false;
 let stream = null, retry = 0, codes = [];
 let isPupil = false;
+let setPassword = false;
+let pwCheck = 0;
+let pwTimer = 0;
+
+function applyPwMode(){
+  const pw = $("devPassword");
+  const cf = $("devConfirm");
+  if(!pw || !cf) return;
+  pw.placeholder = setPassword ? t("pwset") : t("pwph");
+  cf.placeholder = t("pwconfirm");
+  cf.style.display = setPassword ? "block" : "none";
+  if(!setPassword) cf.value = "";
+}
 
 /* ---------------- sign-in ---------------- */
 (function boot(){
@@ -662,29 +689,67 @@ let isPupil = false;
   if(token) start(); else $("signin").style.display = "grid";
 })();
 
-/* Test sign-in — shown when the server injected the flag. Synchronous, so it
-   cannot be defeated by a failed or slow fetch. */
+/* Test sign-in is the login people see while it is on. Microsoft SSO stays
+   wired (button, click handler, /api/auth/microsoft/*) but is hidden here. */
 if(window.HELIX_FLAGS && window.HELIX_FLAGS.dev_login){
   $("devWrap").style.display = "block";
+  $("devOr").style.display = "none";
+  $("msBtn").style.display = "none";
 }
+
+async function checkEmailPassword(){
+  const email = $("devEmail").value.trim();
+  const n = ++pwCheck;
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+    setPassword = false;
+    applyPwMode();
+    return;
+  }
+  try{
+    const r = await fetch("/api/auth/dev-login/status?email=" + encodeURIComponent(email));
+    const j = r.ok ? await r.json() : {};
+    if(n !== pwCheck) return;
+    setPassword = !!j.set_password;
+  }catch(_){
+    if(n !== pwCheck) return;
+  }
+  applyPwMode();
+}
+
+$("devEmail").addEventListener("input", () => {
+  clearTimeout(pwTimer);
+  pwTimer = setTimeout(checkEmailPassword, 280);
+});
+$("devEmail").addEventListener("blur", checkEmailPassword);
 
 $("devBtn").onclick = async () => {
   const email = $("devEmail").value.trim();
+  const password = $("devPassword").value;
+  const confirm = $("devConfirm").value;
   const err = $("signinErr");
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
     err.textContent = t("err_email"); err.style.display = "block"; return;
   }
+  if(confirm && confirm !== password){
+    err.textContent = t("err_pw_mismatch"); err.style.display = "block"; return;
+  }
   try{
     const r = await fetch("/api/auth/dev-login", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ email, password, password_confirm: confirm })
     });
     if(!r.ok){
-      /* Show what the server said when it says something useful. A refused
-         domain needs to name the domains that work — "try again" sends you
-         round the same loop. */
       let detail = "";
-      try{ detail = (await r.json()).detail || ""; }catch(_){}
+      let code = "";
+      try{
+        const fail = await r.json();
+        code = (fail.detail && fail.detail.code) || "";
+        detail = (fail.detail && fail.detail.message) || fail.detail || "";
+      }catch(_){}
+      if(code === "set_password"){
+        setPassword = true;
+        applyPwMode();
+      }
       err.textContent = (typeof detail === "string" && detail) ? detail : t("err_login");
       err.style.display = "block";
       return;
@@ -698,6 +763,8 @@ $("devBtn").onclick = async () => {
   }
 };
 $("devEmail").onkeydown = e => { if(e.key === "Enter") $("devBtn").click(); };
+$("devPassword").onkeydown = e => { if(e.key === "Enter") $("devBtn").click(); };
+$("devConfirm").onkeydown = e => { if(e.key === "Enter") $("devBtn").click(); };
 
 $("msBtn").onclick = async () => {
   try{

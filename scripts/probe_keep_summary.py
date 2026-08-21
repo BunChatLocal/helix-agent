@@ -45,7 +45,7 @@ def get(path, token):
 async def main():
     import websockets
 
-    token = post("/api/auth/dev-login", {"email": "elev-lang@afk.no"})["token"]
+    token = post("/api/auth/dev-login", {"email": "elev-lang@afk.no", "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
     cid = post("/api/me/conversations", {}, token)["id"]
 
     async with websockets.connect("ws://127.0.0.1:18791/ws/chat") as ws:

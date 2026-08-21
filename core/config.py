@@ -17,6 +17,7 @@ WORKSPACE_PATH = Path.home() / ".helix" / "workspace"
 # Permission tiers. See ROLES.md for what each one may do.
 TIER_STAFF = "staff"       # FRID employee: every command, no limit on subject
 TIER_STUDENT = "student"   # pupil: no commands, IT questions only
+ACCESS_BLOCKED = "blocked" # operator closed this account; sign-in and chat refuse
 
 # ─── Sub-models ───────────────────────────────────────────────────────────────
 
@@ -167,6 +168,23 @@ class EntraConfig(BaseModel):
     allowed_group_ids: list[str] = Field(default_factory=list)
 
 
+class UserAccessOverride(BaseModel):
+    """One person whose Zork access is not the tenant/domain default."""
+    email: str
+    access: str  # staff | student | blocked
+    note: str = ""
+
+    @model_validator(mode="after")
+    def _normalise(self):
+        self.email = (self.email or "").strip().lower()
+        self.access = (self.access or "").strip().lower()
+        if self.access not in (TIER_STAFF, TIER_STUDENT, ACCESS_BLOCKED):
+            raise ValueError("access must be staff, student or blocked")
+        if "@" not in self.email:
+            raise ValueError("email is required")
+        return self
+
+
 class TiersConfig(BaseModel):
     """Which directory someone signs in from decides what they may do.
 
@@ -192,6 +210,9 @@ class TiersConfig(BaseModel):
     # goes live.
     staff_domains: list[str] = Field(default_factory=lambda: ["frid.no", "frid-iks.no"])
     student_domains: list[str] = Field(default_factory=lambda: ["afk.no"])
+    # Per-person exceptions. Beats tenant and domain. Empty = everyone follows
+    # the defaults above. Set from the Permissions tab.
+    user_overrides: list[UserAccessOverride] = Field(default_factory=list)
 
     @property
     def tenant_ids(self) -> list[str]:
@@ -222,6 +243,30 @@ class TiersConfig(BaseModel):
         if domain in [d.lower() for d in self.student_domains]:
             return TIER_STUDENT
         return None
+
+    def override_for(self, email: str) -> Optional[str]:
+        """Explicit access for this email, or None to use the default mapping."""
+        key = (email or "").strip().lower()
+        if not key:
+            return None
+        for row in self.user_overrides:
+            if row.email.strip().lower() == key:
+                return row.access
+        return None
+
+    def access_for(self, email: str = "", tid: str = "") -> Optional[str]:
+        """Effective access: override, then tenant, then email domain.
+
+        Returns staff, student, blocked, or None if they are not admitted.
+        """
+        ov = self.override_for(email)
+        if ov:
+            return ov
+        if tid:
+            found = self.for_tenant(tid)
+            if found:
+                return found
+        return self.for_email(email)
 
 
 class HelixConfig(BaseModel):

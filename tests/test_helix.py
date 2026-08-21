@@ -303,6 +303,173 @@ def _make_temp_config(tmp_path: Path):
     return HelixConfig(workspace_path=str(tmp_path))
 
 
+class TestZorkUserPermissions:
+    """An operator can grant, demote or close a single Zork account."""
+
+    def test_override_beats_the_email_domain(self):
+        from core.config import (
+            ACCESS_BLOCKED, TIER_STAFF, TIER_STUDENT,
+            TiersConfig, UserAccessOverride,
+        )
+        t = TiersConfig(user_overrides=[
+            UserAccessOverride(email="elev@afk.no", access="staff"),
+        ])
+        assert t.access_for(email="elev@afk.no") == TIER_STAFF
+        assert t.access_for(email="annen@afk.no") == TIER_STUDENT
+
+        blocked = TiersConfig(user_overrides=[
+            UserAccessOverride(email="ansatt@frid.no", access="blocked"),
+        ])
+        assert blocked.access_for(email="ansatt@frid.no") == ACCESS_BLOCKED
+        assert blocked.access_for(email="kollega@frid.no") == TIER_STAFF
+
+    def test_unknown_domain_is_admitted_only_with_an_override(self):
+        from core.config import TIER_STAFF, TiersConfig, UserAccessOverride
+        t = TiersConfig()
+        assert t.access_for(email="x@example.com") is None
+        t.user_overrides = [UserAccessOverride(email="x@example.com", access="staff")]
+        assert t.access_for(email="x@example.com") == TIER_STAFF
+
+    def test_loadtest_emails_are_stress_accounts(self):
+        from web.app import _is_stress_account
+        assert _is_stress_account("loadtest-p01-n00@afk.no")
+        assert _is_stress_account("loadtest-s02-n07@frid.no")
+        assert not _is_stress_account("elev@afk.no")
+        assert not _is_stress_account("ansatt@frid.no")
+
+
+@pytest.mark.skipif(not _HAS_REAL_FASTAPI, reason="fastapi not installed")
+class TestDevLoginPassword:
+    """First sign-in chooses a password. Stress accounts skip it."""
+
+    def _client(self, tmp_path, monkeypatch):
+        import importlib
+        import core.dev_passwords as pw
+        import web.app as app_mod
+
+        importlib.reload(app_mod)
+        cfg = _make_temp_config(tmp_path)
+        cfg.web.dev_login = True
+        monkeypatch.setattr(app_mod, "get_config", lambda: cfg)
+        monkeypatch.setattr(pw, "STORE_PATH", tmp_path / "dev-passwords.json")
+        return _RealTestClient(app_mod.app, raise_server_exceptions=False)
+
+    def test_first_login_without_password_is_refused(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        r = client.post("/api/auth/dev-login", json={"email": "ansatt@frid.no"})
+        assert r.status_code == 403
+        assert r.json()["detail"]["code"] == "set_password"
+
+    def test_first_login_sets_password_and_later_requires_it(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        body = {
+            "email": "ansatt@frid.no",
+            "password": "correct-horse",
+            "password_confirm": "correct-horse",
+        }
+        r = client.post("/api/auth/dev-login", json=body)
+        assert r.status_code == 200
+        assert r.json().get("token")
+
+        bad = client.post("/api/auth/dev-login", json={
+            "email": "ansatt@frid.no", "password": "wrong-password",
+        })
+        assert bad.status_code == 401
+        assert bad.json()["detail"]["code"] == "bad_password"
+
+        ok = client.post("/api/auth/dev-login", json={
+            "email": "ansatt@frid.no", "password": "correct-horse",
+        })
+        assert ok.status_code == 200
+
+    def test_confirm_must_match_on_first_login(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        r = client.post("/api/auth/dev-login", json={
+            "email": "elev@afk.no",
+            "password": "correct-horse",
+            "password_confirm": "other-horse1",
+        })
+        assert r.status_code == 400
+        assert r.json()["detail"]["code"] == "confirm_mismatch"
+
+    def test_stress_account_skips_password(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        r = client.post("/api/auth/dev-login", json={"email": "loadtest-p01-n00@afk.no"})
+        assert r.status_code == 200
+        assert r.json().get("token")
+
+    def test_admin_can_reset_password(self, tmp_path, monkeypatch):
+        import web.app as app_mod
+
+        client = self._client(tmp_path, monkeypatch)
+        client.post("/api/auth/dev-login", json={
+            "email": "ansatt@frid.no",
+            "password": "correct-horse",
+            "password_confirm": "correct-horse",
+        })
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: {"sub": "admin", "role": "admin", "name": "Admin"},
+        )
+        gone = client.delete(
+            "/api/permissions/ansatt@frid.no/password",
+            headers={"Authorization": "Bearer validtoken"},
+        )
+        assert gone.status_code == 200
+        again = client.post("/api/auth/dev-login", json={"email": "ansatt@frid.no"})
+        assert again.status_code == 403
+        assert again.json()["detail"]["code"] == "set_password"
+
+    def test_first_login_appears_on_the_users_list(self, tmp_path, monkeypatch):
+        import web.app as app_mod
+
+        client = self._client(tmp_path, monkeypatch)
+        r = client.post("/api/auth/dev-login", json={
+            "email": "ny@frid.no",
+            "password": "correct-horse",
+            "password_confirm": "correct-horse",
+        })
+        assert r.status_code == 200
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: {"sub": "admin", "role": "admin", "name": "Admin"},
+        )
+        listed = client.get("/api/permissions", headers={"Authorization": "Bearer validtoken"})
+        assert listed.status_code == 200
+        people = {p["email"]: p for p in listed.json()["people"]}
+        assert people["ny@frid.no"]["has_password"] is True
+
+    def test_status_says_when_a_password_must_be_chosen(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        fresh = client.get("/api/auth/dev-login/status", params={"email": "ansatt@frid.no"})
+        assert fresh.status_code == 200
+        assert fresh.json()["set_password"] is True
+
+        client.post("/api/auth/dev-login", json={
+            "email": "ansatt@frid.no",
+            "password": "correct-horse",
+            "password_confirm": "correct-horse",
+        })
+        again = client.get("/api/auth/dev-login/status", params={"email": "ansatt@frid.no"})
+        assert again.json()["set_password"] is False
+
+        stress = client.get(
+            "/api/auth/dev-login/status",
+            params={"email": "loadtest-p01-n00@afk.no"},
+        )
+        assert stress.json()["set_password"] is False
+
+
+class TestDevPasswordStore:
+    def test_hash_is_not_the_password(self, tmp_path):
+        from core.dev_passwords import hash_password, verify_password
+        stored = hash_password("correct-horse")
+        assert "correct-horse" not in stored
+        assert stored.startswith("pbkdf2$")
+        assert verify_password("correct-horse", stored)
+        assert not verify_password("wrong-password", stored)
+
+
 # ---------------------------------------------------------------------------
 # Fix 3 — File upload sanitization
 # ---------------------------------------------------------------------------
@@ -2283,6 +2450,51 @@ class TestAdminApiIntegration:
         assert (tmpl / "skills" / "triage-flow" / "SKILL.md").exists()
         assert (tmpl / "assets" / "a.png").read_bytes().startswith(b"\x89PNG")
 
+    def test_permissions_api_sets_an_override(self, tmp_path, monkeypatch):
+        from core.config import HelixConfig, save_config as real_save, load_config as real_load
+        from core import config as config_mod
+        import web.app as app_mod
+
+        cfg_path = tmp_path / "config.json"
+        real_save(HelixConfig(workspace_path=str(tmp_path / "ws")), cfg_path)
+        client = self._make_client(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            config_mod, "load_config",
+            lambda path=cfg_path, force_reload=False: real_load(cfg_path, force_reload=True),
+        )
+        monkeypatch.setattr(app_mod, "save_config", lambda c: real_save(c, cfg_path))
+        monkeypatch.setattr(app_mod, "get_config", lambda: real_load(cfg_path, True))
+
+        headers = {"Authorization": "Bearer validtoken"}
+        listed = client.get("/api/permissions", headers=headers)
+        assert listed.status_code == 200
+        assert "frid.no" in listed.json()["defaults"]["staff_domains"]
+
+        saved = client.put(
+            "/api/permissions",
+            json={"email": "Elev@AFK.no", "access": "blocked"},
+            headers=headers,
+        )
+        assert saved.status_code == 200
+        people = {p["email"]: p for p in saved.json()["people"]}
+        assert people["elev@afk.no"]["override"] == "blocked"
+
+        probe = client.put(
+            "/api/permissions",
+            json={"email": "loadtest-p01-n00@afk.no", "access": "blocked"},
+            headers=headers,
+        )
+        assert probe.status_code == 200
+        body = probe.json()
+        assert "loadtest-p01-n00@afk.no" not in [p["email"] for p in body["people"]]
+        stress = {p["email"]: p for p in body["stress"]}
+        assert stress["loadtest-p01-n00@afk.no"]["override"] == "blocked"
+
+        gone = client.delete("/api/permissions/elev@afk.no", headers=headers)
+        assert gone.status_code == 200
+        still = [p["email"] for p in gone.json()["people"] if p.get("override")]
+        assert "elev@afk.no" not in still
+
 
 class TestEntraCallbackLandsOnChat:
     """SSO belongs to /chat. The admin UI at / is a password and never reads
@@ -2500,6 +2712,88 @@ class TestCommandTierGate:
             "/status",
         )
         assert seen["slash"] == ["/status"]
+
+    def test_staff_override_gives_a_pupil_commands(self, monkeypatch):
+        from core.config import HelixConfig, UserAccessOverride
+
+        cfg = HelixConfig()
+        cfg.tiers.user_overrides = [
+            UserAccessOverride(email="elev@afk.no", access="staff"),
+        ]
+        client, seen = self._client(monkeypatch, {
+            "sub": "dev:elev@afk.no", "email": "elev@afk.no",
+            "role": "user", "tier": "student",
+        })
+        import web.app as app_mod
+        monkeypatch.setattr(app_mod, "get_config", lambda: cfg)
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            assert ws.receive_json().get("status") == "connected"
+            ws.send_json({"message": "/status"})
+            for _ in range(10):
+                if ws.receive_json().get("done"):
+                    break
+        assert seen["slash"] == ["/status"]
+
+    def test_blocked_person_cannot_open_chat(self, monkeypatch):
+        from core.config import HelixConfig, UserAccessOverride
+
+        cfg = HelixConfig()
+        cfg.tiers.user_overrides = [
+            UserAccessOverride(email="elev@afk.no", access="blocked"),
+        ]
+        client, _ = self._client(monkeypatch, {
+            "sub": "dev:elev@afk.no", "email": "elev@afk.no",
+            "role": "user", "tier": "student",
+        })
+        import web.app as app_mod
+        monkeypatch.setattr(app_mod, "get_config", lambda: cfg)
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            frame = ws.receive_json()
+        assert frame.get("code") == "forbidden"
+        assert "Zork" in frame.get("error", "")
+
+    def test_staff_override_gives_a_pupil_commands(self, monkeypatch):
+        from core.config import HelixConfig, UserAccessOverride
+
+        cfg = HelixConfig()
+        cfg.tiers.user_overrides = [
+            UserAccessOverride(email="elev@afk.no", access="staff"),
+        ]
+        client, seen = self._client(monkeypatch, {
+            "sub": "dev:elev@afk.no", "email": "elev@afk.no",
+            "role": "user", "tier": "student",
+        })
+        import web.app as app_mod
+        monkeypatch.setattr(app_mod, "get_config", lambda: cfg)
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            assert ws.receive_json().get("status") == "connected"
+            ws.send_json({"message": "/status"})
+            for _ in range(10):
+                if ws.receive_json().get("done"):
+                    break
+        assert seen["slash"] == ["/status"]
+
+    def test_blocked_person_cannot_open_chat(self, monkeypatch):
+        from core.config import HelixConfig, UserAccessOverride
+
+        cfg = HelixConfig()
+        cfg.tiers.user_overrides = [
+            UserAccessOverride(email="elev@afk.no", access="blocked"),
+        ]
+        client, _ = self._client(monkeypatch, {
+            "sub": "dev:elev@afk.no", "email": "elev@afk.no",
+            "role": "user", "tier": "student",
+        })
+        import web.app as app_mod
+        monkeypatch.setattr(app_mod, "get_config", lambda: cfg)
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            frame = ws.receive_json()
+        assert frame.get("code") == "forbidden"
+        assert "Zork" in frame.get("error", "")
 
 
 class TestChatAuditRecords:

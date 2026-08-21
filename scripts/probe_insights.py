@@ -58,7 +58,7 @@ async def ask(token: str, messages: list[str]) -> list[str]:
 
 async def main():
     if "--read-only" not in sys.argv:
-        pupil = post("/api/auth/dev-login", {"email": "elev@afk.no"})["token"]
+        pupil = post("/api/auth/dev-login", {"email": "elev@afk.no", "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
         print("— pupil asks about wifi, then asks for something off-topic —")
         for reply in await ask(pupil, [
             "hei, jeg får ikke koblet pc-en min til wifi på skolen",
@@ -66,7 +66,7 @@ async def main():
         ]):
             print("\n>>", reply.strip()[:400])
 
-        other = post("/api/auth/dev-login", {"email": "elev2@afk.no"})["token"]
+        other = post("/api/auth/dev-login", {"email": "elev2@afk.no", "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
         await ask(other, ["jeg har glemt passordet mitt, hva gjør jeg?"])
 
     # Same JWT secret as the running server, so this is a real operator token.

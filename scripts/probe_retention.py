@@ -34,7 +34,7 @@ def get(path: str, token: str) -> dict:
 
 
 for email in ("elev@afk.no", "ansatt@frid.no"):
-    token = post("/api/auth/dev-login", {"email": email})["token"]
+    token = post("/api/auth/dev-login", {"email": email, "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
     me = get("/api/me", token)
     convs = get("/api/me/conversations", token)["conversations"]
     print(f"{email:<18} kept {me['retention_days']} days")
