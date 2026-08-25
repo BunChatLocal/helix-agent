@@ -64,15 +64,22 @@ to hand over.
 
 ## Staff
 
-Full use. Every slash command, including `/session` and the queue commands, and
-no restriction on what they may ask. They are IT staff; treating them as
-untrusted would only get in the way.
+Own-session commands only (`/new`, `/reset`, `/clear`, `/status`, `/compact`,
+`/model`, `/think`), and no restriction on what they may ask. They are IT staff;
+treating them as untrusted would only get in the way of the question. They cannot
+run commands that write skills, shared memory, the queue, or other people's
+chats — those stay with the operator and with people given the admin access role.
 
-Worth knowing what `/session` does and does not give them: it lists session
-metadata — peer keys, models, last activity — across everyone, pupils included.
-It does not expose message content, because reading a transcript goes through an
-admin-only endpoint. So a staff member can see *that* a pupil has three
-conversations, not what is in them.
+`/session` lists session metadata — peer keys, models, last activity — across
+everyone, pupils included. It does not expose message content, because reading a
+transcript goes through an admin-only endpoint. Employees do not have it.
+
+## Moderators
+
+Staff chat, plus a restricted operator panel from `/chat` (Dev-panel). They may
+open Home, Insights, Skills (read-only), Sessions, and Users — but Users shows
+only AFK (`@afk.no`) accounts, and the only action there is resetting a password.
+They cannot create or edit skills, change roles, or see FRID / stress accounts.
 
 ## Students
 
@@ -513,9 +520,11 @@ refusal of anyone who has no tier.
   backfilled on connect.
 
 The command gate: the websocket handler routes to `handle_slash` and to the
-`/nettside` renderer only for staff. That single gate is enough because it is the
-only route to a command for a signed-in person — every other command-shaped
-endpoint is admin-only or confined to the caller's own conversation.
+`/nettside` renderer only for staff-like tiers. Employees get the own-session
+set; the operator and Users-tab admins get the rest, including `/nettside` and
+`/skill`. That gate is enough because it is the only route to a command for a
+signed-in person — every other command-shaped endpoint is admin-only or confined
+to the caller's own conversation.
 
 And the split itself:
 

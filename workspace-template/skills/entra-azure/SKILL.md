@@ -11,6 +11,11 @@ centre, or give them the command to run once tooling is installed.
 
 ## Scoping questions
 
+Skip this section when they asked how to do a procedure that is already
+verified below (MFA reset, Bitlocker lookup). Give those steps. These
+questions are for undiagnosed sign-in failures, not for "noen trenger
+MFA-reset".
+
 - One user or many? Same licence type, same group, same location?
 - Which client — Outlook desktop, browser, mobile, Teams?
 - Exact error code shown? (Entra codes are `AADSTS<number>` — ask for it, don't guess)
@@ -69,5 +74,69 @@ command or click-path and hand it over.
 
 ## Verified local knowledge
 
-_(Add confirmed tenant-specific patterns here — naming conventions, which groups
-drive which licences, known CA policies. No personal data.)_
+### Om Azure i Akershus fylkeskommune
+
+**Hvem bruker det:** Kun ansatte i FRID (IT-avdelingen). Krever en egen
+administratorkonto med prefiks **cadm** (på formen `cadm.<brukernavn>@afk.no`).
+Vanlige brukerkontoer (`<brukernavn>@afk.no`) har ikke tilgang.
+
+**Hva Azure brukes til:**
+- Slå opp opplysninger om elever og ansatte
+- Resette MFA (Microsoft Authenticator) for elever og ansatte når den ikke
+  lenger fungerer
+- Se hvilke telefoner og PC-er ansatte har registrert
+- Se Bitlocker-nøkler
+
+**Innlogging:** Gå til https://portal.azure.com og logg inn med cadm-kontoen.
+
+## Verified procedures
+
+### Resette MFA for en bruker
+
+> **Visningsregel:** Når noen spør om denne prosedyren, vis ALLTID bildene sammen
+> med stegene — ikke bare teksten.
+
+**Gjelder:** FRID-ansatte med cadm-konto
+
+**Del 1 — Aktiver rettigheten i Privileged Identity Management**
+1. Søk etter «Microsoft Entra Privileged Identity Management» i søkefeltet
+   øverst i Azure og klikk på det under Services i søkeresultatene.
+   (Azure husker valget og legger det fremst på hjemmesiden til neste gang.)
+   ![Søk etter PIM i Azure-søkefeltet](asset:dette-er-bildene-du-skal-sende-sammen-me-20260814-1.png)
+2. Klikk **«My roles»** i venstremenyen under Tasks.
+   ![My roles i venstremenyen under Tasks](asset:dette-er-bildene-du-skal-sende-sammen-me-20260814-2.png)
+3. Finn rollen **«Authentication Administrator»** i listen og klikk **«Activate»**.
+   ![Authentication Administrator med Activate-knapp](asset:dette-er-bildene-du-skal-sende-sammen-me-20260814-3.png)
+4. I aktiveringsvinduet: skriv noe i feltet **«Reason (max 500 characters)»**
+   — feltet kan ikke være tomt, men én enkelt bokstav er nok.
+5. Klikk **«Activate»**. Rettigheten er nå aktivert.
+   ![Reason-felt utfylt og Activate-knapp](asset:dette-er-bildene-du-skal-sende-sammen-me-20260814-4.png)
+
+**Del 2 — Reset MFA**
+
+Ikke krev brukernavn eller e-post før du gir stegene. Det eneste du trenger
+fra den som spør, er **navnet** på personen. Azure-søket under er på navn.
+
+6. Søk opp brukeren i søkefeltet øverst i Azure **på navn**. E-postadresse
+   er ikke nødvendig.
+7. Klikk på riktig bruker under «Microsoft Entra ID» i søkeresultatene.
+   ![Søk opp bruker og klikk på riktig treff](asset:del-2-reset-mfa-20260814-1.png)
+8. Klikk **«Authentication methods»** i venstremenyen.
+   ![Authentication methods i venstremenyen](asset:del-2-reset-mfa-20260814-2.png)
+9. Klikk **«Require re-register multifactor authentication»** i verktøylinjen øverst.
+   ![Require re-register multifactor authentication](asset:del-2-reset-mfa-20260814-3.png)
+
+**Merk:**
+- For å se Bitlocker-nøkler aktiveres rollen **«Bitlocker Key Reader»** på
+  samme måte i steg 3, i stedet for Authentication Administrator.
+- Rettighetene må aktiveres på nytt **hver dag** — de er ikke permanent påslått.
+- Azure skal kun brukes av FRID-ansatte.
+
+**Verifisert:** 2026-08-14
+
+## Integration notes
+
+- **Privileged Identity Management — daglig aktivering:** Rettigheter som
+  «Authentication Administrator» og «Bitlocker Key Reader» utløper daglig og
+  må aktiveres på nytt hver dag før bruk via
+  Microsoft Entra Privileged Identity Management → My roles → Activate.

@@ -31,10 +31,16 @@ from typing import Optional
 
 from core.config import TIER_STUDENT, get_config
 
+SKILL_INJECT_LIMIT = 20_000
+# Follow-ups like "en elev" / "ja" are too short to be a new case. Re-classifying
+# them attaches the wrong skill (Visma InSchool's login email) mid-thread.
+FOLLOW_UP_MIN_TOKENS = 3
+
 logger = logging.getLogger("helix.knowledge")
 
 _FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.S)
 _DESCRIPTION = re.compile(r"^description:\s*(.+)$", re.M | re.I)
+_NAME = re.compile(r"^name:\s*[\"']?(.+?)[\"']?\s*$", re.M | re.I)
 _HEADING = re.compile(r"^(#{2,3})\s+(.+?)\s*$", re.M)
 _VERIFIED_SECTION = re.compile(r"^verified\b", re.I)
 _ASSET_REF = re.compile(r"asset:([A-Za-z0-9._-]+)")
@@ -81,6 +87,9 @@ ALIASES: dict[str, tuple[str, ...]] = {
         "passord", "innlogging", "logge", "konto", "sperret", "låst",
         "utestengt", "tofaktor", "totrinns", "lisens", "tilgang", "gruppe",
         "brukerkonto", "locked", "licence", "license", "signin", "password",
+        # Staff MFA reset ("noen trenger MFA-reset") must beat frid-nettverk,
+        # which also owns "mfa" for the pupil Authenticator-setup guide.
+        "mfa", "reset",
     ),
     "m365-office": (
         "outlook", "mail", "epost", "post", "teams", "onedrive", "sharepoint",
@@ -175,6 +184,23 @@ def _description(text: str) -> str:
     return desc.group(1).strip() if desc else ""
 
 
+def _display_name(skill_id: str, text: str) -> str:
+    """Human name from frontmatter or the H1, not the folder id."""
+    match = _FRONTMATTER.match(text or "")
+    if match:
+        named = _NAME.search(match.group(1))
+        if named:
+            raw = named.group(1).strip()
+            if raw:
+                return raw
+    for line in (text or "").splitlines():
+        if line.startswith("# "):
+            title = line[2:].strip()
+            if title:
+                return title
+    return skill_id
+
+
 def vocabulary(workspace: Optional[Path] = None) -> dict[str, set[str]]:
     """Keywords per skill: its id, its frontmatter description, and its aliases."""
     vocab: dict[str, set[str]] = {}
@@ -233,6 +259,56 @@ def classify_topic(
     return winners[0]
 
 
+def skill_body(skill_id: str, workspace: Optional[Path] = None) -> Optional[str]:
+    """The SKILL.md for `skill_id`, capped so it can ride with a user message."""
+    if not skill_id or "/" in skill_id or "\\" in skill_id or ".." in skill_id:
+        return None
+    fp = _workspace(workspace) / "skills" / skill_id / "SKILL.md"
+    if not fp.is_file():
+        return None
+    try:
+        text = fp.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        logger.warning(f"Could not read {fp}: {exc}")
+        return None
+    if len(text) > SKILL_INJECT_LIMIT:
+        text = text[:SKILL_INJECT_LIMIT] + f"\n\n[...truncated at {SKILL_INJECT_LIMIT} chars...]"
+    return text
+
+
+def with_matching_skill(
+    message: str,
+    tier: str = "",
+    workspace: Optional[Path] = None,
+    *,
+    min_tokens: int = 0,
+) -> str:
+    """Prepend the matching skill file so the model does not spend a turn opening it.
+
+    The transcript still stores `message` unchanged; this string is only what
+    the model sees. Returns `message` as-is when nothing classified, or when
+    `min_tokens` is set and the message is shorter than that — a follow-up
+    such as "en elev" must not replace an MFA-reset guide with Visma InSchool.
+    """
+    if min_tokens and len(_tokens(message)) < min_tokens:
+        return message
+    skill = classify_topic(message, tier, workspace=workspace)
+    if not skill:
+        return message
+    body = skill_body(skill, workspace=workspace)
+    if not body:
+        return message
+    return (
+        f"[Skill file already included: skills/{skill}/SKILL.md. "
+        "This is the guide for the current question. If they asked how to do "
+        "something, give the Verified procedures now — do not open with scoping "
+        "questions the message already answers. Do not list skills/ or Read "
+        "this file unless it does not cover the question.]\n\n"
+        f"## skills/{skill}/SKILL.md\n\n{body}\n\n"
+        f"---\n\n{message}"
+    )
+
+
 def _count_verified(text: str) -> int:
     """`###` entries under a "Verified" heading, ignoring template stubs."""
     count = 0
@@ -274,11 +350,13 @@ def coverage_report(
     urgent rather than after.
     """
     coverage = skill_coverage(workspace)
+    texts = _skill_texts(workspace)
     rows = []
     for skill_id, facts in coverage.items():
         asked = topic_counts.get(skill_id, 0)
         rows.append({
             "skill": skill_id,
+            "label": _display_name(skill_id, texts.get(skill_id, "")),
             "file": f"skills/{skill_id}/SKILL.md",
             "asked": asked,
             "procedures": facts["procedures"],
@@ -290,3 +368,24 @@ def coverage_report(
         })
     rows.sort(key=lambda r: (-r["undocumented_demand"], -r["asked"], r["skill"]))
     return rows
+
+
+def lacks_premade_answer(
+    text: str,
+    tier: str = "",
+    workspace: Optional[Path] = None,
+) -> Optional[str]:
+    """Skill id when this question has no verified, org-specific answer.
+
+    A documented skill (verified procedures or org anchors) is a premade
+    answer for questions that classify into it. An empty skill is not.
+    Unclassified text — greetings, thanks, nothing that names a system — is
+    not a gap.
+    """
+    skill = classify_topic(text, tier, workspace=workspace)
+    if not skill:
+        return None
+    facts = skill_coverage(workspace).get(skill)
+    if facts and facts["documented"]:
+        return None
+    return skill

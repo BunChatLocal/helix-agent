@@ -164,6 +164,16 @@ def match_subject(text: str, catalog: list[dict]) -> dict | None:
     return best
 
 
+def missing_label(text: str, skill: str = "", *, path: Path | None = None) -> str:
+    """Heading for a question with no written procedure, e.g. 'missing Word error'."""
+    base = remember_subject(text, skill, path=path)
+    if not base:
+        return ""
+    if base.lower().startswith("missing "):
+        return base
+    return "missing " + base
+
+
 def remember_subject(text: str, skill: str = "", *, path: Path | None = None) -> str:
     """Label this opening message, reusing a catalog entry when it is the same problem.
 

@@ -14,6 +14,8 @@ import hmac
 import json
 import logging
 import os
+import secrets
+import string
 import threading
 from pathlib import Path
 
@@ -26,8 +28,23 @@ LEGACY_PATH = Path.home() / ".helix" / "dev-passwords.json"
 # Tests set this to a temp file. None = encrypted vault.
 STORE_PATH: Path | None = None
 MIN_LENGTH = 8
+ISSUED_LENGTH = 10
 _ITERATIONS = 210_000
 _LOCK = threading.Lock()
+_ISSUED_ALPHABET = string.ascii_letters + string.digits
+
+
+def generate_password(length: int = ISSUED_LENGTH) -> str:
+    """Random letters+digits for an admin-issued test-login password.
+
+    Plaintext is returned once to the caller and must not be logged or stored.
+    """
+    if length < 2:
+        raise ValueError("password length must be at least 2")
+    while True:
+        chars = [secrets.choice(_ISSUED_ALPHABET) for _ in range(length)]
+        if any(c.isalpha() for c in chars) and any(c.isdigit() for c in chars):
+            return "".join(chars)
 
 
 def hash_password(password: str) -> str:

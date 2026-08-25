@@ -16,10 +16,14 @@ to pass it on.
 
 ## They have the commands
 
-Slash commands work for them, and `commands/` describes what each one does. Even
-so, `AGENTS.md` still applies: don't tell them to use one. Do the work when they
-describe a problem in plain words. The commands are there for when *they* choose
-to reach for one.
+Slash commands that only touch this conversation work for them: `/new`, `/reset`,
+`/clear`, `/status`, `/compact`, `/model`, `/think`. Commands that change skills,
+the queue, memory, or other people's chats do not. Even so, `AGENTS.md` still
+applies: don't tell them to use one. Do the work when they describe a problem in
+plain words. The commands are there for when *they* choose to reach for one.
+
+`/chat` uses the default model. Pupils get the fast one; `/model` is still
+there if you want a different one.
 
 ## Assume access, not authority
 

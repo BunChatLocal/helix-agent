@@ -16,6 +16,7 @@ import sys
 import time
 import types
 import uuid
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -323,6 +324,29 @@ class TestZorkUserPermissions:
         assert blocked.access_for(email="ansatt@frid.no") == ACCESS_BLOCKED
         assert blocked.access_for(email="kollega@frid.no") == TIER_STAFF
 
+    def test_afk_is_pupil_and_frid_iks_is_staff(self):
+        from core.config import TIER_STAFF, TIER_STUDENT, TiersConfig
+        t = TiersConfig()
+        assert t.access_for(email="elev@afk.no") == TIER_STUDENT
+        assert t.access_for(email="ansatt@frid-iks.no") == TIER_STAFF
+        assert t.access_for(email="ansatt@frid.no") == TIER_STAFF
+
+    def test_moderator_and_admin_overrides(self):
+        from core.config import (
+            TIER_ADMIN, TIER_MODERATOR, TIER_STAFF, TiersConfig,
+            UserAccessOverride, is_staff_like,
+        )
+        t = TiersConfig(user_overrides=[
+            UserAccessOverride(email="leder@frid-iks.no", access="moderator"),
+            UserAccessOverride(email="it@frid-iks.no", access="admin"),
+        ])
+        assert t.access_for(email="leder@frid-iks.no") == TIER_MODERATOR
+        assert t.access_for(email="it@frid-iks.no") == TIER_ADMIN
+        assert is_staff_like(TIER_MODERATOR)
+        assert is_staff_like(TIER_ADMIN)
+        assert is_staff_like(TIER_STAFF)
+        assert not is_staff_like("student")
+
     def test_unknown_domain_is_admitted_only_with_an_override(self):
         from core.config import TIER_STAFF, TiersConfig, UserAccessOverride
         t = TiersConfig()
@@ -459,6 +483,82 @@ class TestDevLoginPassword:
         )
         assert stress.json()["set_password"] is False
 
+    def test_creating_a_person_issues_a_ten_character_password(self, tmp_path, monkeypatch):
+        from core.config import save_config as real_save, load_config as real_load
+        from core import config as config_mod
+        import web.app as app_mod
+        import string
+
+        client = self._client(tmp_path, monkeypatch)
+        cfg_path = tmp_path / "config.json"
+        cfg = _make_temp_config(tmp_path)
+        cfg.web.dev_login = True
+        real_save(cfg, cfg_path)
+        monkeypatch.setattr(
+            config_mod, "load_config",
+            lambda path=cfg_path, force_reload=False: real_load(cfg_path, force_reload=True),
+        )
+        monkeypatch.setattr(app_mod, "save_config", lambda c: real_save(c, cfg_path))
+        monkeypatch.setattr(app_mod, "get_config", lambda: real_load(cfg_path, True))
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: {"sub": "admin", "role": "admin", "name": "Admin"},
+        )
+
+        created = client.put(
+            "/api/permissions",
+            json={"email": "Ny@Frid.no", "access": "staff", "issue_password": True},
+            headers={"Authorization": "Bearer validtoken"},
+        )
+        assert created.status_code == 200
+        body = created.json()
+        issued = body["issued_password"]
+        assert body["issued_email"] == "ny@frid.no"
+        assert len(issued) == 10
+        assert all(c in string.ascii_letters + string.digits for c in issued)
+        assert any(c.isalpha() for c in issued) and any(c.isdigit() for c in issued)
+        people = {p["email"]: p for p in body["people"]}
+        assert people["ny@frid.no"]["has_password"] is True
+        assert issued not in str(people["ny@frid.no"])
+
+        again = client.put(
+            "/api/permissions",
+            json={"email": "ny@frid.no", "access": "moderator", "issue_password": True},
+            headers={"Authorization": "Bearer validtoken"},
+        )
+        assert again.status_code == 200
+        assert "issued_password" not in again.json()
+
+        login = client.post("/api/auth/dev-login", json={
+            "email": "ny@frid.no", "password": issued,
+        })
+        assert login.status_code == 200
+        assert login.json().get("token")
+
+        listed = client.get("/api/permissions", headers={"Authorization": "Bearer validtoken"})
+        assert listed.status_code == 200
+        assert "issued_password" not in listed.json()
+
+        role_only = client.put(
+            "/api/permissions",
+            json={"email": "kollega@frid.no", "access": "staff"},
+            headers={"Authorization": "Bearer validtoken"},
+        )
+        assert role_only.status_code == 200
+        assert "issued_password" not in role_only.json()
+
+        stress = client.put(
+            "/api/permissions",
+            json={
+                "email": "loadtest-p01-n00@afk.no",
+                "access": "staff",
+                "issue_password": True,
+            },
+            headers={"Authorization": "Bearer validtoken"},
+        )
+        assert stress.status_code == 200
+        assert "issued_password" not in stress.json()
+
 
 class TestDevPasswordStore:
     def test_hash_is_not_the_password(self, tmp_path):
@@ -468,6 +568,375 @@ class TestDevPasswordStore:
         assert stored.startswith("pbkdf2$")
         assert verify_password("correct-horse", stored)
         assert not verify_password("wrong-password", stored)
+
+    def test_generated_password_is_ten_letters_and_digits(self):
+        from core.dev_passwords import generate_password
+        import string
+        alphabet = string.ascii_letters + string.digits
+        seen = {generate_password() for _ in range(8)}
+        assert len(seen) == 8
+        for pw in seen:
+            assert len(pw) == 10
+            assert all(c in alphabet for c in pw)
+            assert any(c.isalpha() for c in pw)
+            assert any(c.isdigit() for c in pw)
+
+
+@pytest.mark.skipif(not _HAS_REAL_FASTAPI, reason="fastapi not installed")
+class TestModeratorConsole:
+    """Moderators may open the operator panel, but only a subset of it."""
+
+    _CLAIMS = {
+        "sub": "dev:leder@frid-iks.no",
+        "email": "leder@frid-iks.no",
+        "role": "user",
+        "tier": "moderator",
+        "name": "Leder",
+    }
+
+    def _client(self, tmp_path, monkeypatch, claims=None):
+        from core.config import HelixConfig, UserAccessOverride, save_config as real_save, load_config as real_load
+        from core import config as config_mod
+        import importlib
+        import web.app as app_mod
+        import core.dev_passwords as pw
+
+        importlib.reload(app_mod)
+        cfg_path = tmp_path / "config.json"
+        cfg = HelixConfig(workspace_path=str(tmp_path))
+        cfg.tiers.user_overrides = [
+            UserAccessOverride(email="elev@afk.no", access="student"),
+            UserAccessOverride(email="ansatt@frid.no", access="staff"),
+        ]
+        real_save(cfg, cfg_path)
+        monkeypatch.setattr(
+            config_mod, "load_config",
+            lambda path=cfg_path, force_reload=False: real_load(cfg_path, force_reload=True),
+        )
+        monkeypatch.setattr(app_mod, "save_config", lambda c: real_save(c, cfg_path))
+        monkeypatch.setattr(app_mod, "get_config", lambda: real_load(cfg_path, True))
+        monkeypatch.setattr(
+            app_mod, "_decode_token",
+            lambda token: dict(claims or self._CLAIMS) if token == "tok" else None,
+        )
+        monkeypatch.setattr(pw, "STORE_PATH", tmp_path / "dev-passwords.json")
+        sm = MagicMock()
+        sm.list_sessions = AsyncMock(return_value=[])
+        monkeypatch.setattr(app_mod, "_session_manager", sm)
+        return _RealTestClient(app_mod.app, raise_server_exceptions=False)
+
+    def test_me_offers_the_console(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        r = client.get("/api/me", headers={"Authorization": "Bearer tok"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["console"] is True
+        assert body["console_role"] == "moderator"
+        assert body["tier"] == "moderator"
+
+    def test_staff_are_not_offered_the_console(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch, claims={
+            "sub": "dev:ansatt@frid.no", "email": "ansatt@frid.no",
+            "role": "user", "tier": "staff",
+        })
+        r = client.get("/api/me", headers={"Authorization": "Bearer tok"})
+        assert r.status_code == 200
+        assert r.json()["console"] is False
+        sessions = client.get("/api/sessions", headers={"Authorization": "Bearer tok"})
+        assert sessions.status_code == 403
+
+    def test_can_read_status_insights_skills_sessions(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        h = {"Authorization": "Bearer tok"}
+        assert client.get("/api/status", headers=h).status_code == 200
+        assert client.get("/api/insights", headers=h).status_code == 200
+        assert client.get("/api/skills", headers=h).status_code == 200
+        assert client.get("/api/sessions", headers=h).status_code == 200
+
+    def test_cannot_create_a_skill_or_open_config(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        h = {"Authorization": "Bearer tok"}
+        assert client.post(
+            "/api/skills", json={"name": "secret"}, headers=h,
+        ).status_code == 403
+        assert client.get("/api/config", headers=h).status_code == 403
+        assert client.get("/api/logs/audit", headers=h).status_code == 403
+        assert client.post(
+            "/api/insights/promote",
+            json={"skill": "entra-azure", "title": "x"},
+            headers=h,
+        ).status_code == 403
+
+    def test_users_list_is_afk_only(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        r = client.get("/api/permissions", headers={"Authorization": "Bearer tok"})
+        assert r.status_code == 200
+        body = r.json()
+        emails = {p["email"] for p in body["people"]}
+        assert "elev@afk.no" in emails
+        assert "ansatt@frid.no" not in emails
+        assert body["stress"] == []
+        assert body["overrides"] == []
+        assert body["defaults"]["staff_domains"] == []
+
+        assert client.put(
+            "/api/permissions",
+            json={"email": "elev@afk.no", "access": "staff"},
+            headers={"Authorization": "Bearer tok"},
+        ).status_code == 403
+
+    def test_desk_chat_is_for_the_panel_not_ordinary_staff(self, tmp_path, monkeypatch):
+        import core.desk_chat as desk
+        monkeypatch.setattr(desk, "STORE_PATH", tmp_path / "desk-chat.jsonl")
+        monkeypatch.setattr(desk, "READ_PATH", tmp_path / "desk-chat-read.json")
+        staff = self._client(tmp_path, monkeypatch, claims={
+            "sub": "dev:ansatt@frid.no", "email": "ansatt@frid.no",
+            "role": "user", "tier": "staff",
+        })
+        assert staff.get("/api/desk-chat", headers={"Authorization": "Bearer tok"}).status_code == 403
+        mod = self._client(tmp_path, monkeypatch)
+        h = {"Authorization": "Bearer tok"}
+        empty = mod.get("/api/desk-chat", headers=h)
+        assert empty.status_code == 200
+        assert empty.json()["messages"] == []
+        assert empty.json()["unread"] == 0
+        assert empty.json()["you"] == "leder@frid-iks.no"
+        posted = mod.post("/api/desk-chat", json={"text": "Word krasjer på rom 12"}, headers=h)
+        assert posted.status_code == 200
+        body = posted.json()
+        assert body["text"] == "Word krasjer på rom 12"
+        assert body["name"] == "Leder"
+        assert body["email"] == "leder@frid-iks.no"
+        listed = mod.get("/api/desk-chat", headers=h)
+        assert listed.json()["messages"][0]["text"] == "Word krasjer på rom 12"
+        assert listed.json()["unread"] == 0
+
+    def test_unread_is_other_people_until_you_open_the_room(self, tmp_path, monkeypatch):
+        import core.desk_chat as desk
+        monkeypatch.setattr(desk, "STORE_PATH", tmp_path / "desk-chat.jsonl")
+        monkeypatch.setattr(desk, "READ_PATH", tmp_path / "desk-chat-read.json")
+        mod = self._client(tmp_path, monkeypatch)
+        h = {"Authorization": "Bearer tok"}
+        desk.post("PC på rom 12", name="Ada", email="ada@frid.no", role="moderator")
+        waiting = mod.get("/api/desk-chat", headers=h)
+        assert waiting.json()["unread"] == 1
+        marked = mod.post("/api/desk-chat/read", headers=h)
+        assert marked.status_code == 200
+        assert marked.json()["unread"] == 0
+        after = mod.get("/api/desk-chat", headers=h)
+        assert after.json()["unread"] == 0
+        desk.post("Jeg tar den", name="Ada", email="ada@frid.no", role="moderator")
+        again = mod.get("/api/desk-chat", headers=h)
+        assert again.json()["unread"] == 1
+
+    def test_reporter_can_read_and_reply_on_their_own_report(self, tmp_path, monkeypatch):
+        import core.desk_tickets as tickets
+        monkeypatch.setattr(tickets, "STORE_PATH", tmp_path / "desk-tickets.json")
+        tickets.create(
+            "issue", "Annen sak", "Ikke Leders.",
+            name="Ada", email="ada@frid.no", role="moderator",
+        )
+        mod = self._client(tmp_path, monkeypatch)
+        h = {"Authorization": "Bearer tok"}
+        filed = mod.post("/api/desk-tickets", json={
+            "kind": "issue",
+            "subject": "Word krasjer",
+            "description": "Rom 12, hver gang de lagrer.",
+        }, headers=h)
+        assert filed.status_code == 200
+        mine = filed.json()
+        assert mine["status"] == "new"
+        listed = mod.get("/api/desk-tickets", headers=h)
+        assert listed.status_code == 200
+        subjects = [t["subject"] for t in listed.json()["tickets"]]
+        assert subjects == ["Word krasjer"]
+        assert listed.json()["inbox"] is False
+        replied = mod.post(
+            f"/api/desk-tickets/{mine['id']}/replies",
+            json={"text": "Skjer også i Excel."},
+            headers=h,
+        )
+        assert replied.status_code == 200
+        assert replied.json()["status"] == "new"
+        assert replied.json()["replies"][0]["text"] == "Skjer også i Excel."
+        other = tickets.list_all()
+        ada = next(t for t in other if t["subject"] == "Annen sak")
+        assert mod.post(
+            f"/api/desk-tickets/{ada['id']}/replies",
+            json={"text": "hei"},
+            headers=h,
+        ).status_code == 403
+        assert mod.patch(
+            f"/api/desk-tickets/{mine['id']}",
+            json={"status": "needs_context"},
+            headers=h,
+        ).status_code == 403
+        assert mod.get("/api/desk-tickets", headers=h).json()["tickets"][0]["status"] == "new"
+        assert mod.patch(
+            f"/api/desk-tickets/{ada['id']}",
+            json={"status": "finished"},
+            headers=h,
+        ).status_code == 403
+
+    def test_reporter_is_notified_when_admin_replies_or_changes_status(self, tmp_path, monkeypatch):
+        import core.desk_tickets as tickets
+        monkeypatch.setattr(tickets, "STORE_PATH", tmp_path / "desk-tickets.json")
+        mod = self._client(tmp_path, monkeypatch)
+        h = {"Authorization": "Bearer tok"}
+        filed = mod.post("/api/desk-tickets", json={
+            "kind": "issue",
+            "subject": "Word krasjer",
+            "description": "Rom 12.",
+        }, headers=h).json()
+        assert filed["updated"] <= filed["reporter_seen"] + 0.01
+        tickets.reply(
+            filed["id"], "Send et skjermbilde.",
+            name="Operator", role="operator", staff=True,
+        )
+        after_reply = mod.get("/api/desk-tickets", headers=h).json()["tickets"][0]
+        assert after_reply["updated"] > after_reply["reporter_seen"] + 0.01
+        read = mod.post(f"/api/desk-tickets/{filed['id']}/read", headers=h)
+        assert read.status_code == 200
+        assert read.json()["reporter_seen"] >= read.json()["updated"] - 0.01
+        tickets.set_status(filed["id"], "needs_context")
+        after_status = mod.get("/api/desk-tickets", headers=h).json()["tickets"][0]
+        assert after_status["status"] == "needs_context"
+        assert after_status["updated"] > after_status["reporter_seen"] + 0.01
+        other = tickets.create(
+            "issue", "Annen sak", "Ikke Leders.",
+            name="Ada", email="ada@frid.no", role="moderator",
+        )
+        assert mod.post(
+            f"/api/desk-tickets/{other['id']}/read",
+            headers=h,
+        ).status_code == 403
+
+    def test_operator_can_reply_and_set_status(self, tmp_path, monkeypatch):
+        import core.desk_tickets as tickets
+        monkeypatch.setattr(tickets, "STORE_PATH", tmp_path / "desk-tickets.json")
+        entry = tickets.create(
+            "suggestion", "Ny snarvei", "En knapp for å resette MFA.",
+            name="Leder", email="leder@frid-iks.no", role="moderator",
+        )
+        op = self._client(tmp_path, monkeypatch, claims={
+            "sub": "admin", "role": "admin", "name": "Operator",
+        })
+        h = {"Authorization": "Bearer tok"}
+        listed = op.get("/api/desk-tickets", headers=h)
+        assert listed.status_code == 200
+        assert listed.json()["new"] == 1
+        assert listed.json()["tickets"][0]["subject"] == "Ny snarvei"
+        replied = op.post(
+            f"/api/desk-tickets/{entry['id']}/replies",
+            json={"text": "Vi tar den denne uken."},
+            headers=h,
+        )
+        assert replied.status_code == 200
+        assert replied.json()["status"] == "new"
+        assert replied.json()["replies"][0]["text"] == "Vi tar den denne uken."
+        closed = op.patch(
+            f"/api/desk-tickets/{entry['id']}",
+            json={"status": "finished"},
+            headers=h,
+        )
+        assert closed.json()["status"] == "finished"
+        assert op.get("/api/desk-tickets", headers=h).json()["new"] == 0
+
+    def test_inbox_screenshots_are_console_only_and_scoped(self, tmp_path, monkeypatch):
+        from io import BytesIO
+        import core.desk_tickets as tickets
+        monkeypatch.setattr(tickets, "STORE_PATH", tmp_path / "desk-tickets.json")
+        monkeypatch.setattr(tickets, "ASSETS_DIR", tmp_path / "desk-ticket-assets")
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+        mod = self._client(tmp_path, monkeypatch)
+        h = {"Authorization": "Bearer tok"}
+        uploaded = mod.post(
+            "/api/desk-tickets/assets",
+            files={"file": ("shot.png", BytesIO(png), "image/png")},
+            headers=h,
+        )
+        assert uploaded.status_code == 200
+        name = uploaded.json()["name"]
+        filed = mod.post("/api/desk-tickets", json={
+            "kind": "issue",
+            "subject": "Word krasjer",
+            "description": "Se skjermbildet.",
+            "images": [name],
+        }, headers=h)
+        assert filed.status_code == 200
+        assert filed.json()["images"] == [name]
+        fetched = mod.get(f"/api/desk-tickets/assets/{name}", headers=h)
+        assert fetched.status_code == 200
+        assert fetched.content.startswith(b"\x89PNG")
+        shot = mod.post(
+            "/api/desk-tickets/assets",
+            files={"file": ("reply.png", BytesIO(png), "image/png")},
+            headers=h,
+        ).json()["name"]
+        replied = mod.post(
+            f"/api/desk-tickets/{filed.json()['id']}/replies",
+            json={"text": "", "images": [shot]},
+            headers=h,
+        )
+        assert replied.status_code == 200
+        assert replied.json()["replies"][0]["images"] == [shot]
+        import web.app as app_mod
+        app_mod._TICKET_UPLOADS.clear()
+        orphan = tickets.save_image(png, ".png")
+        after_restart = mod.post(
+            f"/api/desk-tickets/{filed.json()['id']}/replies",
+            json={"text": "her er et skjermbilde", "images": [orphan]},
+            headers=h,
+        )
+        assert after_restart.status_code == 200
+        assert orphan in after_restart.json()["replies"][-1]["images"]
+        empty = mod.post(
+            f"/api/desk-tickets/{filed.json()['id']}/replies",
+            json={"text": ""},
+            headers=h,
+        )
+        assert empty.status_code == 400
+        assert mod.get("/api/desk-tickets/assets/not-a-file.png", headers=h).status_code == 404
+        ada = self._client(tmp_path, monkeypatch, claims={
+            "sub": "dev:ada@frid.no", "email": "ada@frid.no",
+            "role": "user", "tier": "moderator", "name": "Ada",
+        })
+        assert ada.get(
+            f"/api/desk-tickets/assets/{name}",
+            headers=h,
+        ).status_code == 404
+        staff = self._client(tmp_path, monkeypatch, claims={
+            "sub": "dev:ansatt@frid.no", "email": "ansatt@frid.no",
+            "role": "user", "tier": "staff",
+        })
+        assert staff.get(
+            f"/api/desk-tickets/assets/{name}",
+            headers=h,
+        ).status_code == 403
+        assert staff.post(
+            "/api/desk-tickets/assets",
+            files={"file": ("shot.png", BytesIO(png), "image/png")},
+            headers=h,
+        ).status_code == 403
+
+    def test_desk_websocket_refuses_staff(self, tmp_path, monkeypatch):
+        staff = self._client(tmp_path, monkeypatch, claims={
+            "sub": "dev:ansatt@frid.no", "email": "ansatt@frid.no",
+            "role": "user", "tier": "staff",
+        })
+        with staff.websocket_connect("/ws/desk") as ws:
+            ws.send_json({"token": "tok"})
+            frame = ws.receive_json()
+        assert "error" in frame
+
+    def test_can_reset_afk_password_but_not_frid(self, tmp_path, monkeypatch):
+        client = self._client(tmp_path, monkeypatch)
+        h = {"Authorization": "Bearer tok"}
+        afk = client.delete("/api/permissions/elev@afk.no/password", headers=h)
+        assert afk.status_code == 200
+        assert "ansatt@frid.no" not in [p["email"] for p in afk.json()["people"]]
+        frid = client.delete("/api/permissions/ansatt@frid.no/password", headers=h)
+        assert frid.status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -859,6 +1328,164 @@ class TestAgentName:
         assert "Always read from and write to these locations" in prompt
 
 
+class TestDeskChatStore:
+    def test_a_message_is_kept_and_read_back(self, tmp_path, monkeypatch):
+        from core import desk_chat
+        monkeypatch.setattr(desk_chat, "STORE_PATH", tmp_path / "desk-chat.jsonl")
+        monkeypatch.setattr(desk_chat, "READ_PATH", tmp_path / "desk-chat-read.json")
+        first = desk_chat.post("PC på rom 12 starter ikke", name="Ada", email="ada@frid.no")
+        second = desk_chat.post("Jeg tar den", name="Bo", email="bo@frid.no")
+        rows = desk_chat.history()
+        assert [r["text"] for r in rows] == [
+            "PC på rom 12 starter ikke",
+            "Jeg tar den",
+        ]
+        assert rows[0]["id"] == first["id"]
+        assert rows[1]["email"] == "bo@frid.no"
+        assert second["name"] == "Bo"
+
+    def test_empty_file_is_an_empty_room(self, tmp_path, monkeypatch):
+        from core import desk_chat
+        monkeypatch.setattr(desk_chat, "STORE_PATH", tmp_path / "missing.jsonl")
+        assert desk_chat.history() == []
+
+    def test_unread_skips_your_own_messages(self, tmp_path, monkeypatch):
+        from core import desk_chat
+        monkeypatch.setattr(desk_chat, "STORE_PATH", tmp_path / "desk-chat.jsonl")
+        monkeypatch.setattr(desk_chat, "READ_PATH", tmp_path / "desk-chat-read.json")
+        desk_chat.post("PC på rom 12 starter ikke", name="Ada", email="ada@frid.no", role="moderator")
+        desk_chat.post("Jeg tar den", name="Bo", email="bo@frid.no", role="moderator")
+        assert desk_chat.unread_count("ada@frid.no") == 1
+        assert desk_chat.unread_count("bo@frid.no") == 1
+        desk_chat.mark_read("ada@frid.no")
+        assert desk_chat.unread_count("ada@frid.no") == 0
+        desk_chat.post("Ferdig", name="Bo", email="bo@frid.no", role="moderator")
+        assert desk_chat.unread_count("ada@frid.no") == 1
+        assert desk_chat.unread_count("bo@frid.no") == 1
+
+
+class TestDeskTickets:
+    def test_create_list_reply_and_status(self, tmp_path, monkeypatch):
+        from core import desk_tickets
+        monkeypatch.setattr(desk_tickets, "STORE_PATH", tmp_path / "tickets.json")
+        issue = desk_tickets.create(
+            "issue", "Printeren", "2. etasje står.",
+            name="Ada", email="ada@frid.no", role="moderator",
+        )
+        idea = desk_tickets.create(
+            "suggestion", "Mørk modus på /chat", "Elevene har spurt.",
+            name="Bo", email="bo@frid.no", role="moderator",
+        )
+        rows = desk_tickets.list_all()
+        assert {r["id"] for r in rows} == {idea["id"], issue["id"]}
+        assert desk_tickets.new_count() == 2
+        replied = desk_tickets.reply(
+            issue["id"], "Jeg tar printeren.",
+            name="Operator", role="operator", staff=True,
+        )
+        assert replied["status"] == "new"
+        assert replied["replies"][0]["text"] == "Jeg tar printeren."
+        assert desk_tickets.new_count() == 2
+        desk_tickets.set_status(issue["id"], "waiting_response")
+        waiting = desk_tickets.reply(
+            issue["id"], "Kan du sende et skjermbilde?",
+            name="Operator", role="operator", staff=True,
+        )
+        assert waiting["status"] == "in_progress"
+        assert desk_tickets.new_count() == 1
+        closed = desk_tickets.set_status(issue["id"], "finished")
+        assert closed["status"] == "finished"
+        refused = desk_tickets.set_status(idea["id"], "refused")
+        assert refused["status"] == "refused"
+
+    def test_reporter_is_notified_on_status_or_reply_not_on_filing(self, tmp_path, monkeypatch):
+        from core import desk_tickets
+        monkeypatch.setattr(desk_tickets, "STORE_PATH", tmp_path / "tickets.json")
+        issue = desk_tickets.create(
+            "issue", "Printeren", "2. etasje står.",
+            name="Ada", email="ada@frid.no", role="moderator",
+        )
+        assert desk_tickets.is_unseen_for_reporter(issue) is False
+        desk_tickets.set_status(issue["id"], "in_progress")
+        row = desk_tickets.get(issue["id"])
+        assert desk_tickets.is_unseen_for_reporter(row) is True
+        seen = desk_tickets.mark_reporter_seen(issue["id"], "ada@frid.no", "moderator")
+        assert desk_tickets.is_unseen_for_reporter(seen) is False
+        desk_tickets.reply(
+            issue["id"], "Vi tar den.",
+            name="Operator", role="operator", staff=True,
+        )
+        row = desk_tickets.get(issue["id"])
+        assert desk_tickets.is_unseen_for_reporter(row) is True
+        desk_tickets.reply(
+            issue["id"], "Takk",
+            name="Ada", email="ada@frid.no", role="moderator",
+        )
+        row = desk_tickets.get(issue["id"])
+        assert desk_tickets.is_unseen_for_reporter(row) is False
+        assert desk_tickets.mark_reporter_seen(issue["id"], "bo@frid.no", "moderator") is None
+
+    def test_screenshots_persist_and_image_only_reply_is_allowed(self, tmp_path, monkeypatch):
+        from core import desk_tickets
+        monkeypatch.setattr(desk_tickets, "STORE_PATH", tmp_path / "tickets.json")
+        monkeypatch.setattr(desk_tickets, "ASSETS_DIR", tmp_path / "ticket-assets")
+        name = desk_tickets.save_image(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8, ".png")
+        issue = desk_tickets.create(
+            "issue", "Skjermbilde", "Se vedlegg.",
+            name="Ada", email="ada@frid.no", role="moderator",
+            images=[name],
+        )
+        assert issue["images"] == [name]
+        assert desk_tickets.image_path(name) is not None
+        assert desk_tickets.ticket_for_image(name)["id"] == issue["id"]
+        shot = desk_tickets.save_image(b"\x89PNG\r\n\x1a\n" + b"\x01" * 8, ".png")
+        replied = desk_tickets.reply(
+            issue["id"], "  ",
+            name="Operator", role="operator", staff=True,
+            images=[shot],
+        )
+        assert replied["replies"][0]["text"] == ""
+        assert replied["replies"][0]["images"] == [shot]
+        try:
+            desk_tickets.reply(issue["id"], "  ", name="Ada")
+            assert False, "expected ValueError"
+        except ValueError as e:
+            assert "text or image" in str(e)
+
+    def test_empty_subject_is_refused(self, tmp_path, monkeypatch):
+        from core import desk_tickets
+        monkeypatch.setattr(desk_tickets, "STORE_PATH", tmp_path / "tickets.json")
+        try:
+            desk_tickets.create("issue", "  ", "body", name="Ada")
+            assert False, "expected ValueError"
+        except ValueError:
+            pass
+
+    def test_old_done_status_reads_as_finished(self, tmp_path, monkeypatch):
+        from core import desk_tickets
+        path = tmp_path / "tickets.json"
+        monkeypatch.setattr(desk_tickets, "STORE_PATH", path)
+        path.write_text(
+            '[{"id":"a1","kind":"issue","subject":"x","description":"y",'
+            '"status":"done","name":"Ada","email":"","role":"","ts":1,"updated":1,"replies":[]}]\n',
+            encoding="utf-8",
+        )
+        rows = desk_tickets.list_all()
+        assert rows[0]["status"] == "finished"
+
+    def test_old_new_status_stays_new(self, tmp_path, monkeypatch):
+        from core import desk_tickets
+        path = tmp_path / "tickets.json"
+        monkeypatch.setattr(desk_tickets, "STORE_PATH", path)
+        path.write_text(
+            '[{"id":"a1","kind":"issue","subject":"x","description":"y",'
+            '"status":"new","name":"Ada","email":"","role":"","ts":1,"updated":1,"replies":[]}]\n',
+            encoding="utf-8",
+        )
+        rows = desk_tickets.list_all()
+        assert rows[0]["status"] == "new"
+
+
 class TestKnowledgeCoverage:
     """Where people ask, against what has actually been written down.
 
@@ -920,6 +1547,20 @@ class TestKnowledgeCoverage:
         ))
         assert skill_coverage(tmp_path)["windows-endpoint"]["documented"] is False
 
+    def test_a_question_in_an_empty_skill_lacks_a_premade_answer(self, tmp_path):
+        from core.knowledge import lacks_premade_answer
+        self._skill(tmp_path, "m365-office", "Outlook Word Excel Teams")
+        self._skill(tmp_path, "frid-nettverk", "wifi", (
+            "## Getting online\n\nGo to <https://onboard.frid-iks.no/>.\n"
+        ))
+        assert lacks_premade_answer(
+            "Word viser en feil når jeg lagrer", workspace=tmp_path
+        ) == "m365-office"
+        assert lacks_premade_answer("hei", workspace=tmp_path) is None
+        assert lacks_premade_answer(
+            "wifi virker ikke", workspace=tmp_path
+        ) is None
+
     # ---- classification -------------------------------------------------
 
     def test_a_new_skill_is_classifiable_from_its_frontmatter_alone(self, tmp_path):
@@ -972,6 +1613,44 @@ class TestKnowledgeCoverage:
         from core.knowledge import classify_topic, skill_coverage
         assert skill_coverage(tmp_path) == {}
         assert classify_topic("wifi", workspace=tmp_path) is None
+
+    def test_the_matching_skill_is_prepended_to_the_message(self, tmp_path):
+        from core.knowledge import with_matching_skill
+        self._skill(tmp_path, "frid-nettverk", "wifi", "Certificate first.\n")
+        out = with_matching_skill("wifi virker ikke", workspace=tmp_path)
+        assert out.startswith("[Skill file already included: skills/frid-nettverk/SKILL.md.")
+        assert "Certificate first." in out
+        assert out.endswith("wifi virker ikke")
+
+    def test_a_greeting_is_not_wrapped_in_a_skill(self, tmp_path):
+        from core.knowledge import with_matching_skill
+        self._skill(tmp_path, "frid-nettverk", "wifi", "Certificate first.\n")
+        assert with_matching_skill("hei", workspace=tmp_path) == "hei"
+
+    def test_a_short_follow_up_is_not_wrapped_in_a_different_skill(self, tmp_path):
+        """"en elev" is Visma InSchool. Mid-MFA-reset that would ask for bruker@afk.no."""
+        from core.knowledge import FOLLOW_UP_MIN_TOKENS, classify_topic, with_matching_skill
+        self._skill(tmp_path, "visma-inschool", "school pupil timetable",
+                    "Logg inn med bruker@afk.no\n")
+        self._skill(tmp_path, "entra-azure", "MFA sign-in licence",
+                    "Search Azure by name.\n")
+        assert classify_topic("en elev", workspace=tmp_path) == "visma-inschool"
+        assert "bruker@afk.no" in with_matching_skill("en elev", workspace=tmp_path)
+        assert with_matching_skill(
+            "en elev", workspace=tmp_path, min_tokens=FOLLOW_UP_MIN_TOKENS,
+        ) == "en elev"
+
+    def test_staff_mfa_reset_classifies_as_entra(self, tmp_path):
+        from core.knowledge import classify_topic
+        self._skill(tmp_path, "frid-nettverk", "wifi Authenticator setup")
+        self._skill(tmp_path, "entra-azure", "Entra ID MFA sign-in")
+        self._skill(tmp_path, "visma-inschool", "school pupil timetable")
+        assert classify_topic("Noen trenger MFA-reset", workspace=tmp_path) == "entra-azure"
+
+    def test_a_bad_skill_id_does_not_leave_the_skills_folder(self, tmp_path):
+        from core.knowledge import skill_body
+        assert skill_body("../etc", workspace=tmp_path) is None
+        assert skill_body("frid-nettverk/../../x", workspace=tmp_path) is None
 
     # ---- the report -----------------------------------------------------
 
@@ -1075,6 +1754,249 @@ class TestPupilCliInvocation:
         blocks = payload["message"]["content"]
         assert [b["type"] for b in blocks] == ["text"]
 
+    def test_empty_system_prompt_is_not_written_to_a_file(self):
+        """A resumed turn must not replace the cached bootstrap with a blank file."""
+        import asyncio
+        from core import cli_backend
+
+        captured = {}
+
+        async def fake_exec(*cmd, **kwargs):
+            captured["cmd"] = list(cmd)
+
+            class Proc:
+                returncode = 0
+
+                async def communicate(self, input=None):
+                    payload = {
+                        "type": "result",
+                        "result": "ok",
+                        "session_id": "sid",
+                        "modelUsage": {},
+                    }
+                    return (json.dumps(payload).encode(), b"")
+
+            return Proc()
+
+        with patch("asyncio.create_subprocess_exec", fake_exec):
+            asyncio.get_event_loop_policy().new_event_loop().run_until_complete(
+                cli_backend._invoke(
+                    "m", "", "hei", ["--resume", "x"], 30, "staff", None
+                )
+            )
+        assert "--system-prompt-file" not in captured["cmd"]
+
+    def test_live_staff_call_uses_stream_json_output_not_input(self):
+        import asyncio
+        from core import cli_backend
+
+        captured = {}
+
+        async def on_text(delta):
+            pass
+
+        async def fake_exec(*cmd, **kwargs):
+            captured["cmd"] = list(cmd)
+
+            class Stdin:
+                def write(self, data):
+                    captured["stdin"] = data
+                async def drain(self):
+                    pass
+                def close(self):
+                    pass
+
+            class Stream:
+                def __init__(self, data):
+                    self._data = data
+                    self._sent = False
+                async def read(self, n=-1):
+                    if self._sent:
+                        return b""
+                    self._sent = True
+                    return self._data
+
+            payload = (
+                json.dumps({
+                    "type": "result",
+                    "result": "ok",
+                    "session_id": "sid",
+                    "modelUsage": {},
+                }) + "\n"
+            ).encode()
+
+            class Proc:
+                returncode = 0
+                stdin = Stdin()
+                stdout = Stream(payload)
+                stderr = Stream(b"")
+                async def wait(self):
+                    return 0
+                def kill(self):
+                    pass
+
+            return Proc()
+
+        with patch("asyncio.create_subprocess_exec", fake_exec):
+            asyncio.get_event_loop_policy().new_event_loop().run_until_complete(
+                cli_backend._invoke(
+                    "m", "sys", "hei", ["--session-id", "x"], 30, "staff",
+                    None, on_text=on_text,
+                )
+            )
+        cmd = captured["cmd"]
+        assert "--allowedTools" in cmd
+        assert "--input-format" not in cmd
+        assert "--include-partial-messages" in cmd
+        assert cmd[cmd.index("--output-format") + 1] == "stream-json"
+
+
+class TestChatTokenStreaming:
+    """ /chat must show tokens as they arrive, not after claude.exe exits. """
+
+    def test_text_delta_is_extracted(self):
+        from core.cli_backend import _event_text_delta, _event_starts_tool_use
+        obj = {
+            "type": "stream_event",
+            "event": {
+                "type": "content_block_delta",
+                "delta": {"type": "text_delta", "text": "Hei"},
+            },
+        }
+        assert _event_text_delta(obj) == "Hei"
+        assert not _event_starts_tool_use(obj)
+
+    def test_tool_use_start_is_detected(self):
+        from core.cli_backend import _event_starts_tool_use, _event_tool_name
+        obj = {
+            "type": "stream_event",
+            "event": {
+                "type": "content_block_start",
+                "content_block": {"type": "tool_use", "name": "Read"},
+            },
+        }
+        assert _event_starts_tool_use(obj)
+        assert _event_tool_name(obj) == "Read"
+
+    @pytest.mark.anyio
+    async def test_web_yields_tokens_without_duplicating_the_result(self):
+        from core.agent_loop import AgentLoop
+
+        sid = str(uuid.uuid4())
+        sm = MagicMock()
+        sm.get_or_create = AsyncMock(return_value={
+            "session_id": sid,
+            "channel": "web",
+            "peer": "dev:x|1",
+            "model": "claude-sonnet-4-6",
+            "claude_session_id": None,
+            "tier": "student",
+        })
+        sm.pop_pending_context = AsyncMock(return_value=None)
+        sm.append_message = AsyncMock()
+        sm.update_activity = AsyncMock()
+        sm.set_claude_session_id = AsyncMock()
+
+        async def fake_call(**kwargs):
+            on_text = kwargs.get("on_text")
+            if on_text:
+                await on_text("He")
+                await on_text("i")
+            return "Hei", "sid", {}
+
+        with patch("core.agent_loop.call_claude", fake_call), \
+             patch("core.agent_loop.build_system_prompt",
+                   lambda is_new_session, tier, **kwargs: f"SYS:{tier}"):
+            chunks = []
+            async for chunk in AgentLoop(sm).run("web", "dev:x|1", "hei"):
+                chunks.append(chunk)
+
+        assert chunks.count("He") == 1
+        assert chunks.count("i") == 1
+        assert "Hei" not in chunks
+        assistant = [
+            c.args for c in sm.append_message.await_args_list if c.args[1] == "assistant"
+        ]
+        assert assistant == [(sid, "assistant", "Hei")]
+
+    @pytest.mark.anyio
+    async def test_web_yields_tool_status_without_saving_it(self):
+        from core.agent_loop import AgentLoop
+
+        sid = str(uuid.uuid4())
+        sm = MagicMock()
+        sm.get_or_create = AsyncMock(return_value={
+            "session_id": sid,
+            "channel": "web",
+            "peer": "dev:x|1",
+            "model": "claude-sonnet-4-6",
+            "claude_session_id": None,
+            "tier": "staff",
+        })
+        sm.pop_pending_context = AsyncMock(return_value=None)
+        sm.append_message = AsyncMock()
+        sm.update_activity = AsyncMock()
+        sm.set_claude_session_id = AsyncMock()
+
+        async def fake_call(**kwargs):
+            on_tool = kwargs.get("on_tool")
+            if on_tool:
+                await on_tool("Read")
+            return "svar", "sid", {}
+
+        with patch("core.agent_loop.call_claude", fake_call), \
+             patch("core.agent_loop.build_system_prompt",
+                   lambda is_new_session, tier, **kwargs: f"SYS:{tier}"), \
+             patch("core.agent_loop.with_matching_skill", lambda msg, tier="", **kwargs: msg):
+            chunks = []
+            async for chunk in AgentLoop(sm).run("web", "dev:x|1", "hei"):
+                chunks.append(chunk)
+
+        assert {"type": "status", "kind": "read"} in chunks
+        assistant = [
+            c.args for c in sm.append_message.await_args_list if c.args[1] == "assistant"
+        ]
+        assert assistant == [(sid, "assistant", "svar")]
+
+    @pytest.mark.anyio
+    async def test_staff_sees_the_skill_the_pupil_does_not(self):
+        from core.agent_loop import AgentLoop
+
+        seen = {}
+
+        async def _run(tier):
+            sm = MagicMock()
+            sm.get_or_create = AsyncMock(return_value={
+                "session_id": str(uuid.uuid4()),
+                "channel": "web",
+                "peer": "dev:x|1",
+                "model": "claude-sonnet-4-6",
+                "claude_session_id": None,
+                "tier": tier,
+            })
+            sm.pop_pending_context = AsyncMock(return_value=None)
+            sm.append_message = AsyncMock()
+            sm.update_activity = AsyncMock()
+            sm.set_claude_session_id = AsyncMock()
+
+            async def fake_call(**kwargs):
+                seen[tier] = kwargs["user_message"]
+                return "svar", "sid", {}
+
+            with patch("core.agent_loop.call_claude", fake_call), \
+                 patch("core.agent_loop.build_system_prompt",
+                       lambda is_new_session, tier, **kwargs: f"SYS:{tier}"), \
+                 patch("core.agent_loop.with_matching_skill",
+                       lambda msg, tier="", **kwargs: f"SKILL\n{msg}"):
+                async for _ in AgentLoop(sm).run("web", "dev:x|1", "wifi"):
+                    pass
+
+        await _run("staff")
+        await _run("student")
+        assert seen["staff"].startswith("SKILL\n")
+        assert seen["student"].startswith("[Denne meldingen er fra en ELEV.")
+        assert "SKILL\n" not in seen["student"]
+
 
 class TestHelixYearlyClaudeToken:
     """Helix may use a setup-token from the secret store. It must not inherit
@@ -1133,6 +2055,15 @@ class TestReadableSubjects:
         wifi = remember_subject("hvordan logger jeg på FRID-nettverket", path=path)
         payroll = remember_subject("hvor registrerer jeg egenmelding", path=path)
         assert wifi != payroll
+
+    def test_missing_label_names_the_gap(self, tmp_path):
+        from core.subjects import missing_label
+        path = tmp_path / "subjects.json"
+        label = missing_label("Word viser en feil når jeg lagrer", "m365-office", path=path)
+        assert label.lower().startswith("missing ")
+        assert "word" in label.lower()
+        again = missing_label("feil i Word når jeg lagrer", "m365-office", path=path)
+        assert again == label
 
 
 class TestOperatorAccountStaysOffTheChat:
@@ -1749,6 +2680,21 @@ class TestSessionFlows:
         assert session["peer"] == "user123"
 
     @pytest.mark.anyio
+    async def test_pupil_web_chat_opens_on_the_fast_model(self, tmp_path):
+        cfg = _make_temp_config(tmp_path)
+        sm = self._make_sm(tmp_path)
+        with patch("core.session_manager.get_config", return_value=cfg):
+            await sm.start()
+            pupil = await sm.get_or_create("web", "elev|1", tier="student")
+            staff = await sm.get_or_create("web", "ansatt|1", tier="staff")
+            other = await sm.get_or_create("discord", "user123")
+            await sm.stop()
+        assert pupil["model"] == cfg.models.chat_id
+        assert staff["model"] == cfg.models.default_id
+        assert other["model"] == cfg.models.default_id
+        assert pupil["model"] != staff["model"]
+
+    @pytest.mark.anyio
     async def test_same_channel_peer_returns_same_session(self, tmp_path):
         cfg = _make_temp_config(tmp_path)
         sm = self._make_sm(tmp_path)
@@ -1872,6 +2818,71 @@ class TestSessionFlows:
 # ---------------------------------------------------------------------------
 # Slash command routing
 # ---------------------------------------------------------------------------
+
+class TestEmployeeCommandScope:
+    """FRID employees get own-session commands only. Skills and shared state stay
+    with the operator and with people given the admin access role.
+    """
+
+    def test_scope_by_tier(self):
+        from channels.slash_commands import command_permitted, command_scope_for
+        assert command_scope_for("student") is None
+        assert command_scope_for("staff") == "employee"
+        assert command_scope_for("moderator") == "employee"
+        assert command_scope_for("admin") == "all"
+        assert command_scope_for("staff", operator=True) == "all"
+        assert command_permitted("/status", "employee")
+        assert command_permitted("/think", "employee")
+        assert not command_permitted("/skills", "employee")
+        assert not command_permitted("/session", "employee")
+        assert not command_permitted("/dokumenter", "employee")
+        assert not command_permitted("/nettside", "employee")
+        assert not command_permitted("/queue", "employee")
+        assert command_permitted("/skills", "all")
+        assert command_permitted("/nettside", "all")
+        assert not command_permitted("/status", None)
+
+    @pytest.mark.anyio
+    async def test_employee_cannot_create_a_skill(self, tmp_path):
+        sent = []
+
+        async def send(text):
+            sent.append(text)
+
+        cfg = _make_temp_config(tmp_path)
+        with patch("channels.slash_commands.get_config", return_value=cfg):
+            from channels.slash_commands import handle_slash
+            result = await handle_slash(
+                "/skill new triage flow", "web", "ansatt",
+                MagicMock(), MagicMock(), send, scope="employee",
+            )
+
+        assert result is True
+        assert not (tmp_path / "skills" / "triage-flow" / "SKILL.md").exists()
+        assert any("ikke tilgjengelig" in s for s in sent)
+
+    @pytest.mark.anyio
+    async def test_employee_help_lists_only_own_session_commands(self, tmp_path):
+        sent = []
+
+        async def send(text):
+            sent.append(text)
+
+        cfg = _make_temp_config(tmp_path)
+        with patch("channels.slash_commands.get_config", return_value=cfg):
+            from channels.slash_commands import handle_slash
+            await handle_slash(
+                "/help", "web", "ansatt",
+                MagicMock(), MagicMock(), send, scope="employee",
+            )
+
+        combined = "\n".join(sent)
+        assert "/status" in combined
+        assert "/new" in combined
+        assert "/skill" not in combined
+        assert "/session" not in combined
+        assert "/queue" not in combined
+
 
 class TestSlashCommands:
     """Tests for channels/slash_commands.py routing logic."""
@@ -2478,6 +3489,33 @@ class TestAdminApiIntegration:
         assert saved.status_code == 200
         people = {p["email"]: p for p in saved.json()["people"]}
         assert people["elev@afk.no"]["override"] == "blocked"
+        assert people["elev@afk.no"]["effective"] == "blocked"
+
+        pupil = client.put(
+            "/api/permissions",
+            json={"email": "elev@afk.no", "access": "student"},
+            headers=headers,
+        )
+        assert pupil.status_code == 200
+        assert "elev@afk.no" not in [
+            p["email"] for p in pupil.json()["people"] if p.get("override")
+        ]
+
+        mod = client.put(
+            "/api/permissions",
+            json={"email": "leder@frid-iks.no", "access": "moderator"},
+            headers=headers,
+        )
+        people = {p["email"]: p for p in mod.json()["people"]}
+        assert people["leder@frid-iks.no"]["override"] == "moderator"
+
+        admin = client.put(
+            "/api/permissions",
+            json={"email": "it@frid-iks.no", "access": "admin"},
+            headers=headers,
+        )
+        people = {p["email"]: p for p in admin.json()["people"]}
+        assert people["it@frid-iks.no"]["override"] == "admin"
 
         probe = client.put(
             "/api/permissions",
@@ -2632,7 +3670,7 @@ class TestCommandTierGate:
 
         seen = {"slash": [], "agent": []}
 
-        async def fake_slash(message, channel, peer, sm, al, send_fn):
+        async def fake_slash(message, channel, peer, sm, al, send_fn, **kwargs):
             seen["slash"].append(message)
             await send_fn("kommando kjørt")
             return True
@@ -2674,6 +3712,45 @@ class TestCommandTierGate:
             "/status",
         )
         assert seen["slash"] == ["/status"]
+        assert seen["agent"] == []
+
+    def test_staff_cannot_run_skill_commands(self, monkeypatch):
+        seen = self._send(
+            monkeypatch,
+            {"sub": "dev:ansatt@frid.no", "role": "user", "tier": "staff"},
+            "/skills",
+        )
+        assert seen["slash"] == []
+        assert seen["agent"] == []
+
+    def test_moderator_cannot_run_skill_commands(self, monkeypatch):
+        seen = self._send(
+            monkeypatch,
+            {"sub": "dev:leder@frid-iks.no", "role": "user", "tier": "moderator"},
+            "/skill new foo",
+        )
+        assert seen["slash"] == []
+        assert seen["agent"] == []
+
+    def test_admin_can_run_skill_commands(self, monkeypatch):
+        seen = self._send(
+            monkeypatch,
+            {
+                "sub": "dev:it@frid-iks.no", "email": "it@frid-iks.no",
+                "role": "admin", "tier": "admin",
+            },
+            "/skills",
+        )
+        assert seen["slash"] == ["/skills"]
+        assert seen["agent"] == []
+
+    def test_staff_cannot_reach_nettside(self, monkeypatch):
+        seen = self._send(
+            monkeypatch,
+            {"sub": "dev:ansatt@frid.no", "role": "user", "tier": "staff"},
+            "/nettside https://example.com",
+        )
+        assert seen["slash"] == []
         assert seen["agent"] == []
 
     def test_student_slash_reaches_the_agent_as_text(self, monkeypatch):
@@ -2938,6 +4015,89 @@ class TestChatAuditRecords:
         refusals = [f for e, f in recorded if e == "chat_scope_refusal"]
         assert len(refusals) == 1
         assert "mattoppgave" in refusals[0]["content_preview"].lower()
+        assert "jeg kan bare hjelpe med it" in refusals[0]["reply"].lower()
+
+    def test_an_undocumented_question_logs_the_conversation(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("core.subjects.CATALOG_PATH", tmp_path / "subjects.json")
+        recorded = self._send(
+            monkeypatch,
+            {"sub": "dev:ansatt@frid.no", "email": "ansatt@frid.no",
+             "name": "Ada", "role": "user", "tier": "staff"},
+            "Word viser en feil når jeg lagrer dokumentet",
+            reply="Jeg har ikke en lokal prosedyre for den Word-feilen.",
+        )
+        gaps = [f for e, f in recorded if e == "chat_knowledge_gap"]
+        assert len(gaps) == 1
+        rec = gaps[0]
+        assert rec["topic"] == "m365-office"
+        assert rec["label"].lower().startswith("missing ")
+        assert "word" in rec["label"].lower()
+        assert rec["session_id"] == "s1"
+        roles = [m["role"] for m in rec["messages"]]
+        assert roles == ["user", "assistant"]
+        assert "Word" in rec["messages"][0]["content"]
+        assert "lokal prosedyre" in rec["messages"][1]["content"]
+
+    def test_a_documented_question_is_not_a_knowledge_gap(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("core.subjects.CATALOG_PATH", tmp_path / "subjects.json")
+        recorded = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "email": "elev@afk.no",
+             "role": "user", "tier": "student"},
+            "Jeg får ikke koblet meg til wifi på skolen",
+        )
+        assert not [e for e, _ in recorded if e == "chat_knowledge_gap"]
+
+    def test_a_later_turn_can_be_the_undocumented_one(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("core.subjects.CATALOG_PATH", tmp_path / "subjects.json")
+        client, recorded = self._client(
+            monkeypatch,
+            {"sub": "dev:ansatt@frid.no", "email": "ansatt@frid.no",
+             "role": "user", "tier": "staff"},
+        )
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            while ws.receive_json().get("status") != "connected":
+                pass
+            for text in ("hei", "Word viser en feil når jeg lagrer"):
+                ws.send_json({"message": text})
+                for _ in range(10):
+                    if ws.receive_json().get("done"):
+                        break
+        gaps = [f for e, f in recorded if e == "chat_knowledge_gap"]
+        assert len(gaps) == 1
+        asked = [m["content"] for m in gaps[0]["messages"] if m["role"] == "user"]
+        assert asked[0] == "hei"
+        assert "Word" in asked[1]
+
+    def test_two_undocumented_turns_log_the_conversation_once(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("core.subjects.CATALOG_PATH", tmp_path / "subjects.json")
+        client, recorded = self._client(
+            monkeypatch,
+            {"sub": "dev:ansatt@frid.no", "email": "ansatt@frid.no",
+             "role": "user", "tier": "staff"},
+        )
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.send_json({"token": "tok"})
+            while ws.receive_json().get("status") != "connected":
+                pass
+            for text in ("Word viser en feil", "og Excel krasjer også"):
+                ws.send_json({"message": text})
+                for _ in range(10):
+                    if ws.receive_json().get("done"):
+                        break
+        assert len([e for e, _ in recorded if e == "chat_knowledge_gap"]) == 1
+
+    def test_a_scope_refusal_is_not_a_knowledge_gap(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("core.subjects.CATALOG_PATH", tmp_path / "subjects.json")
+        recorded = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "email": "elev@afk.no",
+             "role": "user", "tier": "student"},
+            "Kan du løse denne mattoppgaven for meg?",
+            reply="Jeg kan bare hjelpe med IT på skolen. Spør læreren din om matte.",
+        )
+        assert not [e for e, _ in recorded if e == "chat_knowledge_gap"]
 
     def test_staff_reply_that_mentions_the_phrase_is_not_a_refusal(self, monkeypatch):
         """Staff have no scope to break, so the phrase means nothing for them."""
@@ -3083,27 +4243,32 @@ class TestPupilKeepsTheSolution:
 
 
 class TestPupilImagesAreNotPermanent:
-    """Nothing a pupil sends becomes part of the knowledge base.
+    """Nothing a pupil or employee sends becomes part of the knowledge base.
 
-    Only a command can add an image to it, and pupils have no commands. A staff
-    screenshot is still persisted, because that is how documentation gets written.
+    Only the operator and Users-tab admins persist screenshots into assets/.
+    Employees' commands are own-session only, so their uploads stay temporary.
     """
 
-    def _send_with_image(self, monkeypatch, tmp_path, tier: str):
+    def _send_with_image(
+        self, monkeypatch, tmp_path, tier: str, role: str = "user", sub: str = "dev:x@y.no",
+    ):
         import importlib
         import web.app as app_mod
         importlib.reload(app_mod)
 
+        claims = {"sub": sub, "role": role, "tier": tier}
+        if role == "admin" and tier == "admin":
+            claims["email"] = "it@frid-iks.no"
         monkeypatch.setattr(
             app_mod, "_decode_token",
-            lambda token: {"sub": "dev:x@y.no", "role": "user", "tier": tier},
+            lambda token: dict(claims) if token == "tok" else None,
         )
 
         img = tmp_path / "skjermbilde.png"
         img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
         monkeypatch.setitem(
             app_mod._UPLOADS, "up1",
-            {"path": str(img), "owner": "dev:x@y.no", "at": time.time()},
+            {"path": str(img), "owner": sub, "at": time.time()},
         )
 
         assets = tmp_path / "assets"
@@ -3156,8 +4321,25 @@ class TestPupilImagesAreNotPermanent:
         assert "documentation assets" not in seen[0]
         assert "asset:" not in seen[0]
 
-    def test_staff_screenshot_is_still_persisted(self, monkeypatch, tmp_path):
-        seen, assets, _img = self._send_with_image(monkeypatch, tmp_path, "staff")
+    def test_staff_screenshot_is_not_persisted(self, monkeypatch, tmp_path):
+        seen, assets, img = self._send_with_image(monkeypatch, tmp_path, "staff")
+        assert not assets.exists() or list(assets.iterdir()) == [], \
+            "an employee's screenshot was copied into the knowledge base"
+        assert seen and str(img) in seen[0]
+        assert "documentation assets" not in seen[0]
+
+    def test_admin_screenshot_is_persisted(self, monkeypatch, tmp_path):
+        seen, assets, _img = self._send_with_image(
+            monkeypatch, tmp_path, "admin", role="admin",
+        )
+        stored = list(assets.iterdir())
+        assert len(stored) == 1
+        assert "documentation assets" in seen[0]
+
+    def test_operator_screenshot_is_persisted(self, monkeypatch, tmp_path):
+        seen, assets, _img = self._send_with_image(
+            monkeypatch, tmp_path, "staff", role="admin", sub="admin",
+        )
         stored = list(assets.iterdir())
         assert len(stored) == 1
         assert "documentation assets" in seen[0]
@@ -3536,22 +4718,59 @@ class TestChatInsights:
             assert {"skill", "file", "asked", "procedures", "documented",
                     "undocumented_demand"} <= set(row)
             assert row["file"] == f"skills/{row['skill']}/SKILL.md"
-        assert data["totals"]["undocumented"] == sum(
-            r["undocumented_demand"] for r in data["coverage"]
-        )
+        assert data["totals"]["undocumented"] == 0
+
+    def test_knowledge_gaps_are_the_undocumented_card(self, monkeypatch, tmp_path):
+        data = self._insights(monkeypatch, tmp_path, [
+            self._started("wifi virker ikke") | {"topic": "frid-nettverk"},
+            {"ts": time.time(), "event": "chat_knowledge_gap",
+             "sender_id": "ansatt@frid.no", "name": "Ada",
+             "tier": "staff",
+             "topic": "m365-office",
+             "label": "missing Word error solution",
+             "content_preview": "Word viser en feil",
+             "session_id": "s1",
+             "messages": [
+                 {"role": "user", "content": "Word viser en feil"},
+                 {"role": "assistant", "content": "Jeg har ikke en lokal prosedyre for dette."},
+             ]},
+            {"ts": time.time() + 1, "event": "chat_knowledge_gap",
+             "sender_id": "ansatt@frid.no",
+             "tier": "staff",
+             "topic": "m365-office",
+             "label": "missing Word error solution",
+             "session_id": "s1",
+             "messages": [
+                 {"role": "user", "content": "Word viser en feil"},
+                 {"role": "assistant", "content": "Jeg har ikke en lokal prosedyre for dette."},
+                 {"role": "user", "content": "den sier filen er ødelagt"},
+             ]},
+        ])
+        assert data["totals"]["undocumented"] == 1
+        assert len(data["recent_gaps"]) == 1
+        gap = data["recent_gaps"][0]
+        assert gap["label"] == "missing Word error solution"
+        assert gap["email"] == "ansatt@frid.no"
+        assert gap["name"] == "Ada"
+        assert len(gap["messages"]) == 3
 
     def test_refusals_and_blocked_commands_are_counted(self, monkeypatch, tmp_path):
         data = self._insights(monkeypatch, tmp_path, [
             self._started("wifi"),
             {"ts": time.time(), "event": "chat_scope_refusal",
-             "sender_id": "elev@afk.no", "tier": "student",
-             "content_preview": "skriv et dikt"},
+             "sender_id": "elev@afk.no", "name": "Elev Elevsen",
+             "tier": "student",
+             "content_preview": "skriv et dikt",
+             "reply": "Jeg kan bare hjelpe med IT på skolen."},
             {"ts": time.time(), "event": "chat_command_blocked",
              "sender_id": "elev@afk.no", "tier": "student", "command": "/status"},
         ])
         assert data["totals"]["refusals"] == 1
         assert data["totals"]["blocked_commands"] == 1
         assert data["recent_refusals"][0]["asked"] == "skriv et dikt"
+        assert data["recent_refusals"][0]["email"] == "elev@afk.no"
+        assert data["recent_refusals"][0]["name"] == "Elev Elevsen"
+        assert "IT på skolen" in data["recent_refusals"][0]["reply"]
 
     def test_events_outside_the_window_are_left_out(self, monkeypatch, tmp_path):
         data = self._insights(monkeypatch, tmp_path, [
@@ -3911,4 +5130,153 @@ class TestCronRunResult:
         assert saved.crons[0].last_status == "error"
         assert "cli exit 1" in saved.crons[0].last_result
         config_mod._config_cache = None
+
+
+class TestCronScheduleHealth:
+    """A successful run yesterday must not look healthy if today's slot was skipped."""
+
+    def _cron(self, **kwargs):
+        from core.config import CronJob
+        return CronJob(name="morning", schedule="0 7 * * *", prompt="go", **kwargs)
+
+    def test_previous_fire_is_this_morning_after_seven(self):
+        from core.cron_health import previous_fire_time
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        now = datetime(2026, 8, 21, 15, 13, tzinfo=tz)
+        due = previous_fire_time("0 7 * * *", now, "Europe/Oslo")
+        assert due == datetime(2026, 8, 21, 7, 0, tzinfo=tz)
+
+    def test_previous_fire_is_yesterday_before_seven(self):
+        from core.cron_health import previous_fire_time
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        now = datetime(2026, 8, 21, 6, 59, tzinfo=tz)
+        due = previous_fire_time("0 7 * * *", now, "Europe/Oslo")
+        assert due == datetime(2026, 8, 20, 7, 0, tzinfo=tz)
+
+    def test_missed_when_last_run_was_yesterday(self):
+        from core.cron_health import schedule_state
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        cron = self._cron(
+            enabled=True,
+            last_status="ok",
+            last_run=datetime(2026, 8, 20, 7, 1, tzinfo=tz).isoformat(),
+        )
+        state = schedule_state(
+            cron, now=datetime(2026, 8, 21, 15, 0, tzinfo=tz), timezone="Europe/Oslo",
+        )
+        assert state["missed"] is True
+        assert state["expected_at"].startswith("2026-08-21T07:00")
+
+    def test_not_missed_when_it_ran_this_morning(self):
+        from core.cron_health import schedule_state
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        cron = self._cron(
+            enabled=True,
+            last_status="ok",
+            last_run=datetime(2026, 8, 21, 7, 2, tzinfo=tz).isoformat(),
+        )
+        state = schedule_state(
+            cron, now=datetime(2026, 8, 21, 15, 0, tzinfo=tz), timezone="Europe/Oslo",
+        )
+        assert state["missed"] is False
+
+    def test_not_missed_before_todays_slot(self):
+        from core.cron_health import schedule_state
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        cron = self._cron(
+            enabled=True,
+            last_status="ok",
+            last_run=datetime(2026, 8, 20, 7, 1, tzinfo=tz).isoformat(),
+        )
+        state = schedule_state(
+            cron, now=datetime(2026, 8, 21, 6, 50, tzinfo=tz), timezone="Europe/Oslo",
+        )
+        assert state["missed"] is False
+
+    def test_grace_period_right_after_due_time(self):
+        from core.cron_health import schedule_state
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        cron = self._cron(
+            enabled=True,
+            last_status="ok",
+            last_run=datetime(2026, 8, 20, 7, 1, tzinfo=tz).isoformat(),
+        )
+        state = schedule_state(
+            cron, now=datetime(2026, 8, 21, 7, 5, tzinfo=tz), timezone="Europe/Oslo",
+        )
+        assert state["missed"] is False
+
+    def test_paused_job_is_not_missed(self):
+        from core.cron_health import schedule_state
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        cron = self._cron(
+            enabled=False,
+            last_status="ok",
+            last_run=datetime(2026, 8, 20, 7, 1, tzinfo=tz).isoformat(),
+        )
+        state = schedule_state(
+            cron, now=datetime(2026, 8, 21, 15, 0, tzinfo=tz), timezone="Europe/Oslo",
+        )
+        assert state["missed"] is False
+
+    def test_weekday_schedule_skips_sunday(self):
+        from core.cron_health import previous_fire_time
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        # Friday 21 Aug 2026; previous weekday 08:00 is Friday.
+        now = datetime(2026, 8, 21, 10, 0, tzinfo=tz)
+        due = previous_fire_time("0 8 * * 1-5", now, "Europe/Oslo")
+        assert due == datetime(2026, 8, 21, 8, 0, tzinfo=tz)
+        sunday = datetime(2026, 8, 23, 10, 0, tzinfo=tz)
+        due_sun = previous_fire_time("0 8 * * 1-5", sunday, "Europe/Oslo")
+        assert due_sun == datetime(2026, 8, 21, 8, 0, tzinfo=tz)
+
+    def test_catch_up_after_a_late_morning_start(self):
+        from core.cron_health import should_catch_up
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        cron = self._cron(
+            enabled=True,
+            last_status="ok",
+            last_run=datetime(2026, 8, 20, 14, 15, tzinfo=tz).isoformat(),
+        )
+        assert should_catch_up(
+            cron, now=datetime(2026, 8, 21, 8, 10, tzinfo=tz), timezone="Europe/Oslo",
+        )
+        assert should_catch_up(
+            cron, now=datetime(2026, 8, 21, 7, 55, tzinfo=tz), timezone="Europe/Oslo",
+        )
+
+    def test_no_catch_up_in_the_afternoon(self):
+        from core.cron_health import should_catch_up
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        cron = self._cron(
+            enabled=True,
+            last_status="ok",
+            last_run=datetime(2026, 8, 20, 14, 15, tzinfo=tz).isoformat(),
+        )
+        assert not should_catch_up(
+            cron, now=datetime(2026, 8, 21, 15, 20, tzinfo=tz), timezone="Europe/Oslo",
+        )
+
+    def test_no_catch_up_when_this_morning_already_ran(self):
+        from core.cron_health import should_catch_up
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo("Europe/Oslo")
+        cron = self._cron(
+            enabled=True,
+            last_status="ok",
+            last_run=datetime(2026, 8, 21, 7, 56, tzinfo=tz).isoformat(),
+        )
+        assert not should_catch_up(
+            cron, now=datetime(2026, 8, 21, 8, 10, tzinfo=tz), timezone="Europe/Oslo",
+        )
 

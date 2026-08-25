@@ -197,7 +197,13 @@ class SessionManager:
         """
         cfg = get_config()
         if model is None:
-            model = cfg.models.default_id
+            # Pupil /chat uses the fast model. Staff /chat stays on the
+            # default (sonnet): MFA reset and similar procedures go wrong on
+            # haiku. Discord and the queue keep the general default.
+            if channel == "web" and tier == TIER_STUDENT:
+                model = cfg.models.chat_id
+            else:
+                model = cfg.models.default_id
 
         async with self._lock:
             # Try to find existing

@@ -55,6 +55,21 @@ you confirmed it. Do not leave a blank heading in this section — an unfilled
 template looks like a procedure. No employee names, birth numbers, or case
 details; describe roles and record types instead.
 
+---
+
+### Registrere egenmelding for en ansatt (lederoppgave)
+**Gjelder:** Leder som registrerer egenmelding på vegne av en ansatt
+**Slik gjør du:**
+1. Gå til **Meny → Ansatt → Fravaer → Registrer fravaer**
+2. Skriv inn den ansattes navn i feltet **Ansatt**
+3. Kontroller at **Fravaerstype** er satt til **Egenmelding** — dette er standardverdi,
+   men kan endres via nedtrekkslisten hvis en annen fraværstype er aktuelt
+4. Fyll inn **Fra dato** og **Til dato**
+5. Klikk **Lagre** — en grønn bekreftelsesmelding vises øverst på siden
+**Merk:** Registreringen er ikke ferdig behandlet etter Lagre. Nærmeste leder
+må i tillegg godkjenne fraværet under **Fravaer → Fravaersoversikt**.
+**Verifisert:** 2026-08-14
+
 ## Integration notes
 
 _(Record here: what syncs from Visma Enterprise to Entra/AD, how often, which

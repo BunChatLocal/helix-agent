@@ -14,14 +14,29 @@ import weakref
 from pathlib import Path
 from typing import AsyncGenerator, Optional, Union
 
-from core.config import get_config, TIER_STAFF, TIER_STUDENT
+from core.config import get_config, TIER_STAFF, TIER_STUDENT, is_staff_like
 from core.session_manager import SessionManager
 from core.context_engine import build_system_prompt, STUDENT_TURN_MARKER
 from core.cli_backend import call_claude
+from core.knowledge import FOLLOW_UP_MIN_TOKENS, with_matching_skill
 
 logger = logging.getLogger("helix.agent")
 
 NO_REPLY = "NO_REPLY"
+
+_TOOL_STATUS_KIND = {
+    "read": "read",
+    "glob": "search",
+    "grep": "search",
+    "webfetch": "web",
+    "websearch": "web",
+    "edit": "write",
+    "write": "write",
+}
+
+
+def _tool_status_kind(name: str) -> str:
+    return _TOOL_STATUS_KIND.get((name or "").lower(), "working")
 
 # The web layer prepends one of these per upload so the agent can open the file.
 # A pupil's agent has no file tools, so for that tier the path is pulled back out
@@ -101,6 +116,17 @@ class AgentLoop:
                 if tier == TIER_STUDENT:
                     prompt_message, images = _extract_images(user_message)
                     prompt_message = f"{STUDENT_TURN_MARKER}\n\n{prompt_message}"
+                elif is_staff_like(tier):
+                    # Skip the "list skills/ then Read SKILL.md" round-trip.
+                    # The transcript below still stores what the person wrote.
+                    # On a follow-up, skip injection unless the message is long
+                    # enough to be a new case — "en elev" otherwise attaches
+                    # visma-inschool and the bot asks for bruker@afk.no.
+                    prompt_message = with_matching_skill(
+                        user_message,
+                        tier,
+                        min_tokens=0 if is_new_session else FOLLOW_UP_MIN_TOKENS,
+                    )
 
                 # Overflow waits for a slot rather than launching another
                 # claude.exe. Web gets live place-in-line events (not saved);
@@ -116,6 +142,7 @@ class AgentLoop:
                 )
                 if channel == "web":
                     progress: asyncio.Queue = asyncio.Queue()
+                    streamed: list[str] = []
 
                     async def on_wait(position: int, waiting: int) -> None:
                         await progress.put({
@@ -124,8 +151,25 @@ class AgentLoop:
                             "waiting": waiting,
                         })
 
+                    async def on_text(delta: str) -> None:
+                        streamed.append(delta)
+                        await progress.put(delta)
+
+                    async def on_reset() -> None:
+                        streamed.clear()
+                        await progress.put({"replace": True})
+
+                    async def on_tool(name: str) -> None:
+                        await progress.put({
+                            "type": "status",
+                            "kind": _tool_status_kind(name),
+                        })
+
                     work = asyncio.create_task(
-                        call_claude(on_wait=on_wait, **claude_kwargs)
+                        call_claude(
+                            on_wait=on_wait, on_text=on_text, on_reset=on_reset,
+                            on_tool=on_tool, **claude_kwargs,
+                        )
                     )
                     try:
                         while not work.done():
@@ -160,6 +204,7 @@ class AgentLoop:
                     response_text, used_session_id, usage = await call_claude(
                         **claude_kwargs
                     )
+                    streamed = []
 
                 # Persist claude_session_id if new or changed (fresh start or resume fallback)
                 if used_session_id and used_session_id != claude_session_id:
@@ -167,6 +212,8 @@ class AgentLoop:
 
                 # NO_REPLY check — match prefix so "NO_REPLY\n\n(explanation)" is also suppressed
                 if response_text.strip().startswith(NO_REPLY):
+                    if streamed:
+                        yield {"replace": True}
                     yield NO_REPLY
                     return
 
@@ -175,7 +222,17 @@ class AgentLoop:
                 await self.session_manager.append_message(session_id, "assistant", response_text)
                 await self.session_manager.update_activity(session_id, usage)
 
-                yield response_text
+                # /chat already received tokens as they arrived. Only send what
+                # the UI does not yet have, so the bubble does not double.
+                shown = "".join(streamed)
+                if not shown:
+                    yield response_text
+                elif response_text.startswith(shown):
+                    rest = response_text[len(shown):]
+                    if rest:
+                        yield rest
+                elif shown != response_text:
+                    yield {"replace": True, "chunk": response_text}
 
             except Exception as e:
                 logger.error(f"Agent loop error [{channel}:{peer}]: {e}\n{traceback.format_exc()}")

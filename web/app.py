@@ -32,13 +32,19 @@ from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from core.config import get_config, save_config, TIER_STAFF, TIER_STUDENT, ACCESS_BLOCKED
+from core.config import (
+    get_config, save_config,
+    TIER_STAFF, TIER_STUDENT, TIER_MODERATOR, TIER_ADMIN, ACCESS_BLOCKED,
+    ADMITTED_ACCESS,
+)
 from core import dev_passwords as dev_pw
 from core.skill_manager import create_skill, list_skills, read_skill, write_skill
 from security.auth import RateLimiter
 from security.secrets import get_secret, set_secret
 from security.input_validator import sanitize_for_context
-from channels.slash_commands import handle_slash
+from channels.slash_commands import (
+    EMPLOYEE_COMMAND_REFUSED, command_permitted, command_scope_for, handle_slash,
+)
 from main import VERSION
 
 logger = logging.getLogger("helix.web")
@@ -147,8 +153,10 @@ def _create_token(
 ) -> str:
     """Mint a session JWT.
 
-    role="admin" — the operator, via the web password. Full management API.
-    role="user"  — signed in through Entra. Chat only, own session only.
+    role="admin" — the operator, via the web password, or a person given the
+    admin access role. Full management API.
+    role="user"  — signed in through Entra or test login. Chat only, own session
+    only, unless their access role is admin.
 
     `role` decides whether the management API opens; `tier` decides what may be
     asked and which commands exist. They are independent: the operator is
@@ -180,7 +188,12 @@ def _tier(claims: dict) -> str:
     the whole fix.
     """
     tier = claims.get("tier")
-    return tier if tier in (TIER_STAFF, TIER_STUDENT) else TIER_STUDENT
+    return tier if tier in ADMITTED_ACCESS else TIER_STUDENT
+
+
+def _chat_token_role(tier: str) -> str:
+    """Users-tab admins hold the management API; everyone else is chat-only."""
+    return "admin" if tier == TIER_ADMIN else "user"
 
 
 def _claims_email(claims: dict) -> str:
@@ -193,18 +206,33 @@ def _claims_email(claims: dict) -> str:
     return ""
 
 
+def _desk_author(claims: dict) -> dict:
+    """Who is speaking in the operator-panel room."""
+    email = _claims_email(claims)
+    kind = claims.get("_console") or _console_kind(claims) or ""
+    name = (claims.get("name") or "").strip()
+    if kind == "operator" and not email:
+        name = name or "Operator"
+    return {
+        "name": name or email or "unknown",
+        "email": email,
+        "role": kind,
+    }
+
+
 def _live_access(claims: dict) -> tuple[str, bool]:
     """(tier, blocked) using operator overrides, then the token's own tier.
 
-    An override takes effect on the next chat turn without waiting for the JWT
-    to expire. The operator (role=admin) is never blocked from this list.
+    The operator (password login, no email on the token) is never blocked from
+    this list. A person given the admin access role still follows overrides, so
+    they can be blocked or demoted without waiting for the JWT to expire.
     """
-    if claims.get("role") == "admin":
+    if claims.get("role") == "admin" and not _claims_email(claims):
         return TIER_STAFF, False
     ov = get_config().tiers.override_for(_claims_email(claims))
     if ov == ACCESS_BLOCKED:
         return TIER_STUDENT, True
-    if ov in (TIER_STAFF, TIER_STUDENT):
+    if ov in ADMITTED_ACCESS:
         return ov, False
     return _tier(claims), False
 
@@ -226,29 +254,68 @@ def _verify_token(token: str) -> bool:
     return _decode_token(token) is not None
 
 
-async def require_auth(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+def _console_kind(claims: dict) -> str | None:
+    """Who may use the operator panel: operator, admin, moderator, or nobody.
+
+    Live overrides win, so demoting someone closes the panel on the next request
+    without waiting for their JWT to expire.
+    """
+    if not claims:
+        return None
+    if claims.get("role") == "admin" and not _claims_email(claims):
+        return "operator"
+    tier, blocked = _live_access(claims)
+    if blocked:
+        return None
+    if tier == TIER_ADMIN:
+        return "admin"
+    if tier == TIER_MODERATOR:
+        return "moderator"
+    return None
+
+
+def _is_afk_email(email: str) -> bool:
+    domain = (email or "").rsplit("@", 1)[-1].lower()
+    return domain in {d.lower() for d in get_config().tiers.student_domains}
+
+
+def _request_claims(
+    credentials: Optional[HTTPAuthorizationCredentials],
 ) -> dict:
-    """Any valid session — admin or staff user. Returns the claims."""
     claims = _decode_token(credentials.credentials) if credentials else None
     if not claims:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     return claims
 
 
+async def require_auth(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+) -> dict:
+    """Any valid session — admin or staff user. Returns the claims."""
+    return _request_claims(credentials)
+
+
+async def require_console(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+) -> dict:
+    """Operator panel: operator, Users-tab admin, or moderator."""
+    claims = _request_claims(credentials)
+    kind = _console_kind(claims)
+    if kind is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    claims["_console"] = kind
+    return claims
+
+
 async def require_admin(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> dict:
-    """Operator only. Guards every management endpoint.
-
-    Staff signed in via Entra hold role="user" and are rejected here — they must
-    never reach memory, config, skills, sessions, logs or the queue.
-    """
-    claims = _decode_token(credentials.credentials) if credentials else None
-    if not claims:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
-    if claims.get("role") != "admin":
+    """Full management API. Moderators are refused here."""
+    claims = _request_claims(credentials)
+    kind = _console_kind(claims)
+    if kind not in ("operator", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    claims["_console"] = kind
     return claims
 
 
@@ -439,7 +506,7 @@ async def entra_callback(request: Request):
         logger.warning(f"Entra sign-in rejected: {upn} is blocked")
         return _entra_error(2)
     if cfg.tiers.tenant_ids or cfg.tiers.user_overrides:
-        if not access or access not in (TIER_STAFF, TIER_STUDENT):
+        if not access or access not in ADMITTED_ACCESS:
             logger.warning(f"Entra sign-in rejected: tenant {tid} is not admitted")
             return _entra_error(2)
         tier = access
@@ -456,7 +523,7 @@ async def entra_callback(request: Request):
             return _entra_error(2)
 
     token = _create_token(
-        sub=f"entra:{oid}", role="user", name=name, tier=tier,
+        sub=f"entra:{oid}", role=_chat_token_role(tier), name=name, tier=tier,
         email=upn,
     )
     logger.info(f"Entra sign-in: {name} <{upn}> as {tier}")
@@ -493,7 +560,7 @@ def _needs_set_password(email: str, cfg) -> bool:
     if _is_stress_account(email):
         return False
     access = cfg.tiers.access_for(email=email)
-    if access not in (TIER_STAFF, TIER_STUDENT):
+    if access not in ADMITTED_ACCESS:
         return False
     return dev_pw.get_hash(email) is None
 
@@ -544,7 +611,7 @@ async def dev_login(request: Request, body: dict):
     if access == ACCESS_BLOCKED:
         _record_login_failure(client_ip)
         raise HTTPException(403, "Denne kontoen er stengt for Zork.")
-    if not access or access not in (TIER_STAFF, TIER_STUDENT):
+    if not access or access not in ADMITTED_ACCESS:
         _record_login_failure(client_ip)
         staff = ", ".join(f"@{d}" for d in cfg.tiers.staff_domains)
         student = ", ".join(f"@{d}" for d in cfg.tiers.student_domains)
@@ -602,7 +669,7 @@ async def dev_login(request: Request, body: dict):
     )
     return {
         "token": _create_token(
-            sub=f"dev:{email}", role="user", name=name, tier=tier, email=email,
+            sub=f"dev:{email}", role=_chat_token_role(tier), name=name, tier=tier, email=email,
         ),
         "expires_in": cfg.web.jwt_expiry_hours * 3600,
     }
@@ -754,6 +821,78 @@ def _remember_subject(text: str, skill: str) -> str:
         return ""
 
 
+def _lacks_premade_answer(text: str, tier: str) -> str:
+    """Skill id if this question has no written procedure. Never raises."""
+    try:
+        from core.knowledge import lacks_premade_answer
+        return lacks_premade_answer(text, tier) or ""
+    except Exception as exc:
+        logger.debug(f"Could not check premade answer: {exc}")
+        return ""
+
+
+def _missing_label(text: str, skill: str) -> str:
+    """'missing …' heading for an undocumented question. Never raises."""
+    try:
+        from core.subjects import missing_label
+        return missing_label(text, skill) or ""
+    except Exception as exc:
+        logger.debug(f"Could not name knowledge gap: {exc}")
+        return ""
+
+
+_GAP_TURNS = 20
+_GAP_MSG_CHARS = 1500
+
+
+def _transcript_excerpt(messages: list) -> list[dict]:
+    """Conversation snapshot stored with a knowledge-gap record."""
+    out = []
+    for msg in (messages or [])[-_GAP_TURNS:]:
+        role = msg.get("role") or ""
+        if role not in ("user", "assistant"):
+            continue
+        cleaned = _clean_for_display(msg) if role == "user" else msg
+        text = cleaned.get("content") or ""
+        if not isinstance(text, str):
+            text = json.dumps(text, ensure_ascii=False)
+        text = text.strip()[:_GAP_MSG_CHARS]
+        if text:
+            out.append({"role": role, "content": text})
+    return out
+
+
+def _maybe_log_knowledge_gap(
+    claims: dict,
+    message: str,
+    conversation: list,
+    session_id: str,
+    already: bool,
+) -> bool:
+    """One audit record per conversation that asked something with no procedure.
+
+    Returns True once a gap has been recorded for this connection.
+    """
+    if already:
+        return True
+    topic = _lacks_premade_answer(message, _tier(claims))
+    if not topic:
+        return False
+    label = _missing_label(message, topic)
+    if not label:
+        return False
+    _audit_chat(
+        "chat_knowledge_gap",
+        claims,
+        content_preview=(message or "").strip(),
+        topic=topic,
+        label=label,
+        session_id=session_id or "",
+        messages=_transcript_excerpt(conversation),
+    )
+    return True
+
+
 def _title_from_transcript(messages: list) -> str:
     """Derive a conversation title from its first user message.
 
@@ -851,6 +990,29 @@ IMAGE_TYPES = {
     "image/webp": ".webp",
 }
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+# Screenshots attached to inbox reports. Names are server-issued; ownership is
+# checked on attach and again when serving, so a guessed filename is not enough.
+_TICKET_UPLOADS: dict[str, str] = {}
+
+
+async def _read_image_upload(file: UploadFile) -> tuple[bytes, str]:
+    """Return image bytes and a suffix, or raise. Trust the magic number."""
+    ctype = (file.content_type or "").split(";")[0].strip().lower()
+    if ctype not in IMAGE_TYPES:
+        raise HTTPException(400, "Only PNG, JPEG, GIF or WebP images are accepted")
+
+    data = await file.read(MAX_IMAGE_BYTES + 1)
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(413, "Image is larger than 5 MB")
+    if not data:
+        raise HTTPException(400, "Empty file")
+
+    sigs = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a")
+    is_webp = data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+    if not (any(data.startswith(s) for s in sigs) or is_webp):
+        raise HTTPException(400, "That file doesn't look like an image")
+    return data, IMAGE_TYPES[ctype]
 
 # ─── Documentation images ─────────────────────────────────────────────────────
 #
@@ -1070,24 +1232,10 @@ async def upload_image(file: UploadFile = File(...), claims: dict = Depends(requ
     file lands or later name an arbitrary file — the server keeps the mapping
     and rebuilds the path itself when the message is sent.
     """
-    ctype = (file.content_type or "").split(";")[0].strip().lower()
-    if ctype not in IMAGE_TYPES:
-        raise HTTPException(400, "Only PNG, JPEG, GIF or WebP images are accepted")
-
-    data = await file.read(MAX_IMAGE_BYTES + 1)
-    if len(data) > MAX_IMAGE_BYTES:
-        raise HTTPException(413, "Image is larger than 5 MB")
-    if not data:
-        raise HTTPException(400, "Empty file")
-
-    # Trust the bytes, not the declared type — check the magic number.
-    sigs = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a")
-    is_webp = data[:4] == b"RIFF" and data[8:12] == b"WEBP"
-    if not (any(data.startswith(s) for s in sigs) or is_webp):
-        raise HTTPException(400, "That file doesn't look like an image")
+    data, suffix = await _read_image_upload(file)
 
     from core.file_handler import save_file
-    name = f"{uuid.uuid4().hex}{IMAGE_TYPES[ctype]}"
+    name = f"{uuid.uuid4().hex}{suffix}"
     path = save_file(name, data)
     if not path:
         raise HTTPException(500, "Could not save the image")
@@ -1133,12 +1281,19 @@ def _resolve_uploads(ids: list, owner: str) -> list:
 @app.get("/api/me")
 async def whoami(claims: dict = Depends(require_auth)):
     cfg = get_config()
+    tier, blocked = _live_access(claims)
+    if blocked:
+        tier = TIER_STUDENT
+    kind = _console_kind(claims)
     return {
         "name": claims.get("name") or "",
+        "email": _claims_email(claims),
         "role": claims.get("role") or "user",
-        "tier": _tier(claims),
+        "tier": tier,
+        "console": kind is not None,
+        "console_role": kind,
         "test_mode": _dev_login_available(cfg),
-        "retention_days": _retention_days(_tier(claims)),
+        "retention_days": _retention_days(tier),
     }
 
 
@@ -1262,7 +1417,7 @@ async def health():
     return {"status": "ok"}
 
 
-@app.get("/api/status", dependencies=[Depends(require_admin)])
+@app.get("/api/status", dependencies=[Depends(require_console)])
 async def api_status():
     """Authenticated operational status — CLI, auth, prompt size, drift."""
     cfg = get_config()
@@ -1312,17 +1467,322 @@ async def api_status():
 
 _START_TIME = time.time()
 
+# Shared room for people on the operator panel. Not Discord/Telegram — those
+# stay in config. Clients are live websocket connections; the log is on disk.
+_desk_clients: set = set()
+
+
+def _desk_payload(entry: dict) -> dict:
+    return {
+        "id": entry.get("id") or "",
+        "ts": entry.get("ts") or 0,
+        "name": entry.get("name") or "",
+        "email": entry.get("email") or "",
+        "role": entry.get("role") or "",
+        "text": entry.get("text") or "",
+    }
+
+
+async def _desk_broadcast(payload: dict) -> None:
+    dead = []
+    for ws in list(_desk_clients):
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        _desk_clients.discard(ws)
+
+
+@app.get("/api/desk-chat", dependencies=[Depends(require_console)])
+async def desk_chat_history(claims: dict = Depends(require_console)):
+    from core import desk_chat
+    author = _desk_author(claims)
+    key = desk_chat.identity(author["email"], author["role"])
+    return {
+        "messages": [_desk_payload(m) for m in desk_chat.history()],
+        "unread": desk_chat.unread_count(key),
+        "you": key,
+    }
+
+
+@app.post("/api/desk-chat/read", dependencies=[Depends(require_console)])
+async def desk_chat_mark_read(claims: dict = Depends(require_console)):
+    from core import desk_chat
+    author = _desk_author(claims)
+    desk_chat.mark_read(desk_chat.identity(author["email"], author["role"]))
+    return {"unread": 0}
+
+
+@app.post("/api/desk-chat", dependencies=[Depends(require_console)])
+async def desk_chat_post(body: dict, claims: dict = Depends(require_console)):
+    from core import desk_chat
+    text = (body.get("text") or body.get("message") or "").strip()
+    if not text:
+        raise HTTPException(400, "text is required")
+    author = _desk_author(claims)
+    entry = desk_chat.post(
+        text, name=author["name"], email=author["email"], role=author["role"],
+    )
+    payload = {"type": "message", "message": _desk_payload(entry)}
+    await _desk_broadcast(payload)
+    return _desk_payload(entry)
+
+
+@app.websocket("/ws/desk")
+async def ws_desk(websocket: WebSocket):
+    """Live desk chat for the operator panel."""
+    await websocket.accept()
+    try:
+        auth_msg = await asyncio.wait_for(websocket.receive_json(), timeout=10)
+        claims = _decode_token(auth_msg.get("token", ""))
+        if not claims or _console_kind(claims) is None:
+            await websocket.send_json({"error": "Unauthorized"})
+            await websocket.close()
+            return
+        claims["_console"] = _console_kind(claims)
+    except Exception:
+        await websocket.close()
+        return
+
+    _desk_clients.add(websocket)
+    try:
+        from core import desk_chat
+        await websocket.send_json({
+            "type": "history",
+            "messages": [_desk_payload(m) for m in desk_chat.history()],
+        })
+        while True:
+            data = await websocket.receive_json()
+            text = (data.get("text") or data.get("message") or "").strip()
+            if not text:
+                continue
+            author = _desk_author(claims)
+            entry = desk_chat.post(
+                text, name=author["name"], email=author["email"], role=author["role"],
+            )
+            await _desk_broadcast({"type": "message", "message": _desk_payload(entry)})
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.debug(f"Desk websocket error: {e}")
+    finally:
+        _desk_clients.discard(websocket)
+
+
+def _ticket_images(entry: dict) -> list[str]:
+    names = entry.get("images") or []
+    if not isinstance(names, list):
+        return []
+    return [n for n in names if isinstance(n, str) and n]
+
+
+def _ticket_payload(entry: dict) -> dict:
+    return {
+        "id": entry.get("id") or "",
+        "ts": entry.get("ts") or 0,
+        "updated": entry.get("updated") or entry.get("ts") or 0,
+        "kind": entry.get("kind") or "",
+        "subject": entry.get("subject") or "",
+        "description": entry.get("description") or "",
+        "status": entry.get("status") or "new",
+        "name": entry.get("name") or "",
+        "email": entry.get("email") or "",
+        "role": entry.get("role") or "",
+        "reporter_seen": entry.get("reporter_seen") or entry.get("updated") or entry.get("ts") or 0,
+        "images": _ticket_images(entry),
+        "replies": [
+            {
+                "id": r.get("id") or "",
+                "ts": r.get("ts") or 0,
+                "name": r.get("name") or "",
+                "email": r.get("email") or "",
+                "role": r.get("role") or "",
+                "text": r.get("text") or "",
+                "images": _ticket_images(r),
+            }
+            for r in (entry.get("replies") or [])
+            if isinstance(r, dict)
+        ],
+    }
+
+
+def _claim_ticket_images(names, owner: str) -> list[str]:
+    from core import desk_tickets
+    out = []
+    seen = set()
+    for raw in (names or [])[:desk_tickets.IMAGES_MAX]:
+        name = str(raw or "").strip()
+        if not name or name in seen:
+            continue
+        if desk_tickets.image_path(name) is None:
+            continue
+        recorded = _TICKET_UPLOADS.get(name)
+        if recorded is not None and recorded != owner:
+            continue
+        if desk_tickets.ticket_for_image(name) is not None:
+            continue
+        seen.add(name)
+        out.append(name)
+    return out
+
+
+def _can_see_ticket(claims: dict, ticket: dict) -> bool:
+    from core import desk_tickets
+    if claims.get("_console") in ("operator", "admin"):
+        return True
+    author = _desk_author(claims)
+    return desk_tickets.is_owner(ticket, author["email"], author["role"])
+
+
+async def _broadcast_ticket(entry: dict) -> None:
+    await _desk_broadcast({"type": "ticket", "ticket": _ticket_payload(entry)})
+
+
+@app.post("/api/desk-tickets/assets", dependencies=[Depends(require_console)])
+async def desk_ticket_upload(file: UploadFile = File(...), claims: dict = Depends(require_console)):
+    """Persist a screenshot for an inbox report. Survives Helix restarts."""
+    from core import desk_tickets
+    data, suffix = await _read_image_upload(file)
+    try:
+        name = desk_tickets.save_image(data, suffix)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _TICKET_UPLOADS[name] = claims.get("sub") or ""
+    logger.info(f"Desk ticket image {name} ({len(data)} bytes) by {claims.get('sub')}")
+    return {"name": name, "size": len(data)}
+
+
+@app.get("/api/desk-tickets/assets/{name}", dependencies=[Depends(require_console)])
+async def desk_ticket_asset(name: str, claims: dict = Depends(require_console)):
+    """Serve a screenshot that belongs to a report the caller may see."""
+    from core import desk_tickets
+    ticket = desk_tickets.ticket_for_image(name)
+    if ticket is None or not _can_see_ticket(claims, ticket):
+        raise HTTPException(404, "Not found")
+    path = desk_tickets.image_path(name)
+    if path is None:
+        raise HTTPException(404, "Not found")
+    media = {
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".gif": "image/gif", ".webp": "image/webp",
+    }.get(path.suffix.lower())
+    if not media:
+        raise HTTPException(404, "Not found")
+    return FileResponse(path, media_type=media)
+
+
+@app.post("/api/desk-tickets", dependencies=[Depends(require_console)])
+async def desk_ticket_create(body: dict, claims: dict = Depends(require_console)):
+    from core import desk_tickets
+    author = _desk_author(claims)
+    images = _claim_ticket_images(body.get("images"), claims.get("sub") or "")
+    try:
+        entry = desk_tickets.create(
+            body.get("kind") or "",
+            body.get("subject") or "",
+            body.get("description") or body.get("body") or "",
+            name=author["name"], email=author["email"], role=author["role"],
+            images=images,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await _broadcast_ticket(entry)
+    return _ticket_payload(entry)
+
+
+@app.get("/api/desk-tickets", dependencies=[Depends(require_console)])
+async def desk_ticket_list(claims: dict = Depends(require_console)):
+    from core import desk_tickets
+    author = _desk_author(claims)
+    inbox = claims.get("_console") in ("operator", "admin")
+    rows = [
+        _ticket_payload(t)
+        for t in desk_tickets.list_for(author["email"], author["role"], inbox=inbox)
+    ]
+    return {
+        "tickets": rows,
+        "new": desk_tickets.new_count_for(author["email"], author["role"], inbox=inbox),
+        "inbox": inbox,
+    }
+
+
+@app.post("/api/desk-tickets/{ticket_id}/replies", dependencies=[Depends(require_console)])
+async def desk_ticket_reply(
+    ticket_id: str, body: dict, claims: dict = Depends(require_console),
+):
+    from core import desk_tickets
+    author = _desk_author(claims)
+    staff = claims.get("_console") in ("operator", "admin")
+    existing = desk_tickets.get(ticket_id)
+    if existing is None:
+        raise HTTPException(404, "ticket not found")
+    if not staff and not desk_tickets.is_owner(existing, author["email"], author["role"]):
+        raise HTTPException(403, "not your report")
+    try:
+        entry = desk_tickets.reply(
+            ticket_id,
+            body.get("text") or body.get("message") or "",
+            name=author["name"], email=author["email"], role=author["role"],
+            staff=staff,
+            images=_claim_ticket_images(body.get("images"), claims.get("sub") or ""),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if entry is None:
+        raise HTTPException(404, "ticket not found")
+    await _broadcast_ticket(entry)
+    return _ticket_payload(entry)
+
+
+@app.patch("/api/desk-tickets/{ticket_id}", dependencies=[Depends(require_console)])
+async def desk_ticket_status(
+    ticket_id: str, body: dict, claims: dict = Depends(require_console),
+):
+    from core import desk_tickets
+    if claims.get("_console") not in ("operator", "admin"):
+        raise HTTPException(403, "only admins can set status")
+    existing = desk_tickets.get(ticket_id)
+    if existing is None:
+        raise HTTPException(404, "ticket not found")
+    try:
+        entry = desk_tickets.set_status(ticket_id, body.get("status") or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if entry is None:
+        raise HTTPException(404, "ticket not found")
+    await _broadcast_ticket(entry)
+    return _ticket_payload(entry)
+
+
+@app.post("/api/desk-tickets/{ticket_id}/read", dependencies=[Depends(require_console)])
+async def desk_ticket_mark_read(
+    ticket_id: str, claims: dict = Depends(require_console),
+):
+    from core import desk_tickets
+    author = _desk_author(claims)
+    existing = desk_tickets.get(ticket_id)
+    if existing is None:
+        raise HTTPException(404, "ticket not found")
+    if not desk_tickets.is_owner(existing, author["email"], author["role"]):
+        raise HTTPException(403, "not your report")
+    entry = desk_tickets.mark_reporter_seen(ticket_id, author["email"], author["role"])
+    if entry is None:
+        raise HTTPException(404, "ticket not found")
+    await _broadcast_ticket(entry)
+    return _ticket_payload(entry)
+
 
 # ─── Sessions API ─────────────────────────────────────────────────────────────
 
-@app.get("/api/sessions", dependencies=[Depends(require_admin)])
+@app.get("/api/sessions", dependencies=[Depends(require_console)])
 async def list_sessions():
     if not _session_manager:
         return []
     return await _session_manager.list_sessions()
 
 
-@app.delete("/api/sessions/{channel}/{peer}", dependencies=[Depends(require_admin)])
+@app.delete("/api/sessions/{channel}/{peer}", dependencies=[Depends(require_console)])
 async def reset_session(channel: str, peer: str):
     if not _session_manager:
         raise HTTPException(404, "Session manager not running")
@@ -1346,7 +1806,7 @@ async def set_session_model(channel: str, peer: str, body: dict):
     return {"status": "switched", "model": model_id}
 
 
-@app.get("/api/sessions/{session_id}/transcript", dependencies=[Depends(require_admin)])
+@app.get("/api/sessions/{session_id}/transcript", dependencies=[Depends(require_console)])
 async def get_transcript(session_id: str):
     if not _session_manager:
         raise HTTPException(404, "Session manager not running")
@@ -1466,7 +1926,7 @@ async def add_model(body: dict):
     return {"status": "added", "model": entry.model_dump()}
 
 
-_PERM_ACCESS = {TIER_STAFF, TIER_STUDENT, ACCESS_BLOCKED}
+_PERM_ACCESS = {*ADMITTED_ACCESS, ACCESS_BLOCKED}
 _STRESS_LOCAL = re.compile(r"^loadtest", re.I)
 
 
@@ -1549,10 +2009,34 @@ def _permissions_payload(cfg=None) -> dict:
     }
 
 
-@app.get("/api/permissions", dependencies=[Depends(require_admin)])
-async def get_permissions():
+def _moderator_permissions_view(payload: dict) -> dict:
+    """AFK pupils only. No FRID people, no stress accounts, no role overrides."""
+    people = [
+        p for p in payload.get("people") or []
+        if _is_afk_email(p.get("email") or "")
+        and not _is_stress_account(p.get("email") or "", p.get("name") or "")
+    ]
+    return {
+        "defaults": {
+            "staff_domains": [],
+            "student_domains": list(
+                (payload.get("defaults") or {}).get("student_domains") or []
+            ),
+        },
+        "overrides": [],
+        "people": people,
+        "stress": [],
+        "viewer": "moderator",
+    }
+
+
+@app.get("/api/permissions")
+async def get_permissions(claims: dict = Depends(require_console)):
     """Who may use Zork, and as what."""
-    return _permissions_payload()
+    payload = _permissions_payload()
+    if claims.get("_console") == "moderator":
+        return _moderator_permissions_view(payload)
+    return payload
 
 
 @app.put("/api/permissions", dependencies=[Depends(require_admin)])
@@ -1567,30 +2051,52 @@ async def put_permission(body: dict):
     if access is not None:
         access = str(access).strip().lower()
         if access not in _PERM_ACCESS:
-            raise HTTPException(400, "access must be staff, student or blocked")
+            raise HTTPException(400, "access must be staff, student, moderator, admin or blocked")
     note = (body.get("note") or "").strip()[:200]
     cfg = load_config(force_reload=True)
     cfg.tiers.user_overrides = [
         o for o in cfg.tiers.user_overrides if o.email != email
     ]
-    if access:
+    # Picking the domain default (pupil for @afk.no, staff for @frid-iks.no)
+    # stores nothing — the mapping already grants that access.
+    if access and access != cfg.tiers.for_email(email):
         if len(cfg.tiers.user_overrides) >= 500:
             raise HTTPException(400, "Too many overrides")
         cfg.tiers.user_overrides.append(
             UserAccessOverride(email=email, access=access, note=note)
         )
     save_config(cfg)
-    return _permissions_payload(cfg)
+    payload = _permissions_payload(cfg)
+    # Creating someone from the Users tab issues a one-time password so they
+    # can sign in without choosing one themselves. Role changes on the list
+    # do not rotate an existing password, and stress accounts never get one.
+    if (
+        bool(body.get("issue_password"))
+        and not _is_stress_account(email)
+        and dev_pw.get_hash(email) is None
+    ):
+        issued = dev_pw.generate_password()
+        dev_pw.set_password(email, issued)
+        payload = _permissions_payload(cfg)
+        payload["issued_email"] = email
+        payload["issued_password"] = issued
+    return payload
 
 
-@app.delete("/api/permissions/{email}/password", dependencies=[Depends(require_admin)])
-async def reset_dev_password(email: str):
+@app.delete("/api/permissions/{email}/password")
+async def reset_dev_password(email: str, claims: dict = Depends(require_console)):
     """Forget their test-login password so they choose a new one next time."""
     key = (email or "").strip().lower()
     if not _EMAIL_RE.match(key):
         raise HTTPException(400, "Enter a valid email address")
+    if claims.get("_console") == "moderator":
+        if not _is_afk_email(key) or _is_stress_account(key):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     dev_pw.clear_password(key)
-    return _permissions_payload()
+    payload = _permissions_payload()
+    if claims.get("_console") == "moderator":
+        return _moderator_permissions_view(payload)
+    return payload
 
 
 @app.delete("/api/permissions/{email}", dependencies=[Depends(require_admin)])
@@ -1686,6 +2192,25 @@ async def update_notifications_config(body: dict):
 
 # ─── Crons API ────────────────────────────────────────────────────────────────
 
+# If Helix is a few hours late (PC slept, process restarted after 07:00),
+# still fire the slot rather than waiting until tomorrow.
+from core.cron_health import MISFIRE_GRACE_SECONDS as _CRON_MISFIRE_GRACE
+
+
+def _add_scheduler_cron(cron_id: str, schedule: str, timezone: str) -> None:
+    from apscheduler.triggers.cron import CronTrigger
+    if not _scheduler:
+        return
+    _scheduler.add_job(
+        _execute_cron,
+        CronTrigger.from_crontab(schedule, timezone=timezone),
+        id=f"cron_{cron_id}",
+        args=[cron_id],
+        misfire_grace_time=_CRON_MISFIRE_GRACE,
+        coalesce=True,
+    )
+
+
 def _cron_next_run(cron_id: str) -> Optional[str]:
     """Get next scheduled run time for a cron job from APScheduler."""
     if not _scheduler:
@@ -1696,13 +2221,20 @@ def _cron_next_run(cron_id: str) -> Optional[str]:
     return None
 
 
+def _cron_api_row(c) -> dict:
+    from core.cron_health import schedule_state
+    cfg = get_config()
+    return {
+        **c.model_dump(),
+        "next_run": _cron_next_run(c.id),
+        **schedule_state(c, timezone=cfg.timezone),
+    }
+
+
 @app.get("/api/crons", dependencies=[Depends(require_admin)])
 async def list_crons():
     cfg = get_config()
-    return [
-        {**c.model_dump(), "next_run": _cron_next_run(c.id)}
-        for c in cfg.crons
-    ]
+    return [_cron_api_row(c) for c in cfg.crons]
 
 
 @app.post("/api/crons", dependencies=[Depends(require_admin)])
@@ -1734,15 +2266,13 @@ async def create_cron(body: dict):
     cfg.crons.append(cron)
     save_config(cfg)
 
-    if _scheduler and cron.enabled:
-        _scheduler.add_job(
-            _execute_cron,
-            trigger,
-            id=f"cron_{cron.id}",
-            args=[cron.id],
-        )
+    if cron.enabled:
+        try:
+            _add_scheduler_cron(cron.id, cron.schedule, cfg.timezone)
+        except Exception as e:
+            logger.warning(f"Failed to schedule cron {cron.name}: {e}")
 
-    return {**cron.model_dump(), "next_run": _cron_next_run(cron.id)}
+    return _cron_api_row(cron)
 
 
 @app.delete("/api/crons/{cron_id}", dependencies=[Depends(require_admin)])
@@ -1761,7 +2291,6 @@ async def delete_cron(cron_id: str):
 
 @app.patch("/api/crons/{cron_id}/toggle", dependencies=[Depends(require_admin)])
 async def toggle_cron(cron_id: str):
-    from apscheduler.triggers.cron import CronTrigger
     cfg = get_config()
     cron = next((c for c in cfg.crons if c.id == cron_id), None)
     if not cron:
@@ -1774,13 +2303,7 @@ async def toggle_cron(cron_id: str):
         job = _scheduler.get_job(f"cron_{cron_id}")
         if cron.enabled and not job:
             try:
-                trigger = CronTrigger.from_crontab(cron.schedule, timezone=get_config().timezone)
-                _scheduler.add_job(
-                    _execute_cron,
-                    trigger,
-                    id=f"cron_{cron_id}",
-                    args=[cron_id],
-                )
+                _add_scheduler_cron(cron_id, cron.schedule, get_config().timezone)
             except Exception as e:
                 logger.warning(f"Failed to re-schedule cron {cron.name}: {e}")
         elif not cron.enabled and job:
@@ -2140,7 +2663,7 @@ def _read_audit_events(days: int) -> list[dict]:
     return events
 
 
-@app.get("/api/insights", dependencies=[Depends(require_admin)])
+@app.get("/api/insights", dependencies=[Depends(require_console)])
 async def chat_insights(days: int = 30, recent: int = 50):
     """What people have been asking, counted.
 
@@ -2155,6 +2678,27 @@ async def chat_insights(days: int = 30, recent: int = 50):
     refusals = [e for e in events if e["event"] == "chat_scope_refusal"]
     blocked = [e for e in events if e["event"] == "chat_command_blocked"]
     throttled = [e for e in events if e["event"] == "chat_rate_limited"]
+    gap_events = [e for e in events if e["event"] == "chat_knowledge_gap"]
+    # One conversation, one gap — keep the latest snapshot (more of the thread).
+    gaps_by_session: dict[str, dict] = {}
+    gaps_unkeyed: list[dict] = []
+    for e in sorted(gap_events, key=lambda ev: ev.get("ts") or 0):
+        key = (e.get("session_id") or "").strip()
+        if not key:
+            gaps_unkeyed.append(e)
+            continue
+        prev = gaps_by_session.get(key)
+        if prev:
+            merged = dict(e)
+            for field in ("name", "label", "topic", "sender_id"):
+                if not merged.get(field):
+                    merged[field] = prev.get(field) or ""
+            if len(merged.get("messages") or []) < len(prev.get("messages") or []):
+                merged["messages"] = prev.get("messages") or []
+            gaps_by_session[key] = merged
+        else:
+            gaps_by_session[key] = e
+    gaps = list(gaps_by_session.values()) + gaps_unkeyed
 
     by_domain: dict[str, int] = {}
     by_tier: dict[str, int] = {}
@@ -2222,7 +2766,7 @@ async def chat_insights(days: int = 30, recent: int = 50):
             "blocked_commands": len(blocked),
             "rate_limited": len(throttled),
             "people": len(by_person),
-            "undocumented": sum(r["undocumented_demand"] for r in coverage),
+            "undocumented": len(gaps),
         },
         "coverage": coverage,
         "by_topic": top(by_topic, 20),
@@ -2247,14 +2791,31 @@ async def chat_insights(days: int = 30, recent: int = 50):
             {
                 "ts": e.get("ts"),
                 "email": e.get("sender_id"),
+                "name": e.get("name") or "",
+                "tier": e.get("tier"),
                 "asked": e.get("content_preview"),
+                "reply": e.get("reply") or "",
             }
-            for e in sorted(refusals, key=lambda e: e.get("ts") or 0, reverse=True)[:recent]
+            for e in sorted(refusals, key=lambda e: e.get("ts") or 0, reverse=True)[:200]
+        ],
+        "recent_gaps": [
+            {
+                "ts": e.get("ts"),
+                "email": e.get("sender_id"),
+                "name": e.get("name") or "",
+                "tier": e.get("tier"),
+                "topic": e.get("topic") or "",
+                "label": e.get("label") or "",
+                "asked": e.get("content_preview") or "",
+                "session_id": e.get("session_id") or "",
+                "messages": e.get("messages") or [],
+            }
+            for e in sorted(gaps, key=lambda e: e.get("ts") or 0, reverse=True)[:200]
         ],
     }
 
 
-@app.get("/api/insights/subject", dependencies=[Depends(require_admin)])
+@app.get("/api/insights/subject", dependencies=[Depends(require_console)])
 async def insight_subject(key: str, days: int = 30):
     """Opening lines that clustered into one Insights subject."""
     key = (key or "").strip()
@@ -2320,13 +2881,13 @@ async def get_op_logs(lines: int = 100):
 
 # ─── Skills API ───────────────────────────────────────────────────────────────
 
-@app.get("/api/skills", dependencies=[Depends(require_admin)])
+@app.get("/api/skills", dependencies=[Depends(require_console)])
 async def skills_list_api():
     cfg = get_config()
     return {"skills": list_skills(cfg.workspace_path)}
 
 
-@app.get("/api/skills/{skill_id}", dependencies=[Depends(require_admin)])
+@app.get("/api/skills/{skill_id}", dependencies=[Depends(require_console)])
 async def skills_get_api(skill_id: str):
     cfg = get_config()
     try:
@@ -2563,6 +3124,8 @@ async def _relay_agent_chunks(websocket: WebSocket, agen) -> str:
     parts = []
     async for chunk in agen:
         if isinstance(chunk, dict):
+            if chunk.get("replace"):
+                parts = [chunk["chunk"]] if chunk.get("chunk") else []
             await websocket.send_json(chunk)
             continue
         parts.append(chunk)
@@ -2606,22 +3169,31 @@ async def ws_chat(websocket: WebSocket):
         await websocket.send_json({"error": _CHAT_BLOCKED_MSG, "code": "forbidden"})
         await websocket.close()
         return
-    # Commands are staff-only — see ROLES.md. This websocket is the only route
-    # to handle_slash for a signed-in person; every other command-shaped endpoint
-    # is admin-only or confined to the caller's own conversation.
-    commands_allowed = tier == TIER_STAFF
+    # Commands are staff, moderator and admin — see ROLES.md. Employees only
+    # get own-session commands; skill/queue/session-list commands stay with
+    # the operator and with people given the admin access role. This websocket
+    # is the only route to handle_slash for a signed-in person.
+    command_scope = command_scope_for(
+        tier, operator=claims.get("role") == "admin" and not _claims_email(claims),
+    )
+    commands_allowed = command_scope is not None
 
     # Replay the last 30 messages from the web/admin session transcript so the
     # client can repopulate the chat history after a reconnect.
     # Whether the conversation already had content also decides if the next
     # message is the one that names it, for the audit record below.
     new_conversation = True
+    conversation: list = []
+    gap_logged = False
+    session_id = ""
     if _session_manager:
         try:
             session = await _session_manager.get_or_create("web", peer, tier=tier)
+            session_id = session.get("session_id") or ""
             history = await _session_manager.async_read_transcript(session["session_id"])
             if history:
                 new_conversation = False
+                conversation = list(history)
                 tail = history[-30:]
                 await websocket.send_json({"type": "history", "messages": tail})
         except Exception as e:
@@ -2646,7 +3218,11 @@ async def ws_chat(websocket: WebSocket):
                 await websocket.send_json({"error": _CHAT_BLOCKED_MSG, "code": "forbidden"})
                 await websocket.close()
                 return
-            commands_allowed = tier == TIER_STAFF
+            command_scope = command_scope_for(
+                tier,
+                operator=claims.get("role") == "admin" and not _claims_email(claims),
+            )
+            commands_allowed = command_scope is not None
 
             # Rate limit, per person across every connection they hold.
             rate_key = f"web:{claims.get('sub')}"
@@ -2667,22 +3243,15 @@ async def ws_chat(websocket: WebSocket):
             if attachment_ids:
                 paths = _resolve_uploads(attachment_ids, claims.get("sub"))
                 if paths:
-                    # A staff upload is persisted into assets/ before the agent
-                    # sees it, and the agent is shown ONLY the asset path.
-                    # Previously images were kept only for /dokumenter, so if a
-                    # user pasted screenshots and asked for documentation in
-                    # plain words, the agent referenced temp files that were
-                    # deleted hours later, leaving dead images in a skill file.
-                    # Unreferenced assets are purged on the retention schedule.
-                    #
-                    # A pupil's upload is NOT persisted. Nothing a pupil sends
-                    # becomes part of the knowledge base: their screenshot stays
-                    # in the temp upload directory, is passed to the model inside
-                    # the message, and is deleted with the rest of the uploads a
-                    # few hours later. Only a command can add an image to the
-                    # knowledge base, and pupils have no commands (ROLES.md).
+                    # Only the operator and Users-tab admins persist uploads
+                    # into assets/: that folder is the shared knowledge base.
+                    # An employee's screenshot stays in the temp upload
+                    # directory, is passed to the model, and is deleted with
+                    # the rest of the uploads a few hours later — same as a
+                    # pupil's. Pupils have no commands that write the knowledge
+                    # base (ROLES.md); employees' commands are own-session only.
                     names = []
-                    if tier == TIER_STAFF:
+                    if command_scope == "all":
                         hint = message.split(None, 1)[-1] if message.strip() else ""
                         names = _persist_assets(paths, hint)
                         if names:
@@ -2718,6 +3287,22 @@ async def ws_chat(websocket: WebSocket):
                     f"Command not available to {tier} {claims.get('sub')}: {attempted}"
                 )
                 _audit_chat("chat_command_blocked", claims, command=attempted)
+
+            # Employees may type a slash, but only own-session commands run.
+            # Anything that writes skills, the queue, or other people's chats
+            # is refused here so it never reaches handle_slash or /nettside.
+            if commands_allowed and message.lstrip().startswith("/"):
+                attempted = message.lstrip().split(None, 1)[0].lower()
+                if not command_permitted(attempted, command_scope):
+                    logger.info(
+                        f"Command not available to {tier} {claims.get('sub')}: {attempted[:32]}"
+                    )
+                    _audit_chat("chat_command_blocked", claims, command=attempted[:32])
+                    await websocket.send_json({
+                        "chunk": EMPLOYEE_COMMAND_REFUSED,
+                        "done": True,
+                    })
+                    continue
 
             # /nettside <url> — render a JavaScript page server-side and hand
             # the text to the agent. Done here rather than giving the agent a
@@ -2777,7 +3362,10 @@ async def ws_chat(websocket: WebSocket):
                 # Append after the command token so command parsing still works
                 # and the paths arrive as arguments.
                 slash_message = f"{message}\n\n{attachment_note}" if attachment_note else message
-                handled = await handle_slash(slash_message, "web", peer, _session_manager, _agent_loop, send_fn)
+                handled = await handle_slash(
+                    slash_message, "web", peer, _session_manager, _agent_loop, send_fn,
+                    scope=command_scope or "employee",
+                )
                 if handled:
                     full = "".join(responses)
                     await websocket.send_json({"done": True, "full_response": full})
@@ -2851,6 +3439,9 @@ async def ws_chat(websocket: WebSocket):
                 )
                 new_conversation = False
 
+            conversation.append({"role": "user", "content": message})
+            conversation.append({"role": "assistant", "content": full or ""})
+
             if tier == TIER_STUDENT and _SCOPE_REFUSAL_NB.search(full):
                 # The message is logged, truncated: seeing what was asked is the
                 # point, and a pupil pressing the same request five different ways
@@ -2862,6 +3453,13 @@ async def ws_chat(websocket: WebSocket):
                 _audit_chat(
                     "chat_scope_refusal", claims,
                     content_preview=clean_message.strip(),
+                    reply=(full or "").strip()[:1500],
+                )
+            else:
+                # A later turn can be the undocumented one — "hei" then a Word
+                # error must still be logged. One record per conversation.
+                gap_logged = _maybe_log_knowledge_gap(
+                    claims, message, conversation, session_id, gap_logged,
                 )
 
             claim = _completion_claim(full, clean_message)

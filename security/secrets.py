@@ -87,25 +87,54 @@ def _derive_key(passphrase: str = "") -> bytes:
     return base64.urlsafe_b64encode(raw)
 
 
+_fernet_empty: Optional[Fernet] = None
+_secrets_cache: Optional[dict] = None
+_secrets_mtime: float = -1.0
+
+
 def _get_fernet(passphrase: str = "") -> Fernet:
+    # Argon2id is the expensive part of every secrets read. The empty-passphrase
+    # key is derived from machine entropy and the salt file, so it is stable
+    # for the life of the process — cache it rather than spending tens-to-
+    # hundreds of milliseconds on every chat turn.
+    global _fernet_empty
+    if not passphrase:
+        if _fernet_empty is None:
+            _fernet_empty = Fernet(_derive_key(""))
+        return _fernet_empty
     return Fernet(_derive_key(passphrase))
 
 
 def _load_secrets(passphrase: str = "") -> dict:
+    global _secrets_cache, _secrets_mtime
     if not SECRETS_PATH.exists():
+        if not passphrase:
+            _secrets_cache = {}
+            _secrets_mtime = 0.0
         return {}
+    mtime = SECRETS_PATH.stat().st_mtime
+    if not passphrase and _secrets_cache is not None and mtime == _secrets_mtime:
+        return _secrets_cache
     fernet = _get_fernet(passphrase)
     encrypted = SECRETS_PATH.read_bytes()
     decrypted = fernet.decrypt(encrypted)
-    return json.loads(decrypted)
+    data = json.loads(decrypted)
+    if not passphrase:
+        _secrets_cache = data
+        _secrets_mtime = mtime
+    return data
 
 
 def _save_secrets(data: dict, passphrase: str = "") -> None:
+    global _secrets_cache, _secrets_mtime
     SECRETS_PATH.parent.mkdir(parents=True, exist_ok=True)
     fernet = _get_fernet(passphrase)
     encrypted = fernet.encrypt(json.dumps(data).encode())
     SECRETS_PATH.write_bytes(encrypted)
     SECRETS_PATH.chmod(0o600)
+    if not passphrase:
+        _secrets_cache = data
+        _secrets_mtime = SECRETS_PATH.stat().st_mtime
 
 
 def set_secret(key: str, value: str, passphrase: str = "") -> None:

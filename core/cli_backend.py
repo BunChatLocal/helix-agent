@@ -21,6 +21,10 @@ import uuid
 from pathlib import Path
 from typing import Awaitable, Callable, Optional, Tuple
 
+OnText = Callable[[str], Awaitable[None]]
+OnReset = Callable[[], Awaitable[None]]
+OnTool = Callable[[str], Awaitable[None]]
+
 logger = logging.getLogger("helix.cli_backend")
 
 
@@ -362,19 +366,28 @@ def sanitize_helix_oauth_profile() -> bool:
         return False
 
 
+_CWD_CACHE: Optional[tuple[str, str]] = None
+
+
 def _agent_cwd() -> str:
     """Working directory for the claude subprocess.
 
     The agent's own workspace, NOT the Helix source tree — otherwise it reads
     this repo instead of its memory files. Must stay consistent for --resume.
     """
+    global _CWD_CACHE
     try:
         from core.config import load_config
         workspace = Path(load_config().workspace_path)
     except Exception:
         workspace = Path.home() / ".helix" / "workspace"
+    key = str(workspace)
+    if _CWD_CACHE and _CWD_CACHE[0] == key:
+        return _CWD_CACHE[1]
     workspace.mkdir(parents=True, exist_ok=True)
-    return str(workspace)
+    resolved = str(workspace)
+    _CWD_CACHE = (key, resolved)
+    return resolved
 
 
 def _build_env() -> dict:
@@ -387,6 +400,12 @@ def _build_env() -> dict:
     # Sharing the login also carries over claude.ai account connectors, which
     # --strict-mcp-config does not block. Disable them for the agent.
     env["ENABLE_CLAUDEAI_MCP_SERVERS"] = "false"
+    # Skip auto-update / telemetry / feature-flag fetches. Those are extra
+    # network round-trips on every claude.exe start and are the main reason a
+    # local CLI call sits still before the model even begins.
+    env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+    env["DISABLE_AUTOUPDATER"] = "1"
+    env["DISABLE_TELEMETRY"] = "1"
     # Pick up any token refresh from the user's normal CLI before each call
     sync_credentials()
     sanitize_helix_oauth_profile()
@@ -491,6 +510,174 @@ def _result_object(raw: str, streaming: bool) -> dict:
     raise RuntimeError("no result object in claude CLI stream output")
 
 
+def _stream_event(obj: dict) -> dict:
+    """Unwrap a stream_event envelope, or return the object itself."""
+    if obj.get("type") == "stream_event" and isinstance(obj.get("event"), dict):
+        return obj["event"]
+    return obj
+
+
+def _event_text_delta(obj: dict) -> str:
+    """Token text from a stream-json line, or '' if this line is not a delta."""
+    event = _stream_event(obj)
+    delta = event.get("delta") if isinstance(event.get("delta"), dict) else {}
+    if event.get("type") == "content_block_delta" or delta.get("type") == "text_delta":
+        if delta.get("type") == "text_delta":
+            return str(delta.get("text") or "")
+    return ""
+
+
+def _event_starts_tool_use(obj: dict) -> bool:
+    """True when this line begins a tool_use content block.
+
+    Intermediate 'I'll look that up' text is not part of the saved reply —
+    only the final `result` is. Seeing a tool start means any text we already
+    forwarded for this message was preamble and must be withdrawn.
+    """
+    event = _stream_event(obj)
+    if event.get("type") == "content_block_start":
+        block = event.get("content_block") if isinstance(event.get("content_block"), dict) else {}
+        return block.get("type") == "tool_use"
+    if obj.get("type") == "assistant":
+        content = (obj.get("message") or {}).get("content") or []
+        return any(isinstance(b, dict) and b.get("type") == "tool_use" for b in content)
+    return False
+
+
+def _event_tool_name(obj: dict) -> str:
+    """Tool name from a stream-json tool_use start, or ''."""
+    event = _stream_event(obj)
+    if event.get("type") == "content_block_start":
+        block = event.get("content_block") if isinstance(event.get("content_block"), dict) else {}
+        if block.get("type") == "tool_use":
+            return str(block.get("name") or "")
+    if obj.get("type") == "assistant":
+        content = (obj.get("message") or {}).get("content") or []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                return str(block.get("name") or "")
+    return ""
+
+
+def _assistant_text_only(obj: dict) -> str:
+    """Full text of a completed assistant message that did not call a tool."""
+    if obj.get("type") != "assistant":
+        return ""
+    content = (obj.get("message") or {}).get("content") or []
+    if not isinstance(content, list):
+        return ""
+    if any(isinstance(b, dict) and b.get("type") == "tool_use" for b in content):
+        return ""
+    return "".join(
+        b.get("text") or ""
+        for b in content
+        if isinstance(b, dict) and b.get("type") == "text"
+    )
+
+
+async def _drain_cli(
+    proc,
+    stdin_bytes: bytes,
+    timeout: int,
+    on_text: Optional[OnText],
+    on_reset: Optional[OnReset],
+    on_tool: Optional[OnTool] = None,
+) -> Tuple[str, str]:
+    """Read stream-json stdout as it arrives and forward token text."""
+    if proc.stdin is not None:
+        proc.stdin.write(stdin_bytes)
+        await proc.stdin.drain()
+        proc.stdin.close()
+
+    lines: list[str] = []
+    stderr_buf = bytearray()
+    got_partials = False
+
+    async def read_err() -> None:
+        if proc.stderr is None:
+            return
+        stderr_buf.extend(await proc.stderr.read())
+
+    err_task = asyncio.create_task(read_err())
+
+    async def handle_line(line: str) -> None:
+        nonlocal got_partials
+        text = line.strip()
+        if not text.startswith("{"):
+            return
+        try:
+            obj = json.loads(text)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(obj, dict):
+            return
+        if _event_starts_tool_use(obj):
+            if got_partials and on_reset:
+                await on_reset()
+            got_partials = False
+            if on_tool:
+                await on_tool(_event_tool_name(obj))
+            return
+        delta = _event_text_delta(obj)
+        if delta and on_text:
+            got_partials = True
+            await on_text(delta)
+            return
+        if got_partials or not on_text:
+            return
+        # Older CLIs without --include-partial-messages still emit a complete
+        # assistant message before the process exits. Forward that so /chat
+        # is not stuck on dots until the result object.
+        full = _assistant_text_only(obj)
+        if full:
+            got_partials = True
+            await on_text(full)
+
+    buf = b""
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise asyncio.TimeoutError()
+            chunk = await asyncio.wait_for(proc.stdout.read(8192), timeout=remaining)
+            if not chunk:
+                break
+            buf += chunk
+            while b"\n" in buf:
+                raw_line, buf = buf.split(b"\n", 1)
+                line = raw_line.decode("utf-8", errors="replace")
+                lines.append(line)
+                await handle_line(line)
+        if buf.strip():
+            line = buf.decode("utf-8", errors="replace")
+            lines.append(line)
+            await handle_line(line)
+        await asyncio.wait_for(proc.wait(), timeout=max(1.0, deadline - time.monotonic()))
+    except (asyncio.TimeoutError, Exception):
+        if proc.returncode is None:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            try:
+                await proc.wait()
+            except Exception:
+                pass
+        raise
+    finally:
+        if not err_task.done():
+            err_task.cancel()
+            try:
+                await err_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        elif not err_task.cancelled():
+            await err_task
+
+    return "\n".join(lines), stderr_buf.decode("utf-8", errors="replace")
+
+
 async def _invoke(
     model: str,
     system: str,
@@ -499,6 +686,9 @@ async def _invoke(
     timeout: int,
     tier: str = "staff",
     images: Optional[list[Path]] = None,
+    on_text: Optional[OnText] = None,
+    on_reset: Optional[OnReset] = None,
+    on_tool: Optional[OnTool] = None,
 ) -> Tuple[str, str, dict]:
     """
     Run claude -p with the given session flags.
@@ -510,11 +700,14 @@ async def _invoke(
     # No tools means no way to open an attached file, so the pupil path carries
     # images in the message itself. That needs stream-json input, which the CLI
     # only accepts alongside stream-json output, which in turn requires
-    # --verbose. Staff keep the plain text/json path.
-    streaming = not tools
+    # --verbose. Staff keep text stdin; /chat still uses stream-json *output*
+    # so tokens can be forwarded before the process exits.
+    stream_input = not tools
+    live = on_text is not None
+    stream_output = stream_input or live
 
     cmd = [CLAUDE_BIN, "-p"]
-    if streaming:
+    if stream_input:
         cmd += [
             "--input-format", "stream-json",
             "--output-format", "stream-json",
@@ -522,39 +715,62 @@ async def _invoke(
             # Empty string disables every built-in tool.
             "--tools", "",
         ]
+    elif stream_output:
+        cmd += [
+            "--output-format", "stream-json",
+            "--verbose",
+            # NO Bash, for anyone. This agent advises; it never executes.
+            "--allowedTools", tools,
+        ]
     else:
         cmd += [
             "--output-format", "json",
-            # NO Bash, for anyone. This agent advises; it never executes. It tells
-            # the user which command to run and they run it themselves. Removing a
-            # tool here is the real enforcement point — it is never offered to the
-            # model, so there is nothing to jailbreak into. Do not re-add it.
             "--allowedTools", tools,
         ]
+    if live and stream_output:
+        cmd.append("--include-partial-messages")
+
     # The prompt goes in a file, never on the command line. Windows caps a command
     # line at 32767 characters, and a pupil's prompt is already past that now that
     # their guides are inlined into it — passed as an argument it fails with
     # WinError 206 and every pupil message dies. A file also keeps staff safe as
     # their workspace grows: BOOTSTRAP_CHAR_LIMIT allows 150k.
-    prompt_file = tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", suffix=".md", delete=False
-    )
-    try:
+    #
+    # Resumed turns pass an empty system prompt on purpose so --resume keeps the
+    # original bootstrap. Writing a blank --system-prompt-file would replace it.
+    prompt_path = None
+    if system:
+        prompt_file = tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", suffix=".md", delete=False
+        )
         prompt_file.write(system)
         prompt_file.close()
+        prompt_path = prompt_file.name
 
+    raw = ""
+    out = b""
+    stderr = b""
+    try:
         cmd += [
             "--model", model,
-            "--system-prompt-file", prompt_file.name,
             # Ignore every MCP config source — the agent gets no MCP servers unless
             # they're added to Helix's own config dir explicitly.
             "--strict-mcp-config",
-        ] + session_args
+            # Skip project CLAUDE.md / commands / skills discovery. Helix injects
+            # its own prompt and handles slash commands itself; walking the
+            # workspace on every claude.exe start is pure latency.
+            "--setting-sources", "user",
+            "--disable-slash-commands",
+        ]
+        if prompt_path:
+            cmd += ["--system-prompt-file", prompt_path]
+        cmd += session_args
 
         logger.debug(
-            f"CLI call: model={model}, tier={tier}, streaming={streaming}, "
-            f"images={len(images)}, session_args={session_args}, "
-            f"sys_len={len(system)}, msg_len={len(user_message)}"
+            f"CLI call: model={model}, tier={tier}, stream_in={stream_input}, "
+            f"stream_out={stream_output}, live={live}, images={len(images)}, "
+            f"session_args={session_args}, sys_len={len(system)}, "
+            f"msg_len={len(user_message)}"
         )
 
         proc = await asyncio.create_subprocess_exec(
@@ -564,34 +780,45 @@ async def _invoke(
             stderr=asyncio.subprocess.PIPE,
             cwd=_agent_cwd(),
             env=_build_env(),
+            limit=16 * 1024 * 1024,
         )
 
         stdin_bytes = (
             _stream_payload(user_message, images)
-            if streaming
+            if stream_input
             else user_message.encode("utf-8")
         )
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(input=stdin_bytes),
-            timeout=timeout,
-        )
+        if live:
+            raw, err = await _drain_cli(
+                proc, stdin_bytes, timeout, on_text, on_reset, on_tool,
+            )
+            out = raw.encode("utf-8")
+            stderr = err.encode("utf-8")
+        else:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(input=stdin_bytes),
+                timeout=timeout,
+            )
+            raw = stdout.decode("utf-8", errors="replace")
+            out = stdout
     finally:
-        try:
-            os.unlink(prompt_file.name)
-        except OSError:
-            pass
+        if prompt_path:
+            try:
+                os.unlink(prompt_path)
+            except OSError:
+                pass
 
     if proc.returncode != 0:
         err = stderr.decode("utf-8", errors="replace")
-        out = stdout.decode("utf-8", errors="replace")
-        logger.error(f"claude CLI failed (exit {proc.returncode})\nSTDERR: {err[:1000]}\nSTDOUT: {out[:1500]}")
-        _raise_cli_failure(err, out)
+        out_text = out.decode("utf-8", errors="replace")
+        logger.error(f"claude CLI failed (exit {proc.returncode})\nSTDERR: {err[:1000]}\nSTDOUT: {out_text[:1500]}")
+        _raise_cli_failure(err, out_text)
 
-    raw = stdout.decode("utf-8", errors="replace").strip()
+    raw = raw.strip()
     if not raw:
         raise RuntimeError("claude CLI returned empty output")
 
-    data = _result_object(raw, streaming)
+    data = _result_object(raw, stream_output)
 
     if data.get("is_error"):
         _raise_cli_failure("", json.dumps(data))
@@ -840,6 +1067,9 @@ async def call_claude(
     tier: str = "staff",
     images: Optional[list[Path]] = None,
     on_wait: Optional[OnWait] = None,
+    on_text: Optional[OnText] = None,
+    on_reset: Optional[OnReset] = None,
+    on_tool: Optional[OnTool] = None,
 ) -> Tuple[str, str, dict]:
     """
     Call claude CLI. Returns (response_text, claude_session_id_used, usage_dict).
@@ -852,6 +1082,10 @@ async def call_claude(
     - If resume fails for any reason, falls back to a fresh --session-id
     - on_wait(position, waiting) fires while this turn is queued; position 0
       means a slot was granted. Not called at all if we never waited.
+    - on_text(delta) fires as tokens arrive (web chat). on_reset() fires when
+      streamed preamble must be discarded because the model started a tool.
+    - on_tool(name) fires when a tool starts, so /chat can show what it is
+      waiting on instead of silent dots.
     """
     queue = _claude_queue()
     ticket = await queue.acquire(on_wait=on_wait)
@@ -860,6 +1094,7 @@ async def call_claude(
             result = await _call_claude_once(
                 model, system, user_message, claude_session_id,
                 is_new_session, timeout, tier, images,
+                on_text=on_text, on_reset=on_reset, on_tool=on_tool,
             )
             queue.note_ok()
             return result
@@ -872,10 +1107,13 @@ async def call_claude(
                 queue.note_failure()
                 raise
             logger.warning(f"claude CLI failed, retrying once: {e}")
+            if on_reset:
+                await on_reset()
             await asyncio.sleep(2)
             try:
                 result = await _call_claude_once(
                     model, system, user_message, None, True, timeout, tier, images,
+                    on_text=on_text, on_reset=on_reset, on_tool=on_tool,
                 )
                 queue.note_ok()
                 return result
@@ -892,21 +1130,32 @@ async def call_claude(
 
 async def _call_claude_once(
     model, system, user_message, claude_session_id, is_new_session,
-    timeout, tier, images,
+    timeout, tier, images, on_text=None, on_reset=None, on_tool=None,
 ) -> Tuple[str, str, dict]:
     if is_new_session or not claude_session_id:
         new_id = str(uuid.uuid4())
         logger.info(f"Starting new Claude session: {new_id} ({tier})")
-        return await _invoke(model, system, user_message, ["--session-id", new_id], timeout, tier, images)
+        return await _invoke(
+            model, system, user_message, ["--session-id", new_id], timeout, tier, images,
+            on_text=on_text, on_reset=on_reset, on_tool=on_tool,
+        )
 
     try:
         logger.debug(f"Resuming Claude session: {claude_session_id}")
-        return await _invoke(model, system, user_message, ["--resume", claude_session_id], timeout, tier, images)
+        return await _invoke(
+            model, system, user_message, ["--resume", claude_session_id], timeout, tier, images,
+            on_text=on_text, on_reset=on_reset, on_tool=on_tool,
+        )
     except AuthExpiredError:
         raise
     except QuotaExhaustedError:
         raise
     except Exception as e:
         logger.warning(f"Resume failed for session {claude_session_id}, falling back to new session: {e}")
+        if on_reset:
+            await on_reset()
         new_id = str(uuid.uuid4())
-        return await _invoke(model, system, user_message, ["--session-id", new_id], timeout, tier, images)
+        return await _invoke(
+            model, system, user_message, ["--session-id", new_id], timeout, tier, images,
+            on_text=on_text, on_reset=on_reset, on_tool=on_tool,
+        )

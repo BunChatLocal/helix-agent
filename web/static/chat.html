@@ -114,6 +114,27 @@
   .lang:hover{color:var(--text)}
   .who-wrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
   #who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dev-panel{
+    display:none;align-self:flex-start;margin:0 0 6px;padding:3px 9px;
+    border-radius:7px;cursor:pointer;font-size:11px;font-weight:600;
+    letter-spacing:.04em;line-height:1.3;color:#f3d2c4;
+    border:1px solid color-mix(in srgb,var(--accent) 55%, var(--line));
+    background:
+      linear-gradient(180deg,
+        color-mix(in srgb,var(--accent) 38%, transparent) 0%,
+        color-mix(in srgb,var(--accent) 12%, var(--panel-2)) 100%);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb,#fff 22%, transparent),
+      0 0 10px color-mix(in srgb,var(--accent) 22%, transparent);
+  }
+  .dev-panel.on{display:inline-block}
+  .dev-panel:hover{
+    color:#fff;
+    background:
+      linear-gradient(180deg,
+        color-mix(in srgb,var(--accent) 52%, transparent) 0%,
+        color-mix(in srgb,var(--accent) 18%, var(--panel-2)) 100%);
+  }
   .logout{
     align-self:flex-start;border:0;background:transparent;padding:0;
     cursor:pointer;font-size:12px;color:var(--muted);text-align:left;
@@ -387,6 +408,7 @@
     <div class="side-foot">
       <div class="avatar" id="ini">–</div>
       <div class="who-wrap">
+        <button type="button" class="dev-panel" id="devPanelBtn" data-t="devpanel">Dev</button>
         <div id="who">–</div>
         <button type="button" class="logout" id="logoutBtn" data-t="logout">Logg ut</button>
       </div>
@@ -501,6 +523,7 @@ const I18N = {
     pwph:"passord", pwset:"lag passord", pwconfirm:"bekreft passord",
     err_pw_mismatch:"Passordene er ikke like.",
     logout:"Logg ut",
+    devpanel:"Dev",
     err_email:"Skriv inn en gyldig e-postadresse.",
     ctx:"Kontekst",
     fulltext:"Denne samtalen er blitt lang. Komprimer den for å fortsette — jeg lager et sammendrag og husker det viktigste.",
@@ -524,7 +547,12 @@ const I18N = {
     ratelimit:"Du har sendt mange meldinger på kort tid. Vent litt, så kan du sende igjen.",
     imgmissing:"Bildet er ikke tilgjengelig",
     queuenext:"Du er neste i køen. Ikke lukk siden — svaret kommer.",
-    queuepos:n=>`Du er nummer ${n} i køen. Ikke lukk siden — svaret kommer.`
+    queuepos:n=>`Du er nummer ${n} i køen. Ikke lukk siden — svaret kommer.`,
+    statusread:"Leser i kunnskapsbasen…",
+    statussearch:"Søker i filene…",
+    statusweb:"Slår opp på nettet…",
+    statuswrite:"Oppdaterer dokumentasjonen…",
+    statusworking:"Jobber med det…"
   },
   en:{
     title:"Zork",
@@ -555,6 +583,7 @@ const I18N = {
     pwph:"password", pwset:"create password", pwconfirm:"confirm password",
     err_pw_mismatch:"The passwords do not match.",
     logout:"Sign out",
+    devpanel:"Dev",
     err_email:"Enter a valid email address.",
     ctx:"Context",
     fulltext:"This conversation has grown long. Compact it to continue — I'll summarise and keep what matters.",
@@ -578,7 +607,12 @@ const I18N = {
     ratelimit:"You've sent a lot of messages in a short time. Wait a moment and try again.",
     imgmissing:"Image unavailable",
     queuenext:"You're next in the queue. Don't close the page — the answer is coming.",
-    queuepos:n=>`You are number ${n} in the queue. Don't close the page — the answer is coming.`
+    queuepos:n=>`You are number ${n} in the queue. Don't close the page — the answer is coming.`,
+    statusread:"Reading the knowledge base…",
+    statussearch:"Searching the files…",
+    statusweb:"Looking that up…",
+    statuswrite:"Updating the documentation…",
+    statusworking:"Working on it…"
   }
 };
 /* Norwegian is the default; English only if saved or the browser asks for it.
@@ -781,6 +815,11 @@ $("langA").onclick = toggleLang;
 $("langB").onclick = toggleLang;
 $("logoutBtn").onclick = signOut;
 $("logoutTop").onclick = signOut;
+$("devPanelBtn").onclick = () => {
+  if(!token) return;
+  localStorage.setItem("helix_token", token);
+  location.href = "/";
+};
 
 /* ---------------- app ---------------- */
 async function start(){
@@ -797,6 +836,7 @@ async function start(){
     }
     isPupil = me.tier === "student";
     document.body.classList.toggle("pupil", isPupil);
+    $("devPanelBtn").classList.toggle("on", !!me.console);
     applyChips();
   }catch(_){}
   await loadConvs();
@@ -815,9 +855,12 @@ async function api(path, opts={}){
   return r.json();
 }
 function signOut(){
+  const stored = localStorage.getItem("helix_token");
+  if(stored && token && stored === token) localStorage.removeItem("helix_token");
   sessionStorage.removeItem("helix_token"); token = null;
   isPupil = false;
   document.body.classList.remove("pupil");
+  $("devPanelBtn").classList.remove("on");
   if(ws){ ws.onclose = null; ws.close(); ws = null; }
   retry = 0; convs = []; convId = null; busy = false; stream = null;
   $("msgs").innerHTML = "";
@@ -1125,7 +1168,25 @@ function connect(){
       scroll();
       return;
     }
-    if(d.chunk){
+    if(d.type === "status"){
+      if(!stream){ stream = add("a",""); stream.dataset.raw = ""; }
+      if(!stream.dataset.raw){
+        const note = t("status" + (d.kind || "working")) || t("statusworking");
+        stream.innerHTML =
+          '<span class="dots"><span></span><span></span><span></span></span>'
+          + '<div class="queue-note">' + note + '</div>';
+      }
+      scroll();
+      return;
+    }
+    if(d.replace){
+      if(!stream){ stream = add("a",""); }
+      stream.dataset.raw = d.chunk || "";
+      stream.innerHTML = stream.dataset.raw
+        ? render(stream.dataset.raw)
+        : '<span class="dots"><span></span><span></span><span></span></span>';
+      scroll();
+    } else if(d.chunk){
       if(!stream){ stream = add("a",""); stream.dataset.raw = ""; }
       stream.dataset.raw += d.chunk;
       stream.innerHTML = render(stream.dataset.raw);

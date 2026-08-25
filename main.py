@@ -225,7 +225,15 @@ async def main():
     import uvicorn
 
     # Scheduler created before init_web so the web API has a reference
-    scheduler = AsyncIOScheduler(timezone=cfg.timezone)
+    from core.cron_health import MISFIRE_GRACE_SECONDS
+
+    scheduler = AsyncIOScheduler(
+        timezone=cfg.timezone,
+        job_defaults={
+            "coalesce": True,
+            "misfire_grace_time": MISFIRE_GRACE_SECONDS,
+        },
+    )
     init_web(session_manager, agent_loop, scheduler, queue_manager=queue_manager,
              audit_logger=audit)
 
@@ -349,6 +357,8 @@ async def main():
                     CronTrigger.from_crontab(cron.schedule, timezone=cfg.timezone),
                     id=f"cron_{cron.id}",
                     args=[cron.id],
+                    misfire_grace_time=MISFIRE_GRACE_SECONDS,
+                    coalesce=True,
                 )
                 logger.info(f"Scheduled cron: {cron.name} ({cron.schedule})")
             except Exception as e:
@@ -356,6 +366,17 @@ async def main():
 
     scheduler.start()
     logger.info(f"Scheduler started ({len(cfg.crons)} user cron(s) + heartbeat)")
+
+    import zoneinfo
+    from core.cron_health import crons_due_for_catch_up, previous_fire_time
+    now = datetime.now(zoneinfo.ZoneInfo(cfg.timezone))
+    for cron in crons_due_for_catch_up(cfg, now=now):
+        due = previous_fire_time(cron.schedule, now, cfg.timezone)
+        logger.warning(
+            f"Catching up missed cron '{cron.name}' — due "
+            f"{due.isoformat() if due else '?'}, last run {cron.last_run or 'never'}"
+        )
+        asyncio.create_task(_execute_cron(cron.id))
 
     logger.info("Helix fully started.")
     logger.info(f"  Admin UI: http://{cfg.web.host}:{cfg.web.admin_port}")

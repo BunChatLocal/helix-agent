@@ -9,7 +9,7 @@ Custom commands loaded from ~/.helix/workspace/commands/*.md
 from pathlib import Path
 from typing import Callable, Awaitable
 
-from core.config import get_config
+from core.config import TIER_ADMIN, get_config, is_staff_like
 from core.skill_manager import create_skill, list_skills, read_skill
 
 
@@ -21,6 +21,45 @@ HARNESS_COMMANDS = {
     "/memory", "/heartbeat", "/agent",
     "/queue", "/skills", "/skill",
 }
+
+# FRID employees (staff / moderator) may only touch their own conversation.
+# Skills, shared memory, the queue, other people's sessions, and custom
+# commands that write the knowledge base stay with the operator and with
+# people given the admin access role.
+EMPLOYEE_COMMANDS = frozenset({
+    "/help", "/new", "/reset", "/clear",
+    "/status", "/compact", "/model", "/think",
+})
+
+EMPLOYEE_HELP = (
+    "**Kommandoer** — bare denne samtalen\n"
+    "`/new` eller `/reset` — Start en ny samtale\n"
+    "`/compact` — Kort ned historikken i denne samtalen\n"
+    "`/status` — Vis modell og samtaleinfo\n"
+    "`/model [alias]` — Bytt modell for denne samtalen\n"
+    "`/think [deep]` — Tenk grundigere på neste svar\n"
+    "`/clear` — Tøm samtalen\n"
+)
+
+EMPLOYEE_COMMAND_REFUSED = "Den kommandoen er ikke tilgjengelig. Prøv `/help`."
+
+
+def command_scope_for(tier: str, *, operator: bool = False) -> str | None:
+    """None = no slash commands. employee = own-session. all = operator set."""
+    if operator or tier == TIER_ADMIN:
+        return "all"
+    if is_staff_like(tier):
+        return "employee"
+    return None
+
+
+def command_permitted(cmd: str, scope: str | None) -> bool:
+    if scope is None:
+        return False
+    if scope == "all":
+        return True
+    return cmd.lower() in EMPLOYEE_COMMANDS
+
 
 # Module-level reference to the queue manager — set by main.py after startup
 _queue_manager = None
@@ -42,10 +81,13 @@ async def handle_slash(
     session_manager,
     agent_loop,
     send_fn: Callable[[str], Awaitable[None]],
+    *,
+    scope: str = "all",
 ) -> bool:
     """
     Process a slash command. Returns True if handled (suppress normal processing).
     send_fn is an async callable that sends a message back to the user.
+    scope=employee keeps only own-session commands; scope=all is the operator set.
     """
     parts = command_str.strip().split(None, 1)
     cmd = parts[0].lower()
@@ -53,8 +95,15 @@ async def handle_slash(
 
     cfg = get_config()
 
+    if not command_permitted(cmd, scope):
+        await send_fn(EMPLOYEE_COMMAND_REFUSED)
+        return True
+
     # ── /help ──────────────────────────────────────────────────────────────
     if cmd == "/help":
+        if scope != "all":
+            await send_fn(EMPLOYEE_HELP)
+            return True
         await send_fn(
             "**Helix Commands**\n"
             "`/new` or `/reset` — Start a new session\n"

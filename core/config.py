@@ -15,9 +15,18 @@ CONFIG_PATH = Path.home() / ".helix" / "config.json"
 WORKSPACE_PATH = Path.home() / ".helix" / "workspace"
 
 # Permission tiers. See ROLES.md for what each one may do.
-TIER_STAFF = "staff"       # FRID employee: every command, no limit on subject
-TIER_STUDENT = "student"   # pupil: no commands, IT questions only
-ACCESS_BLOCKED = "blocked" # operator closed this account; sign-in and chat refuse
+TIER_STAFF = "staff"             # FRID employee: own-session commands, no subject limit
+TIER_STUDENT = "student"         # pupil: no commands, IT questions only
+TIER_MODERATOR = "moderator"     # staff chat; limited operator panel; own-session commands
+TIER_ADMIN = "admin"             # full commands plus the management API
+ACCESS_BLOCKED = "blocked"       # operator closed this account; sign-in and chat refuse
+ADMITTED_ACCESS = {TIER_STAFF, TIER_STUDENT, TIER_MODERATOR, TIER_ADMIN}
+STAFF_LIKE = {TIER_STAFF, TIER_MODERATOR, TIER_ADMIN}
+
+
+def is_staff_like(tier: str) -> bool:
+    """Staff, moderator and admin share the staff chat prompt."""
+    return tier in STAFF_LIKE
 
 # ─── Sub-models ───────────────────────────────────────────────────────────────
 
@@ -37,6 +46,9 @@ class ModelsConfig(BaseModel):
     default: str = "sonnet"
     heartbeat: str = "haiku"
     compaction: str = "haiku"
+    # Pupil /chat only. Staff /chat uses `default` (sonnet) — verified
+    # procedures like MFA reset do not survive the fast model.
+    chat: str = "haiku"
 
     def resolve(self, alias_or_id: str) -> str:
         """Return model ID for an alias or pass through a full model ID."""
@@ -56,6 +68,13 @@ class ModelsConfig(BaseModel):
     @property
     def compaction_id(self) -> str:
         return self.resolve(self.compaction)
+
+    @property
+    def chat_id(self) -> str:
+        try:
+            return self.resolve(self.chat)
+        except ValueError:
+            return self.default_id
 
 
 class DiscordConfig(BaseModel):
@@ -171,15 +190,15 @@ class EntraConfig(BaseModel):
 class UserAccessOverride(BaseModel):
     """One person whose Zork access is not the tenant/domain default."""
     email: str
-    access: str  # staff | student | blocked
+    access: str  # staff | student | moderator | admin | blocked
     note: str = ""
 
     @model_validator(mode="after")
     def _normalise(self):
         self.email = (self.email or "").strip().lower()
         self.access = (self.access or "").strip().lower()
-        if self.access not in (TIER_STAFF, TIER_STUDENT, ACCESS_BLOCKED):
-            raise ValueError("access must be staff, student or blocked")
+        if self.access not in (*ADMITTED_ACCESS, ACCESS_BLOCKED):
+            raise ValueError("access must be staff, student, moderator, admin or blocked")
         if "@" not in self.email:
             raise ValueError("email is required")
         return self
@@ -257,7 +276,7 @@ class TiersConfig(BaseModel):
     def access_for(self, email: str = "", tid: str = "") -> Optional[str]:
         """Effective access: override, then tenant, then email domain.
 
-        Returns staff, student, blocked, or None if they are not admitted.
+        Returns staff, student, moderator, admin, blocked, or None if they are not admitted.
         """
         ov = self.override_for(email)
         if ov:

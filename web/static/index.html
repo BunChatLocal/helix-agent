@@ -220,6 +220,17 @@
     border-color: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.2);
     box-shadow: inset 0 0 0 1px rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.1), 0 4px 24px rgba(0,0,0,0.4);
   }
+  button.insight-stat {
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    font: inherit;
+    color: inherit;
+  }
+  button.insight-stat:focus-visible {
+    outline: 2px solid rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.5);
+    outline-offset: 2px;
+  }
 
   /* Stat cards */
   .stat-card::after {
@@ -402,6 +413,146 @@
   }
   .tab-inactive { background: rgba(255,255,255,0.04); color: #64748b; border: 1px solid rgba(255,255,255,0.06); }
   .tab-inactive:hover { background: rgba(255,255,255,0.07); color: #94a3b8; }
+  .tab-alert {
+    background: #eab308; color: #111827;
+    box-shadow: 0 2px 10px rgba(234,179,8,0.4);
+    border: 1px solid rgba(250,204,21,0.5);
+  }
+  .tab-alert-quiet {
+    background: rgba(234,179,8,0.16); color: #fbbf24;
+    border: 1px solid rgba(234,179,8,0.4);
+  }
+  .tab-alert-quiet:hover { background: rgba(234,179,8,0.24); color: #fde68a; }
+  .ticket-filter-count {
+    min-width: 1.15rem; padding: 0 0.3rem; border-radius: 999px;
+    font-size: 10px; font-weight: 700; line-height: 1.4; text-align: center;
+    background: rgba(0,0,0,0.18); color: inherit;
+  }
+  .tab-alert-quiet .ticket-filter-count, .tab-inactive .ticket-filter-count {
+    background: rgba(234,179,8,0.22);
+  }
+
+  .desk-modal-backdrop {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(0,0,0,0.58);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.5rem;
+  }
+  .desk-modal {
+    width: min(32rem, 100%);
+    background: var(--card-bg);
+    border: 1px solid rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.18);
+    border-radius: 0.875rem;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+    padding: 1.25rem 1.4rem 1.35rem;
+  }
+  html.light .desk-modal { background: var(--card-bg-light); box-shadow: 0 18px 40px rgba(15,23,42,0.12); }
+  .ticket-status-new { color: #fbbf24; }
+  .ticket-status-waiting_response { color: #fbbf24; }
+  .ticket-status-in_progress { color: var(--accent-light); }
+  .ticket-status-needs_context { color: #c4b5fd; }
+  .ticket-status-refused { color: #f87171; }
+  .ticket-status-completed, .ticket-status-done, .ticket-status-finished { color: #4ade80; }
+  .ticket-emblem {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+    padding: 3px 7px 3px 8px; border-radius: 999px; white-space: nowrap; line-height: 1.2;
+    border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+  }
+  .ticket-emblem svg { width: 10px; height: 10px; flex-shrink: 0; }
+  .ticket-emblem-static { cursor: default; padding-right: 8px; }
+  .ticket-unseen-dot {
+    width: 7px; height: 7px; border-radius: 999px;
+    background: #eab308; box-shadow: 0 0 8px rgba(234,179,8,0.7);
+  }
+  .ticket-emblem.new {
+    color: #facc15; border-color: rgba(250,204,21,0.45); background: rgba(234,179,8,0.18);
+  }
+  .ticket-emblem.waiting_response {
+    color: #fbbf24; border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.12);
+  }
+  .ticket-emblem.in_progress {
+    color: var(--accent-light);
+    border-color: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.35);
+    background: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.15);
+  }
+  .ticket-emblem.needs_context {
+    color: #c4b5fd; border-color: rgba(167,139,250,0.35); background: rgba(167,139,250,0.12);
+  }
+  .ticket-emblem.finished, .ticket-emblem.completed, .ticket-emblem.done {
+    color: #4ade80; border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.1);
+  }
+  .ticket-emblem.refused {
+    color: #f87171; border-color: rgba(248,113,113,0.35); background: rgba(248,113,113,0.12);
+  }
+  .ticket-filter-menu {
+    position: absolute; right: 0; top: calc(100% + 6px); z-index: 40;
+    min-width: 12rem; padding: 0.4rem;
+    background: var(--card-bg);
+    border: 1px solid rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.18);
+    border-radius: 0.75rem; box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+    display: flex; flex-direction: column; gap: 0.25rem;
+  }
+  html.light .ticket-filter-menu, html.light .ticket-status-menu { background: var(--card-bg-light); }
+  .ticket-filter-menu button, .ticket-status-menu button {
+    text-align: left; padding: 0.4rem 0.7rem; border-radius: 0.5rem;
+    font-size: 12px; font-weight: 500;
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  }
+  .ticket-status-menu {
+    position: fixed; z-index: 70; min-width: 12rem; padding: 0.4rem;
+    background: var(--card-bg);
+    border: 1px solid rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.18);
+    border-radius: 0.75rem; box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+    display: flex; flex-direction: column; gap: 0.25rem;
+    transform: translateX(-100%);
+  }
+  .ticket-status-backdrop { position: fixed; inset: 0; z-index: 69; }
+
+  .ticket-thread { display: flex; flex-direction: column; gap: 0.7rem; padding: 0.15rem 0 0.35rem; }
+  .ticket-row { display: flex; flex-direction: column; max-width: min(78%, 36rem); }
+  .ticket-row.me { align-self: flex-end; align-items: flex-end; }
+  .ticket-row.them { align-self: flex-start; align-items: flex-start; }
+  .ticket-meta { font-size: 11px; color: #64748b; margin: 0 0.45rem 0.22rem; }
+  .ticket-bubble {
+    padding: 0.55rem 0.85rem;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+  .ticket-bubble.me {
+    background: #0a84ff;
+    color: #fff;
+    border-radius: 18px 18px 4px 18px;
+  }
+  .ticket-bubble.them {
+    background: #3a3a3c;
+    color: #f1f5f9;
+    border-radius: 18px 18px 18px 4px;
+  }
+  html.light .ticket-bubble.them { background: #e5e5ea; color: #111827; }
+  .ticket-shots { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .ticket-shots + .ticket-shots, .ticket-bubble > div + .ticket-shots { margin-top: 0.45rem; }
+  .ticket-shots img {
+    max-width: 220px; max-height: 160px; border-radius: 10px;
+    object-fit: cover; cursor: zoom-in; display: block;
+  }
+  .ticket-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ticket-thumb { position: relative; width: 64px; height: 64px; border-radius: 9px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+  .ticket-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .ticket-thumb button {
+    position: absolute; top: 2px; right: 2px; width: 18px; height: 18px;
+    border-radius: 50%; background: rgba(0,0,0,0.65); color: #fff;
+    font-size: 12px; line-height: 18px; text-align: center; border: 0; cursor: pointer;
+  }
+  .ticket-thumb.busy { opacity: 0.5; }
+  .ticket-attach {
+    width: 44px; height: 44px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 0.9rem; color: #94a3b8;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+  }
+  .ticket-attach:hover { color: #e2e8f0; background: rgba(255,255,255,0.07); }
 
   /* Model tier pills */
   .tier-fast     { background: rgba(34,197,94,0.1);  color: #4ade80; border: 1px solid rgba(34,197,94,0.2);  border-radius: 4px; font-size: 11px; padding: 1px 7px; }
@@ -422,6 +573,8 @@
   .cron-result.error .label{color:#f87171}
   .cron-result.running .label{color:#fbbf24}
   .cron-result.silent .label,.cron-result.idle .label{color:#94a3b8}
+  .cron-result.missed{border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.08)}
+  .cron-result.missed .label{color:#fbbf24}
   .cron-result pre{
     margin:0;white-space:pre-wrap;word-break:break-word;max-height:18rem;overflow:auto;
     color:#cbd5e1;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11.5px;
@@ -540,6 +693,8 @@
   html.light .section-title { background: linear-gradient(90deg, #1e293b 60%, var(--accent-dark)); -webkit-background-clip: text; background-clip: text; }
   html.light .tab-inactive { background: #f1f5f9; border-color: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.15); }
   html.light .tab-inactive:hover { background: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.08); color: var(--accent-dark); }
+  html.light .tab-alert { color: #111827; }
+  html.light .tab-alert-quiet { background: rgba(234,179,8,0.2); color: #a16207; }
   html.light .chip { color: var(--accent-dark) !important; }
   html.light .grad-sep { background: linear-gradient(90deg, transparent, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.3) 50%, transparent); }
   html.light .theme-btn { color: #475569; }
@@ -604,7 +759,7 @@
         </div>
       </div>
       <h1 class="text-3xl font-bold" style="color: var(--accent-light);">Zork</h1>
-      <p class="text-slate-500 text-sm mt-1 font-medium tracking-wide">AI Agent Harness</p>
+      <p class="text-slate-500 text-sm mt-1 font-medium tracking-wide">FRID Agent</p>
     </div>
     <div class="grad-sep mb-6"></div>
     <input
@@ -644,22 +799,28 @@
 
     <!-- Navigation -->
     <nav class="flex-1 p-2 space-y-0.5 mt-1 overflow-y-auto">
-      <template x-for="page in pages" :key="page.id">
+      <template x-for="page in visiblePages" :key="page.id">
         <button
           @click="currentPage = page.id; onPageChange(page.id)"
           :class="currentPage === page.id ? 'nav-active' : 'text-slate-500'"
           class="nav-item w-full text-left px-3 py-2.5 text-sm font-medium rounded-lg flex items-center gap-2.5"
         >
           <span class="text-base leading-none" x-text="page.icon"></span>
-          <span x-text="page.label"></span>
+          <span class="flex-1" x-text="page.label"></span>
+          <span x-show="page.id === 'desk' && deskUnread"
+                class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300"
+                x-text="deskUnread"></span>
+          <span x-show="page.id === 'desk' && deskInboxBadge()"
+                class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300"
+                x-text="deskInboxBadge()"></span>
         </button>
       </template>
-      <button @click="showAdvanced = !showAdvanced"
+      <button x-show="!isModerator" @click="showAdvanced = !showAdvanced"
         class="nav-item w-full text-left px-3 py-2.5 text-sm font-medium rounded-lg flex items-center gap-2.5 text-slate-600 mt-2">
         <span class="text-base leading-none">▾</span>
         <span x-text="showAdvanced ? 'Advanced' : 'Advanced'"></span>
       </button>
-      <template x-if="showAdvanced">
+      <template x-if="showAdvanced && !isModerator">
         <div class="space-y-0.5">
           <template x-for="page in advancedPages" :key="page.id">
             <button
@@ -715,6 +876,7 @@
       </button>
 
       <div class="text-xs text-slate-700 text-center font-mono pt-0.5">v1.3.1</div>
+      <a x-show="isModerator" href="/chat" class="block text-center text-xs text-slate-500 hover:text-slate-300 pt-1">Back to chat</a>
     </div>
   </div>
 
@@ -748,22 +910,31 @@
         </div>
         <div class="card stat-card p-5">
           <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Sessions</div>
-          <div class="text-3xl font-bold" style="color: var(--accent-light);" x-text="health.sessions || 0"></div>
-          <div class="text-xs text-slate-700 mt-2">active sessions</div>
+          <div class="text-3xl font-bold" style="color: var(--accent-light);" x-text="usedSessionCount()"></div>
+          <div class="text-xs text-slate-700 mt-2">chats</div>
+          <button type="button" @click="homeSessionDetail = !homeSessionDetail"
+            class="text-xs mt-2 text-slate-500 hover:text-slate-300">more info</button>
+          <div x-show="homeSessionDetail" class="text-xs text-slate-500 mt-1.5">
+            <span x-text="sessions.length"></span> total
+            <span x-show="emptySessionCount()"> · <span x-text="emptySessionCount()"></span> unused</span>
+          </div>
         </div>
         <div class="card stat-card p-5">
           <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Uptime</div>
           <div class="text-2xl font-bold text-slate-200" x-text="formatUptime(health.uptime || 0)"></div>
         </div>
-        <div class="card stat-card p-5">
-          <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Channels</div>
-          <div class="flex flex-wrap gap-1 mt-1">
-            <template x-for="ch in (health.channels || [])" :key="ch">
-              <span class="chip" x-text="ch"></span>
-            </template>
-            <span x-show="!(health.channels || []).length" class="text-slate-600 text-sm">none</span>
-          </div>
-        </div>
+        <button type="button" class="card stat-card p-5 text-left cursor-pointer" @click="openDeskTab()">
+          <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Team chat</div>
+          <div class="text-xl font-bold leading-tight" :class="deskUnread ? 'text-amber-400' : 'text-slate-200'"
+               x-text="deskUnreadLabel()"></div>
+          <div class="text-xs text-slate-700 mt-2">Open the room</div>
+        </button>
+        <button type="button" class="card stat-card p-5 text-left cursor-pointer" @click="openDeskReports()">
+          <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Reports</div>
+          <div class="text-xl font-bold leading-tight" :class="deskReportsAlertCount() ? 'text-amber-400' : 'text-slate-200'"
+               x-text="deskReportsLabel()"></div>
+          <div class="text-xs text-slate-700 mt-2" x-text="deskReportsHint()"></div>
+        </button>
       </div>
 
       <div x-show="health.auth && !health.auth.ready"
@@ -833,6 +1004,194 @@
             </div>
           </template>
           <div x-show="!(config.models?.roster || []).length" class="text-slate-600 text-sm">No models configured.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================ TEAM CHAT ================================ -->
+    <div x-show="currentPage === 'desk'" class="flex-1 flex flex-col overflow-hidden">
+      <div class="flex items-center gap-4 px-6 py-4" style="border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.15);">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-slate-200">Team chat</span>
+            <span class="text-xs text-slate-600" x-text="deskWsStatus === 'connected' ? 'live' : deskWsStatus"></span>
+          </div>
+          <p class="text-xs text-slate-600 mt-0.5">Everyone with access to this panel. Report an issue or answer one.</p>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" @click="deskView = 'chat'"
+            :class="deskView === 'chat' ? 'tab-active' : 'tab-inactive'"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium">Chat</button>
+          <button type="button" @click="deskView = 'inbox'; loadDeskTickets()"
+            :class="deskView === 'inbox' ? 'tab-active' : 'tab-inactive'"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium">
+            Inbox
+            <span x-show="deskInboxBadge()" class="opacity-80" x-text="'(' + deskInboxBadge() + ')'"></span>
+          </button>
+        </div>
+      </div>
+
+      <div x-show="deskView === 'chat'" class="flex-1 flex flex-col overflow-hidden">
+        <div id="desk-messages" class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          <p x-show="!deskMessages.length" class="text-sm text-slate-600">No messages yet.</p>
+          <template x-for="m in deskMessages" :key="m.id">
+            <div>
+              <div class="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-500">
+                <span class="text-slate-300 font-medium" x-text="m.name || m.email || 'unknown'"></span>
+                <span x-show="m.email && m.name && m.email !== m.name.toLowerCase()" class="text-slate-600" x-text="m.email"></span>
+                <span x-text="m.ts ? new Date(m.ts * 1000).toLocaleString() : ''"></span>
+              </div>
+              <div class="text-sm text-slate-200 mt-0.5 whitespace-pre-wrap" x-text="m.text"></div>
+            </div>
+          </template>
+        </div>
+        <div class="px-6 py-4 space-y-2.5" style="border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1);">
+          <div class="flex gap-2">
+            <button type="button" @click="openDeskForm('suggestion')"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium tab-inactive">Suggestion</button>
+            <button type="button" @click="openDeskForm('issue')"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium tab-inactive">Report issue</button>
+          </div>
+          <form class="flex gap-3" @submit.prevent="sendDeskChat()">
+            <input
+              x-model="deskInput"
+              placeholder="Write to the team…"
+              class="input-base flex-1 px-4 py-3 text-sm rounded-2xl"
+              maxlength="2000"
+            >
+            <button type="submit" :disabled="!deskInput.trim()" class="btn-primary px-5 rounded-2xl text-sm">Send</button>
+          </form>
+        </div>
+      </div>
+
+      <div x-show="deskView === 'inbox'" class="flex-1 flex flex-col overflow-hidden"
+           @keydown.escape.window="deskFilterOpen = false; deskStatusEditId = ''">
+        <div class="px-6 py-3 flex items-center justify-between gap-3 flex-wrap" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+          <div class="flex gap-2">
+            <button type="button" @click="deskTicketKind = 'issue'; selectFirstVisibleTicket()"
+              :class="deskKindTabClass('issue')"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5">
+              Issues
+              <span x-show="deskKindAlertCount('issue')" class="ticket-filter-count" x-text="deskKindAlertCount('issue')"></span>
+            </button>
+            <button type="button" @click="deskTicketKind = 'suggestion'; selectFirstVisibleTicket()"
+              :class="deskKindTabClass('suggestion')"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5">
+              Suggestions
+              <span x-show="deskKindAlertCount('suggestion')" class="ticket-filter-count" x-text="deskKindAlertCount('suggestion')"></span>
+            </button>
+          </div>
+          <div class="relative">
+            <button type="button" @click="deskFilterOpen = !deskFilterOpen; deskStatusEditId = ''"
+              :class="deskFilterTriggerClass()"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5">
+              <span x-text="deskFilterLabel()"></span>
+              <span x-show="deskKindAlertCount()" class="ticket-filter-count" x-text="deskKindAlertCount()"></span>
+              <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path d="M5.3 7.3a1 1 0 011.4 0L10 10.58l3.3-3.3a1 1 0 111.4 1.42l-4 4a1 1 0 01-1.4 0l-4-4a1 1 0 010-1.42z"/></svg>
+            </button>
+            <div x-show="deskFilterOpen" class="ticket-filter-menu" @click.outside="deskFilterOpen = false" x-cloak>
+              <button type="button" @click="setDeskFilter('all')"
+                :class="deskFilterItemClass('all')">
+                <span>All</span>
+                <span x-show="deskKindAlertCount()" class="ticket-filter-count" x-text="deskKindAlertCount()"></span>
+              </button>
+              <template x-for="s in deskStatuses" :key="'filter-'+s.id">
+                <button type="button" @click="setDeskFilter(s.id)"
+                  :class="deskFilterItemClass(s.id)">
+                  <span x-text="s.label"></span>
+                  <span x-show="deskStatusIsAlert(s.id) && deskStatusCount(s.id)" class="ticket-filter-count" x-text="deskStatusCount(s.id)"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+        <div class="flex-1 flex overflow-hidden">
+        <div class="w-80 flex-shrink-0 overflow-y-auto px-3 py-4 space-y-1" style="border-right: 1px solid rgba(255,255,255,0.06);">
+          <p x-show="!visibleDeskTickets().length" class="text-sm text-slate-600 px-1">Nothing here yet.</p>
+          <template x-for="t in visibleDeskTickets()" :key="t.id">
+            <div @click="selectDeskTicket(t.id)"
+              class="w-full text-left px-3 py-2.5 rounded-lg cursor-pointer"
+              :class="deskTicketId === t.id ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'">
+              <div class="flex items-start justify-between gap-2">
+                <span class="text-sm text-slate-200 truncate" x-text="t.subject"></span>
+                <button type="button" x-show="isDeskAdmin" @click.stop="openDeskStatusMenu($event, t)"
+                  class="ticket-emblem flex-shrink-0"
+                  :class="normalizeStatus(t.status)">
+                  <span x-text="ticketStatusLabel(t.status)"></span>
+                  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.3 7.3a1 1 0 011.4 0L10 10.58l3.3-3.3a1 1 0 111.4 1.42l-4 4a1 1 0 01-1.4 0l-4-4a1 1 0 010-1.42z"/></svg>
+                </button>
+                <span x-show="!isDeskAdmin" class="ticket-emblem ticket-emblem-static flex-shrink-0"
+                  :class="normalizeStatus(t.status)"
+                  x-text="ticketStatusLabel(t.status)"></span>
+              </div>
+              <div class="text-[11px] text-slate-600 mt-0.5 truncate flex items-center gap-1.5">
+                <span x-show="!isDeskAdmin && deskTicketUnseen(t)" class="ticket-unseen-dot flex-shrink-0"></span>
+                <span class="truncate" x-text="t.name || t.email || 'unknown'"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+        <div class="flex-1 flex flex-col overflow-hidden" x-show="selectedDeskTicket()">
+          <div class="px-6 py-4 overflow-y-auto flex-1 space-y-4" id="ticket-thread">
+            <div>
+              <div class="text-xs text-slate-600 uppercase tracking-wider font-medium" x-text="ticketKindLabel(deskTicket.kind)"></div>
+              <h3 class="text-lg font-semibold text-slate-100 mt-1" x-text="deskTicket.subject"></h3>
+              <div class="text-xs text-slate-500 mt-1">
+                <span x-text="deskTicket.name || deskTicket.email || 'unknown'"></span>
+                <span x-show="deskTicket.email && deskTicket.name" class="text-slate-600" x-text="' · ' + deskTicket.email"></span>
+                <span x-text="' · ' + (deskTicket.ts ? new Date(deskTicket.ts * 1000).toLocaleString() : '')"></span>
+              </div>
+            </div>
+            <div class="ticket-thread">
+              <template x-for="m in deskTicketThread()" :key="m.id">
+                <div class="ticket-row" :class="deskIsMine(m) ? 'me' : 'them'">
+                  <div class="ticket-meta">
+                    <span x-text="deskIsMine(m) ? 'You' : (m.name || m.email || 'unknown')"></span>
+                    <span x-text="m.ts ? (' · ' + new Date(m.ts * 1000).toLocaleString()) : ''"></span>
+                  </div>
+                  <div class="ticket-bubble" :class="deskIsMine(m) ? 'me' : 'them'">
+                    <div x-show="m.text" class="whitespace-pre-wrap" x-text="m.text"></div>
+                    <div class="ticket-shots" x-show="m.images && m.images.length">
+                      <template x-for="name in (m.images || [])" :key="name">
+                        <img x-show="deskImageUrls[name]" :src="deskImageUrls[name]" alt=""
+                             @click="deskImageUrls[name] && window.open(deskImageUrls[name], '_blank')">
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+          <form class="px-6 py-4 space-y-2" style="border-top: 1px solid rgba(255,255,255,0.05);"
+                @submit.prevent="sendDeskTicketReply()"
+                @dragover.prevent @drop.prevent="onDeskImageDrop($event, 'reply')">
+            <div class="ticket-thumbs" x-show="deskReplyImages.length">
+              <template x-for="(p, i) in deskReplyImages" :key="p.url">
+                <div class="ticket-thumb" :class="{ busy: p.uploading }">
+                  <img :src="p.url" alt="">
+                  <button type="button" @click="removeDeskImage('reply', i)">×</button>
+                </div>
+              </template>
+            </div>
+            <div class="flex gap-3">
+              <button type="button" class="ticket-attach" title="Add screenshot" @click="pickDeskImage('reply')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <input
+                x-model="deskTicketReply"
+                placeholder="Write a reply, or paste a screenshot…"
+                class="input-base flex-1 px-4 py-3 text-sm rounded-2xl"
+                maxlength="2000"
+                @paste="onDeskImagePaste($event, 'reply')"
+              >
+              <button type="submit" :disabled="!canSendDeskReply()" class="btn-primary px-5 rounded-2xl text-sm">Reply</button>
+            </div>
+            <p x-show="deskReplyError" class="text-xs text-red-400" x-text="deskReplyError"></p>
+          </form>
+        </div>
+        <div class="flex-1 flex items-center justify-center text-sm text-slate-600" x-show="!selectedDeskTicket()">
+          Pick a report from the list.
+        </div>
         </div>
       </div>
     </div>
@@ -915,39 +1274,108 @@
     <div x-show="currentPage === 'sessions'" class="flex-1 overflow-y-auto p-7">
       <h2 class="section-title mb-1">Sessions</h2>
       <p class="text-slate-600 text-sm mb-6">Active conversations across all channels</p>
+      <div x-show="!isModerator" class="flex gap-2 mb-4">
+        <button @click="sessionTab = 'afk'" :class="sessionTab === 'afk' ? 'tab-active' : 'tab-inactive'" class="px-4 py-2 rounded-lg text-sm font-medium">
+          AFK
+          <span class="opacity-70" x-text="sessionAfkCount() ? '(' + sessionAfkCount() + ')' : ''"></span>
+        </button>
+        <button @click="sessionTab = 'frid'" :class="sessionTab === 'frid' ? 'tab-active' : 'tab-inactive'" class="px-4 py-2 rounded-lg text-sm font-medium">
+          FRID-IKS
+          <span class="opacity-70" x-text="sessionFridCount() ? '(' + sessionFridCount() + ')' : ''"></span>
+        </button>
+        <button @click="sessionTab = 'stress'" :class="sessionTab === 'stress' ? 'tab-active' : 'tab-inactive'" class="px-4 py-2 rounded-lg text-sm font-medium">
+          Stress accounts
+          <span class="opacity-70" x-text="sessionStressCount() ? '(' + sessionStressCount() + ')' : ''"></span>
+        </button>
+      </div>
+      <div class="flex gap-3 mb-4">
+        <input x-model="sessionQuery" placeholder="Search email…" class="input-base flex-1 px-3 py-2.5 text-sm">
+      </div>
       <div x-show="sessions.length === 0" class="text-slate-500 text-sm">No active sessions.</div>
-      <div class="space-y-4">
-        <template x-for="s in sessions" :key="s.session_id">
+      <div x-show="sessions.length && !filteredSessionPeople().length" class="text-slate-500 text-sm">No matching people.</div>
+      <div class="space-y-3">
+        <template x-for="person in filteredSessionPeople()" :key="person.key">
           <div class="card p-5">
-            <div class="flex items-start justify-between mb-4">
-              <div>
-                <div class="font-semibold text-slate-200 text-sm" x-text="s.channel + ':' + s.peer"></div>
-                <div class="font-mono text-xs text-slate-600 mt-0.5" x-text="'#' + s.session_id.slice(0,8)"></div>
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <div class="font-semibold text-slate-200 text-sm truncate" x-text="person.label"></div>
+                <div class="text-xs text-slate-600 mt-0.5" x-text="person.channel"></div>
               </div>
-              <div class="flex items-center gap-2">
-                <button @click="resetSession(s.channel, s.peer)" class="text-xs px-3 py-1.5 rounded-lg border border-red-500/20 text-red-500 hover:bg-red-500/10">Reset</button>
-              </div>
+              <button type="button" @click="toggleSessionUser(person.key)"
+                class="shrink-0 text-sm px-3 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:border-white/20 hover:text-slate-100">
+                <span x-text="person.used.length"></span>
+                <span x-text="person.used.length === 1 ? ' active' : ' active'"></span>
+                <span x-show="person.empty.length" class="text-slate-500" x-text="' · ' + person.empty.length + ' unused'"></span>
+              </button>
             </div>
-            <div class="grid grid-cols-2 gap-3 mb-4">
-              <div class="bg-white/[0.02] rounded-lg p-3">
-                <div class="text-xs text-slate-600 mb-1">Model</div>
-                <div class="text-sm text-slate-300 font-medium" x-text="s.model"></div>
-              </div>
-              <div class="bg-white/[0.02] rounded-lg p-3">
-                <div class="text-xs text-slate-600 mb-1">Tokens</div>
-                <div class="text-sm text-slate-300 font-medium" x-text="(s.token_count || 0).toLocaleString()"></div>
-              </div>
-            </div>
-            <button @click="loadTranscript(s.session_id)" class="text-xs font-medium flex items-center gap-1" style="color: var(--accent-light);">
-              <span x-text="transcript.session_id === s.session_id ? '▲ Hide transcript' : '▼ View transcript'"></span>
-            </button>
-            <div x-show="transcript.session_id === s.session_id" class="mt-3 bg-black/30 rounded-xl p-4 max-h-48 overflow-y-auto space-y-2">
-              <template x-for="msg in transcript.messages" :key="msg.role + Math.random()">
-                <div class="flex gap-2 text-xs">
-                  <span class="font-semibold flex-shrink-0" :style="msg.role === 'user' ? 'color: var(--accent-light)' : 'color: #64748b'" x-text="msg.role + ':'"></span>
-                  <span class="text-slate-400 leading-relaxed" x-text="typeof msg.content === 'string' ? msg.content.slice(0,200) : JSON.stringify(msg.content).slice(0,200)"></span>
+            <div x-show="expandedSessionUser === person.key" class="mt-4 space-y-2">
+              <template x-for="s in person.used" :key="s.session_id">
+                <div class="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="font-mono text-xs text-slate-400" x-text="'#' + s.session_id.slice(0,8)"></div>
+                      <div class="text-xs text-slate-600 mt-1">
+                        <span x-text="s.model"></span>
+                        ·
+                        <span x-text="(s.token_count || 0).toLocaleString() + ' tokens'"></span>
+                        <span x-show="s.last_active">
+                          ·
+                          <span x-text="new Date((s.last_active || 0) * 1000).toLocaleString()"></span>
+                        </span>
+                      </div>
+                    </div>
+                    <button @click="resetSession(s.channel, s.peer)" class="text-xs px-3 py-1.5 rounded-lg border border-red-500/20 text-red-500 hover:bg-red-500/10">Reset</button>
+                  </div>
+                  <button @click="loadTranscript(s.session_id)" class="text-xs font-medium flex items-center gap-1 mt-2" style="color: var(--accent-light);">
+                    <span x-text="transcript.session_id === s.session_id ? '▲ Hide transcript' : '▼ View transcript'"></span>
+                  </button>
+                  <div x-show="transcript.session_id === s.session_id" class="mt-3 bg-black/30 rounded-xl p-4 max-h-48 overflow-y-auto space-y-2">
+                    <template x-for="msg in transcript.messages" :key="msg.role + Math.random()">
+                      <div class="flex gap-2 text-xs">
+                        <span class="font-semibold flex-shrink-0" :style="msg.role === 'user' ? 'color: var(--accent-light)' : 'color: #64748b'" x-text="msg.role + ':'"></span>
+                        <span class="text-slate-400 leading-relaxed" x-text="typeof msg.content === 'string' ? msg.content.slice(0,200) : JSON.stringify(msg.content).slice(0,200)"></span>
+                      </div>
+                    </template>
+                  </div>
                 </div>
               </template>
+              <details x-show="person.empty.length" class="rounded-lg border border-white/5 bg-white/[0.01]">
+                <summary class="cursor-pointer select-none text-sm text-slate-400 hover:text-slate-200 px-3 py-2">
+                  <span x-text="person.empty.length"></span>
+                  unused (0 tokens)
+                </summary>
+                <div class="space-y-2 p-2 pt-0">
+                  <template x-for="s in person.empty" :key="s.session_id">
+                    <div class="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="font-mono text-xs text-slate-400" x-text="'#' + s.session_id.slice(0,8)"></div>
+                          <div class="text-xs text-slate-600 mt-1">
+                            <span x-text="s.model"></span>
+                            · 0 tokens
+                            <span x-show="s.last_active">
+                              ·
+                              <span x-text="new Date((s.last_active || 0) * 1000).toLocaleString()"></span>
+                            </span>
+                          </div>
+                        </div>
+                        <button @click="resetSession(s.channel, s.peer)" class="text-xs px-3 py-1.5 rounded-lg border border-red-500/20 text-red-500 hover:bg-red-500/10">Reset</button>
+                      </div>
+                      <button @click="loadTranscript(s.session_id)" class="text-xs font-medium flex items-center gap-1 mt-2" style="color: var(--accent-light);">
+                        <span x-text="transcript.session_id === s.session_id ? '▲ Hide transcript' : '▼ View transcript'"></span>
+                      </button>
+                      <div x-show="transcript.session_id === s.session_id" class="mt-3 bg-black/30 rounded-xl p-4 max-h-48 overflow-y-auto space-y-2">
+                        <template x-for="msg in transcript.messages" :key="msg.role + Math.random()">
+                          <div class="flex gap-2 text-xs">
+                            <span class="font-semibold flex-shrink-0" :style="msg.role === 'user' ? 'color: var(--accent-light)' : 'color: #64748b'" x-text="msg.role + ':'"></span>
+                            <span class="text-slate-400 leading-relaxed" x-text="typeof msg.content === 'string' ? msg.content.slice(0,200) : JSON.stringify(msg.content).slice(0,200)"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </details>
             </div>
           </div>
         </template>
@@ -957,9 +1385,11 @@
     <!-- ================================ USERS ================================ -->
     <div x-show="currentPage === 'permissions'" class="flex-1 overflow-y-auto p-7">
       <h2 class="section-title mb-1">Users</h2>
-      <p class="text-slate-600 text-sm mb-6">Who may use Zork, and as staff or pupil. An override beats the domain default and applies on their next message.</p>
+      <p class="text-slate-600 text-sm mb-6" x-text="isModerator
+        ? 'AFK accounts. You can reset a password; roles are set by an admin.'
+        : 'Who may use Zork, and as staff or pupil. An override beats the domain default and applies on their next message.'"></p>
 
-      <div class="card p-5 mb-5">
+      <div x-show="!isModerator" class="card p-5 mb-5">
         <h3 class="font-semibold text-slate-300 mb-3">Defaults</h3>
         <div class="grid md:grid-cols-2 gap-3 text-sm">
           <div class="bg-white/[0.02] rounded-lg p-3">
@@ -973,7 +1403,7 @@
         </div>
       </div>
 
-      <div class="card p-5 mb-5">
+      <div x-show="!isModerator" class="card p-5 mb-5">
         <h3 class="font-semibold text-slate-300 mb-3">Add or change a person</h3>
         <div class="flex flex-wrap gap-2 items-end">
           <label class="flex-1 min-w-[12rem]">
@@ -983,17 +1413,25 @@
           <label>
             <span class="block text-xs text-slate-600 mb-1.5 font-medium">Access</span>
             <select x-model="permAccess" class="input-base px-3 py-2.5 text-sm text-slate-300 cursor-pointer">
-              <option value="staff">Staff</option>
               <option value="student">Pupil</option>
+              <option value="staff">Staff</option>
+              <option value="moderator">Moderator</option>
+              <option value="admin">Admin</option>
               <option value="blocked">Blocked</option>
             </select>
           </label>
           <button @click="savePermission()" class="btn-primary px-4 py-2.5 text-sm">Save</button>
         </div>
         <p x-show="permMsg" class="text-xs mt-2" :class="permOk ? 'text-emerald-400' : 'text-red-400'" x-text="permMsg"></p>
+        <div x-show="permIssuedPassword" class="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span class="text-slate-500">Password</span>
+          <code class="px-2 py-1 rounded bg-black/40 text-emerald-300 font-mono text-xs" x-text="permIssuedPassword"></code>
+          <button type="button" @click="copyIssuedPassword(permIssuedEmail)" class="text-xs px-2 py-1 rounded-lg border border-white/10 text-slate-400 hover:text-slate-200">Copy</button>
+          <span class="text-xs text-slate-600">Shown once — copy it now.</span>
+        </div>
       </div>
 
-      <div class="flex gap-2 mb-4">
+      <div x-show="!isModerator" class="flex gap-2 mb-4">
         <button @click="permTab = 'afk'" :class="permTab === 'afk' ? 'tab-active' : 'tab-inactive'" class="px-4 py-2 rounded-lg text-sm font-medium">
           AFK
           <span class="opacity-70" x-text="filteredAfk().length ? '(' + filteredAfk().length + ')' : ''"></span>
@@ -1014,29 +1452,45 @@
       <div x-show="filteredPermList().length === 0" class="text-slate-500 text-sm" x-text="permEmptyMsg()"></div>
       <div class="space-y-2">
         <template x-for="p in filteredPermList()" :key="p.email">
-          <div class="card p-4 flex flex-wrap items-center gap-3">
+          <div class="card p-4 space-y-2">
+            <div class="flex flex-wrap items-center gap-3">
             <div class="flex-1 min-w-[12rem]">
               <div class="text-sm text-slate-200 font-medium" x-text="p.email"></div>
               <div class="text-xs text-slate-600 mt-0.5">
                 <span x-text="p.name || ''"></span>
                 <span x-show="p.last_seen"> · last seen <span x-text="formatPermSeen(p.last_seen)"></span></span>
-                <span x-show="!p.override"> · default <span x-text="permLabel(p.default_access)"></span></span>
+                <span x-show="p.override"> · override</span>
               </div>
             </div>
               <select
+                x-show="!isModerator"
                 class="input-base px-3 py-2 text-sm text-slate-300 cursor-pointer"
-                :value="p.override || ''"
-                @change="setPermission(p.email, $event.target.value)"
+                :value="p.effective || p.default_access || ''"
+                @change="setPermission(p.email, $event.target.value, { where: 'row' })"
               >
-                <option value="">Default</option>
-                <option value="staff">Staff</option>
                 <option value="student">Pupil</option>
+                <option value="staff">Staff</option>
+                <option value="moderator">Moderator</option>
+                <option value="admin">Admin</option>
                 <option value="blocked">Blocked</option>
               </select>
               <button
                 @click="resetPassword(p.email)"
                 class="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/5"
-              >Reset</button>
+              >Reset password</button>
+            </div>
+            <p
+              x-show="permRowNotice[p.email]"
+              class="text-xs"
+              :class="permRowNotice[p.email]?.ok ? 'text-emerald-400' : 'text-red-400'"
+              x-text="permRowNotice[p.email]?.text || ''"
+            ></p>
+            <div x-show="issuedPasswords[p.email]" class="flex flex-wrap items-center gap-2 text-sm">
+              <span class="text-slate-500">Password</span>
+              <code class="px-2 py-1 rounded bg-black/40 text-emerald-300 font-mono text-xs" x-text="issuedPasswords[p.email]"></code>
+              <button type="button" @click="copyIssuedPassword(p.email)" class="text-xs px-2 py-1 rounded-lg border border-white/10 text-slate-400 hover:text-slate-200">Copy</button>
+              <span class="text-xs text-slate-600">Shown once — copy it now.</span>
+            </div>
           </div>
         </template>
       </div>
@@ -1186,7 +1640,7 @@
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="section-title">Cron Jobs</h2>
-          <p class="text-slate-600 text-sm mt-0.5">Scheduled agent tasks. Each job shows whether the last run succeeded.</p>
+          <p class="text-slate-600 text-sm mt-0.5">Scheduled agent tasks. A green last-run is not enough — the job is marked missed if today's slot never fired.</p>
         </div>
         <button @click="cronFormOpen = !cronFormOpen" class="btn-primary px-4 py-2 text-sm flex items-center gap-2"
           x-text="cronFormOpen ? '✕ Cancel' : '+ Add Cron'"></button>
@@ -1243,6 +1697,7 @@
                 <div class="flex items-center gap-3 mb-2">
                   <span class="font-semibold text-slate-200" x-text="cron.name"></span>
                   <span :class="cron.enabled ? 'badge-active' : 'badge-paused'" x-text="cron.enabled ? 'active' : 'paused'"></span>
+                  <span x-show="cron.missed" class="badge-paused" style="color:#fbbf24;border-color:rgba(245,158,11,0.35)">missed</span>
                 </div>
                 <div class="flex flex-wrap gap-x-5 gap-y-1.5 text-xs mb-3">
                   <span>
@@ -1252,6 +1707,10 @@
                   <span x-show="cron.model">
                     <span class="text-slate-600">model </span>
                     <span class="text-slate-400" x-text="cron.model"></span>
+                  </span>
+                  <span x-show="cron.expected_at">
+                    <span class="text-slate-600">due </span>
+                    <span :class="cron.missed ? 'text-amber-400' : 'text-slate-400'" x-text="new Date(cron.expected_at).toLocaleString()"></span>
                   </span>
                   <span x-show="cron.next_run">
                     <span class="text-slate-600">next </span>
@@ -1264,7 +1723,7 @@
                 </div>
                 <div class="text-xs text-slate-500 bg-black/30 rounded-lg px-3 py-2 font-mono truncate" x-text="cron.prompt"></div>
                 <div class="cron-result"
-                  :class="(cronRunning[cron.id] || cron.last_status === 'running') ? 'running' : (cron.last_status || 'idle')">
+                  :class="cronResultClass(cron)">
                   <div class="label" x-text="cronResultLabel(cron)"></div>
                   <pre x-show="cron.last_result" x-text="cron.last_result"></pre>
                 </div>
@@ -1355,18 +1814,19 @@
       <div class="flex-1 overflow-y-auto space-y-5">
         <!-- Totals -->
         <div class="grid grid-cols-6 gap-4">
-          <div class="card p-5">
+          <button type="button" class="card insight-stat p-5" @click="goToSessions()" title="Open Sessions">
             <div class="text-slate-600 text-xs uppercase tracking-wide">Conversations</div>
             <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.conversations ?? '–'"></div>
-          </div>
-          <div class="card p-5">
+          </button>
+          <button type="button" class="card insight-stat p-5" @click="goToUsers()" title="Open Users">
             <div class="text-slate-600 text-xs uppercase tracking-wide">People</div>
             <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.people ?? '–'"></div>
-          </div>
-          <div class="card p-5">
+          </button>
+          <button type="button" class="card insight-stat p-5" @click="openRefusals()" title="Show off-topic refusals"
+            :class="insightFocus === 'refusals' ? 'ring-1 ring-white/20' : ''">
             <div class="text-slate-600 text-xs uppercase tracking-wide">Off-topic refusals</div>
             <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.refusals ?? '–'"></div>
-          </div>
+          </button>
           <div class="card p-5">
             <div class="text-slate-600 text-xs uppercase tracking-wide">Blocked commands</div>
             <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.blocked_commands ?? '–'"></div>
@@ -1375,50 +1835,111 @@
             <div class="text-slate-600 text-xs uppercase tracking-wide">Hit rate limit</div>
             <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.rate_limited ?? '–'"></div>
           </div>
-          <div class="card p-5" title="Questions in a domain with nothing written down">
+          <button type="button" class="card insight-stat p-5" @click="openGaps()"
+            title="Questions with no written procedure"
+            :class="insightFocus === 'gaps' ? 'ring-1 ring-white/20' : ''">
             <div class="text-slate-600 text-xs uppercase tracking-wide">Undocumented</div>
             <div class="text-2xl font-semibold mt-1"
                  :class="(insights?.totals?.undocumented || 0) > 0 ? 'text-amber-400' : 'text-slate-200'"
                  x-text="insights?.totals?.undocumented ?? '–'"></div>
+          </button>
+        </div>
+
+        <div x-show="insightFocus === 'gaps'" class="card p-5">
+          <div class="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-300">Undocumented</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Asked something Zork had no written procedure for. The conversation is kept so you can write it down.</p>
+            </div>
+            <button type="button" @click="insightFocus = ''"
+              class="text-xs text-slate-500 hover:text-slate-300">Close</button>
+          </div>
+          <template x-if="!(insights?.recent_gaps || []).length">
+            <p class="text-sm text-slate-600">None in this window.</p>
+          </template>
+          <div class="space-y-4">
+            <template x-for="(g, i) in (insights?.recent_gaps || [])" :key="i">
+              <div class="py-3 border-b border-white/5 last:border-0">
+                <div class="text-sm font-semibold text-amber-400" x-text="g.label || 'missing answer'"></div>
+                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-slate-500 mt-1">
+                  <span class="text-slate-300" x-text="g.name || g.email || 'unknown'"></span>
+                  <span x-show="g.name && g.email" class="text-slate-600" x-text="g.email"></span>
+                  <span x-show="g.tier" x-text="g.tier"></span>
+                  <span x-show="g.topic" x-text="g.topic"></span>
+                  <span x-text="new Date((g.ts || 0) * 1000).toLocaleString()"></span>
+                </div>
+                <div class="mt-3 space-y-2">
+                  <template x-if="!(g.messages || []).length">
+                    <div class="text-sm text-slate-200" x-text="g.asked || 'Conversation was not stored.'"></div>
+                  </template>
+                  <template x-for="(msg, mi) in (g.messages || [])" :key="mi">
+                    <div class="flex gap-2 text-xs">
+                      <span class="font-semibold flex-shrink-0"
+                            :style="msg.role === 'user' ? 'color: var(--accent-light)' : 'color: #64748b'"
+                            x-text="msg.role + ':'"></span>
+                      <span class="text-slate-400 leading-relaxed whitespace-pre-wrap" x-text="msg.content"></span>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
 
-        <!-- Knowledge coverage -->
+        <div x-show="insightFocus === 'refusals'" class="card p-5">
+          <div class="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-300">Off-topic refusals</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Who asked, what they asked, and what Zork answered.</p>
+            </div>
+            <button type="button" @click="insightFocus = ''"
+              class="text-xs text-slate-500 hover:text-slate-300">Close</button>
+          </div>
+          <template x-if="!(insights?.recent_refusals || []).length">
+            <p class="text-sm text-slate-600">None in this window.</p>
+          </template>
+          <div class="space-y-4">
+            <template x-for="(r, i) in (insights?.recent_refusals || [])" :key="i">
+              <div class="py-3 border-b border-white/5 last:border-0">
+                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                  <span class="text-slate-300" x-text="r.name || r.email || 'unknown'"></span>
+                  <span x-show="r.name && r.email" class="text-slate-600" x-text="r.email"></span>
+                  <span x-show="r.tier" x-text="r.tier"></span>
+                  <span x-text="new Date((r.ts || 0) * 1000).toLocaleString()"></span>
+                </div>
+                <div class="text-sm text-slate-200 mt-2" x-text="r.asked || '—'"></div>
+                <div class="text-sm text-slate-400 mt-2 whitespace-pre-wrap" x-text="r.reply || 'Reply was not stored for this refusal.'"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+
         <div class="card p-5">
-          <h3 class="text-sm font-semibold text-slate-300 mb-1">Where the knowledge is missing</h3>
+          <h3 class="text-sm font-semibold text-slate-300 mb-1">What people asked about</h3>
           <p class="text-xs text-slate-600 mb-4">
-            Questions per domain against what that domain actually has written down. A busy
-            row with nothing documented is where the agent is answering from general
-            knowledge rather than a verified procedure — that is the one to write next.
+            Conversations classified into a domain from the opening question.
+            This is demand, not a score of how complete the skill file is.
             Click a file to open it.
           </p>
-          <template x-if="!insights?.coverage?.length">
+          <template x-if="!askedCoverage().length">
             <p class="text-sm text-slate-600">Nothing recorded yet.</p>
           </template>
           <div class="space-y-1">
-            <template x-for="r in (insights?.coverage || [])" :key="r.skill">
-              <div class="flex items-center gap-3 py-1.5 px-2 rounded"
-                   :class="r.undocumented_demand > 0 ? 'bg-amber-500/5' : ''">
+            <template x-for="r in askedCoverage()" :key="'asked-' + r.skill">
+              <div class="flex items-center gap-3 py-1.5 px-2 rounded">
                 <div class="w-52 flex-shrink-0 min-w-0">
-                  <span class="text-sm truncate block"
-                        :class="r.documented ? 'text-slate-400' : 'text-amber-400'"
-                        x-text="r.skill"></span>
+                  <span class="text-sm truncate block text-slate-300" x-text="r.label || r.skill"></span>
                   <button type="button" @click="openCoverageFile(r)"
-                    class="text-[11px] font-mono truncate block text-left w-full hover:underline"
-                    :class="r.documented ? 'text-slate-600 hover:text-slate-300' : 'text-amber-700 hover:text-amber-400'"
+                    class="text-[11px] font-mono truncate block text-left w-full hover:underline text-slate-600 hover:text-slate-300"
                     :title="'Open ' + (r.file || '')"
                     x-text="r.file || ('skills/' + r.skill + '/SKILL.md')"></button>
                 </div>
                 <div class="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
-                  <div class="h-full rounded-full"
-                       :style="'width:' + askedPct(r) + '%; background:' + (r.documented ? 'var(--accent-light)' : '#f59e0b') + ';'"></div>
+                  <div class="h-full rounded-full" :style="'width:' + askedPct(r) + '%; background: var(--accent-light);'"></div>
                 </div>
                 <span class="text-xs text-slate-500 w-10 text-right" x-text="r.asked"></span>
-                <span class="text-xs w-36 text-right"
-                      :class="r.documented ? 'text-slate-600' : 'text-amber-500'"
-                      x-text="r.procedures > 0
-                        ? r.procedures + ' procedure' + (r.procedures === 1 ? '' : 's')
-                        : (r.anchors > 0 ? 'verified notes' : 'nothing documented')"></span>
+                <span class="text-xs w-36 text-right text-slate-600"
+                      x-text="coverageStatus(r)"></span>
               </div>
             </template>
           </div>
@@ -1426,6 +1947,35 @@
             <span x-text="insights.unclassified"></span> conversation(s) matched no domain —
             usually chat that never named a system.
           </p>
+        </div>
+
+        <div class="card p-5">
+          <h3 class="text-sm font-semibold text-slate-300 mb-1">Where the knowledge is missing</h3>
+          <p class="text-xs text-slate-600 mb-4">
+            Domains with no verified procedure or notes. If people have been asking
+            here, Zork is answering from general knowledge — write these next.
+          </p>
+          <p x-show="insightsLoading" class="text-sm text-slate-600">Loading…</p>
+          <p x-show="!insightsLoading && insights && !missingCoverage().length" class="text-sm text-slate-600">Every domain has something written down.</p>
+          <div class="space-y-1" x-show="!insightsLoading && insights">
+            <template x-for="r in missingCoverage()" :key="'missing-' + r.skill">
+              <div class="flex items-center gap-3 py-1.5 px-2 rounded"
+                   :class="r.asked > 0 ? 'bg-amber-500/5' : ''">
+                <div class="w-52 flex-shrink-0 min-w-0">
+                  <span class="text-sm truncate block text-amber-400" x-text="r.label || r.skill"></span>
+                  <button type="button" @click="openCoverageFile(r)"
+                    class="text-[11px] font-mono truncate block text-left w-full hover:underline text-amber-700 hover:text-amber-400"
+                    :title="'Open ' + (r.file || '')"
+                    x-text="r.file || ('skills/' + r.skill + '/SKILL.md')"></button>
+                </div>
+                <span class="flex-1 text-xs text-right"
+                      :class="r.asked > 0 ? 'text-amber-400' : 'text-slate-600'"
+                      x-text="r.asked > 0
+                        ? r.asked + ' question' + (r.asked === 1 ? '' : 's') + ' with nothing written down'
+                        : 'nothing written — nobody has asked yet'"></span>
+              </div>
+            </template>
+          </div>
         </div>
 
         <div class="grid grid-cols-2 gap-5">
@@ -1517,6 +2067,7 @@
                   </div>
                 </div>
                 <button type="button"
+                  x-show="!isModerator"
                   @click="promoteInsight(c)"
                   :disabled="!c.topic || insightPromoting"
                   class="btn-primary px-2 py-1 text-[11px] disabled:opacity-40"
@@ -1545,23 +2096,6 @@
           </div>
         </div>
 
-        <!-- Refusals -->
-        <div class="card p-5">
-          <h3 class="text-sm font-semibold text-slate-300 mb-3">Off-topic requests refused</h3>
-          <p class="text-xs text-slate-600 mb-3">Pupils asked for something outside IT. Repeats from one person are worth a look.</p>
-          <template x-if="!insights?.recent_refusals?.length">
-            <p class="text-sm text-slate-600">None.</p>
-          </template>
-          <div class="space-y-0.5">
-            <template x-for="(r, i) in (insights?.recent_refusals || [])" :key="i">
-              <div class="log-line flex items-start gap-3 py-1.5 px-2 rounded text-sm">
-                <span class="text-slate-700 flex-shrink-0 w-32 text-xs" x-text="new Date((r.ts || 0) * 1000).toLocaleString()"></span>
-                <span class="text-slate-500 flex-shrink-0 w-56 truncate text-xs" x-text="r.email"></span>
-                <span class="text-slate-400" x-text="r.asked"></span>
-              </div>
-            </template>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -1579,7 +2113,7 @@
             <button @click="loadSkills()" class="subtle-action transition-colors px-2 py-1 rounded text-xs">↺</button>
           </div>
 
-          <div class="space-y-2.5">
+          <div x-show="!isModerator" class="space-y-2.5">
             <input x-model="newSkill.name" type="text" placeholder="Skill name"
               class="input-base w-full px-3 py-2 text-sm">
             <textarea x-model="newSkill.description" rows="3" placeholder="What this skill is for..."
@@ -1608,7 +2142,7 @@
             </button>
           </template>
           <div x-show="skillsList.length === 0 && !skillsLoading" class="text-slate-700 text-xs px-3 py-3 italic">
-            No skills yet. Create your first one above.
+            No skills yet.
           </div>
           <div x-show="skillsLoading" class="text-slate-700 text-xs px-3 py-3">Loading…</div>
         </div>
@@ -1618,19 +2152,18 @@
       <div class="flex-1 flex flex-col overflow-hidden">
         <div x-show="!selectedSkillId" class="flex-1 flex flex-col items-center justify-center gap-3 text-slate-700">
           <div class="text-4xl opacity-30">🧠</div>
-          <p class="text-sm">Select a skill to read or edit it</p>
-          <p class="text-xs opacity-60">Or create a new skill from the left panel</p>
+          <p class="text-sm">Select a skill to read it</p>
         </div>
 
         <div x-show="selectedSkillId" class="flex-1 flex flex-col overflow-hidden">
           <div class="flex items-center gap-2 px-4 py-2.5 flex-shrink-0 pane-toolbar">
             <span class="text-xs font-mono text-slate-500 flex-1 truncate" x-text="selectedSkillPath || selectedSkillId"></span>
-            <span x-show="skillUnsaved" class="text-xs text-amber-500 flex-shrink-0">● unsaved</span>
+            <span x-show="skillUnsaved && !isModerator" class="text-xs text-amber-500 flex-shrink-0">● unsaved</span>
             <span x-show="skillSaved" class="text-xs text-emerald-400 flex-shrink-0">✓ saved</span>
-            <button @click="saveSkill()" :disabled="skillSaving || !skillUnsaved"
+            <button x-show="!isModerator" @click="saveSkill()" :disabled="skillSaving || !skillUnsaved"
               class="btn-primary px-3 py-1.5 text-xs flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
               x-text="skillSaving ? 'Saving…' : 'Save'"></button>
-            <button @click="copySkillToTemplate()" :disabled="skillTemplateBusy || skillUnsaved"
+            <button x-show="!isModerator" @click="copySkillToTemplate()" :disabled="skillTemplateBusy || skillUnsaved"
               class="px-3 py-1.5 text-xs flex-shrink-0 rounded-lg border border-white/10 text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Overwrite workspace-template/ so this skill (and its screenshots) survive the next PC"
               x-text="skillTemplateBusy ? 'Copying…' : 'Copy this skill into the repo template'"></button>
@@ -1644,7 +2177,8 @@
 
           <textarea
             x-model="skillContent"
-            @input="skillUnsaved = true; skillSaved = false; refreshSkillPreview()"
+            :readonly="isModerator"
+            @input="if (!isModerator) { skillUnsaved = true; skillSaved = false; refreshSkillPreview(); }"
             @keydown.ctrl.s.prevent="saveSkill()"
             @keydown.meta.s.prevent="saveSkill()"
             spellcheck="false"
@@ -1767,6 +2301,61 @@
       </div>
     </div>
 
+    <div x-show="deskStatusEditId" class="ticket-status-backdrop" @click="deskStatusEditId = ''"></div>
+    <div x-show="deskStatusEditId" class="ticket-status-menu" x-cloak
+         :style="'top:' + deskStatusMenuY + 'px; left:' + deskStatusMenuX + 'px'">
+      <template x-for="s in deskStatuses" :key="'edit-'+s.id">
+        <button type="button" @click="setDeskTicketStatusOn(deskStatusEditId, s.id)"
+          :class="normalizeStatus(deskStatusEditTicket() && deskStatusEditTicket().status) === s.id ? 'tab-active' : 'tab-inactive'"
+          x-text="s.label"></button>
+      </template>
+    </div>
+    <input type="file" class="hidden" x-ref="deskImageFile" accept="image/png,image/jpeg,image/gif,image/webp" multiple @change="onDeskImagePicked($event)">
+    <div x-show="deskFormOpen" class="desk-modal-backdrop" @keydown.escape.window="closeDeskForm()" @click.self="closeDeskForm()">
+      <div class="desk-modal" @click.stop>
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 class="text-base font-semibold text-slate-100" x-text="deskFormKind === 'issue' ? 'Report issue' : 'Suggestion'"></h3>
+            <p class="text-xs text-slate-600 mt-0.5">Admins see this in the Team chat inbox.</p>
+          </div>
+          <button type="button" @click="closeDeskForm()" class="text-slate-500 hover:text-slate-300 text-sm px-1">Close</button>
+        </div>
+        <form class="space-y-3" @submit.prevent="submitDeskForm()"
+              @dragover.prevent @drop.prevent="onDeskImageDrop($event, 'form')">
+          <div>
+            <label class="text-xs text-slate-500 font-medium">Subject</label>
+            <input x-model="deskFormSubject" maxlength="120" class="input-base w-full px-3 py-2.5 text-sm mt-1" placeholder="Short title">
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 font-medium">Description</label>
+            <textarea x-model="deskFormBody" maxlength="4000" rows="6"
+                      class="input-base w-full px-3 py-2.5 text-sm mt-1 resize-none"
+                      placeholder="What should they know? Paste a screenshot if it helps."
+                      @paste="onDeskImagePaste($event, 'form')"></textarea>
+          </div>
+          <div class="ticket-thumbs" x-show="deskFormImages.length">
+            <template x-for="(p, i) in deskFormImages" :key="p.url">
+              <div class="ticket-thumb" :class="{ busy: p.uploading }">
+                <img :src="p.url" alt="">
+                <button type="button" @click="removeDeskImage('form', i)">×</button>
+              </div>
+            </template>
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <button type="button" class="ticket-attach" title="Add screenshot" @click="pickDeskImage('form')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <p class="text-[11px] text-slate-600 flex-1">Paste or attach a screenshot.</p>
+          </div>
+          <p x-show="deskFormError" class="text-xs text-red-400" x-text="deskFormError"></p>
+          <div class="flex justify-end gap-2 pt-1">
+            <button type="button" @click="closeDeskForm()" class="px-4 py-2 rounded-lg text-sm tab-inactive">Cancel</button>
+            <button type="submit" :disabled="deskFormBusy || !deskFormSubject.trim() || !deskFormBody.trim() || deskImagesBusy('form')" class="btn-primary px-4 py-2 text-sm">Send</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1779,8 +2368,10 @@ function helixApp() {
     token: localStorage.getItem('helix_token') || '',
     currentPage: 'home',
     showAdvanced: false,
+    consoleRole: '',
     pages: [
       { id: 'home',     label: 'Home',     icon: '◈' },
+      { id: 'desk',     label: 'Team chat', icon: '✉' },
       { id: 'insights', label: 'Insights', icon: '◔' },
       { id: 'skills',   label: 'Skills',   icon: '🧠' },
       { id: 'files',    label: 'Files',    icon: '⊞' },
@@ -1794,9 +2385,61 @@ function helixApp() {
       { id: 'config', label: 'Config',        icon: '◉' },
       { id: 'crons',  label: 'Crons',         icon: '◷' },
     ],
+    get isModerator() {
+      return this.consoleRole === 'moderator';
+    },
+    get isDeskAdmin() {
+      return this.consoleRole === 'operator' || this.consoleRole === 'admin';
+    },
+    get visiblePages() {
+      if (this.consoleRole !== 'moderator') return this.pages;
+      const allow = ['home', 'desk', 'insights', 'skills', 'sessions', 'permissions'];
+      return this.pages.filter(p => allow.includes(p.id));
+    },
     health: {},
     config: { discord: {}, telegram: {}, models: { roster: [] } },
     sessions: [],
+    homeSessionDetail: false,
+    deskMessages: [],
+    deskInput: '',
+    deskWs: null,
+    deskWsGen: 0,
+    deskWsStatus: 'disconnected',
+    deskUnread: 0,
+    deskYou: '',
+    deskView: 'chat',
+    deskFormOpen: false,
+    deskFormKind: 'suggestion',
+    deskFormSubject: '',
+    deskFormBody: '',
+    deskFormError: '',
+    deskFormBusy: false,
+    deskFormImages: [],
+    deskTickets: [],
+    deskTicketId: '',
+    deskTicketReply: '',
+    deskTicketKind: 'issue',
+    deskTicketStatus: 'all',
+    deskFilterOpen: false,
+    deskStatuses: [
+      { id: 'new', label: 'New' },
+      { id: 'waiting_response', label: 'Waiting response' },
+      { id: 'in_progress', label: 'In progress' },
+      { id: 'needs_context', label: 'Needs context' },
+      { id: 'finished', label: 'Finished' },
+      { id: 'refused', label: 'Refused' },
+    ],
+    deskStatusEditId: '',
+    deskStatusMenuX: 0,
+    deskStatusMenuY: 0,
+    deskReplyImages: [],
+    deskReplyError: '',
+    deskImageTarget: 'reply',
+    deskImageUrls: {},
+    deskImageTick: 0,
+    expandedSessionUser: '',
+    sessionQuery: '',
+    sessionTab: 'afk',
     permissions: { defaults: { staff_domains: [], student_domains: [] }, overrides: [], people: [], stress: [] },
     permQuery: '',
     permEmail: '',
@@ -1804,6 +2447,10 @@ function helixApp() {
     permMsg: '',
     permOk: true,
     permTab: 'afk',
+    permRowNotice: {},
+    issuedPasswords: {},
+    permIssuedEmail: '',
+    permIssuedPassword: '',
     transcript: {},
     chatMessages: [],
     chatInput: '',
@@ -1812,8 +2459,10 @@ function helixApp() {
     wsStatus: 'disconnected',
     ws: null,
     insights: null,
+    insightsLoading: false,
     insightsDays: 30,
     insightSubject: '',
+    insightFocus: '',
     insightRows: [],
     insightLoading: false,
     insightPromoting: false,
@@ -1880,6 +2529,11 @@ function helixApp() {
     async init() {
       this.applyTheme(this.theme);
       this.applyMode(this.lightMode);
+      this.$watch('deskTicketId', () => {
+        this.clearDeskImages('reply');
+        this.hydrateSelectedTicketImages();
+        this.deskStatusEditId = '';
+      });
       if (this.token) {
         const ok = await this.checkAuth();
         if (ok) {
@@ -1928,15 +2582,25 @@ function helixApp() {
       if (pageId === 'crons') this.loadCrons();
       if (pageId === 'skills') this.loadSkills();
       if (pageId === 'files') this.loadFileTree();
-      if (pageId === 'insights') this.loadInsights();
-      if (pageId === 'permissions') this.loadPermissions();
+      if (pageId === 'insights') {
+        this.insightsLoading = true;
+        this.loadInsights();
+      }
+      if (pageId === 'permissions' || pageId === 'sessions') this.loadPermissions();
+      if (pageId === 'desk') {
+        this.markDeskRead();
+        this.scrollDesk();
+        this.loadDeskTickets();
+      }
     },
 
     async loadInsights() {
+      this.insightsLoading = true;
       try {
         const r = await this.api('/api/insights?days=' + this.insightsDays);
         if (r.ok) this.insights = await r.json();
       } catch (e) { this.insights = null; }
+      this.insightsLoading = false;
     },
 
     // Longest bar in a series fills the row; everything else is relative to it.
@@ -1945,9 +2609,32 @@ function helixApp() {
       return Math.round((count / max) * 100);
     },
 
+    askedCoverage() {
+      return (this.insights?.coverage || [])
+        .filter(r => (r.asked || 0) > 0)
+        .slice()
+        .sort((a, b) => (b.asked || 0) - (a.asked || 0) || (a.skill || '').localeCompare(b.skill || ''));
+    },
+
+    missingCoverage() {
+      return (this.insights?.coverage || [])
+        .filter(r => !r.documented)
+        .slice()
+        .sort((a, b) => (b.asked || 0) - (a.asked || 0) || (a.skill || '').localeCompare(b.skill || ''));
+    },
+
+    coverageStatus(row) {
+      if (!row) return '';
+      if (row.procedures > 0) {
+        return row.procedures + ' procedure' + (row.procedures === 1 ? '' : 's');
+      }
+      if (row.anchors > 0) return 'verified notes';
+      return 'nothing written down';
+    },
+
     // Coverage rows carry the count as `asked`, not `count`.
     askedPct(row) {
-      return this.barPct(row.asked, (this.insights?.coverage || []).map(r => ({ count: r.asked })));
+      return this.barPct(row.asked, this.askedCoverage().map(r => ({ count: r.asked })));
     },
 
     async openCoverageFile(row) {
@@ -1959,6 +2646,7 @@ function helixApp() {
     },
 
     async openSubject(key) {
+      this.insightFocus = '';
       this.insightSubject = key;
       this.insightRows = [];
       this.insightPromoteMsg = '';
@@ -1971,6 +2659,28 @@ function helixApp() {
         }
       } catch (e) { this.insightRows = []; }
       finally { this.insightLoading = false; }
+    },
+
+    openRefusals() {
+      this.insightSubject = '';
+      this.insightRows = [];
+      this.insightFocus = this.insightFocus === 'refusals' ? '' : 'refusals';
+    },
+
+    openGaps() {
+      this.insightSubject = '';
+      this.insightRows = [];
+      this.insightFocus = this.insightFocus === 'gaps' ? '' : 'gaps';
+    },
+
+    goToUsers() {
+      this.currentPage = 'permissions';
+      this.onPageChange('permissions');
+    },
+
+    goToSessions() {
+      this.currentPage = 'sessions';
+      this.onPageChange('sessions');
     },
 
     async promoteInsight(row) {
@@ -2007,8 +2717,19 @@ function helixApp() {
 
     async checkAuth() {
       try {
-        const r = await this.api('/api/sessions');
-        return r.ok || r.status !== 401;
+        const r = await this.api('/api/me');
+        if (!r.ok) return false;
+        const me = await r.json();
+        if (!me.console) return false;
+        this.consoleRole = me.console_role || '';
+        this.rememberDeskYou(me);
+        if (this.consoleRole === 'moderator') {
+          this.showAdvanced = false;
+          this.permTab = 'afk';
+          const allowed = ['home', 'desk', 'insights', 'skills', 'sessions', 'permissions'];
+          if (!allowed.includes(this.currentPage)) this.currentPage = 'home';
+        }
+        return true;
       } catch { return false; }
     },
 
@@ -2046,22 +2767,662 @@ function helixApp() {
     },
 
     async loadAll() {
-      await this.loadConfig();
-      await Promise.all([
-        this.loadHealth(),
-        this.loadSessions(),
-        this.loadMemory(),
-        this.loadAuditLogs(),
-        this.loadCrons(),
-        this.connectWS(),
-      ]);
-      setInterval(() => { this.loadHealth(); this.loadSessions(); }, 30000);
+      await this.refreshConsoleRole();
+      if (this.consoleRole !== 'moderator') {
+        await this.loadConfig();
+      }
+      const jobs = [this.loadHealth(), this.loadSessions(), this.loadPermissions(), this.loadDeskChat(), this.connectDeskWS(), this.loadDeskTickets()];
+      if (this.consoleRole !== 'moderator') {
+        jobs.push(this.loadMemory(), this.loadAuditLogs(), this.loadCrons(), this.connectWS());
+      }
+      await Promise.all(jobs);
+      setInterval(() => {
+        this.loadHealth();
+        this.loadSessions();
+        if (this.currentPage === 'crons') this.loadCrons();
+        if (this.currentPage === 'desk' || this.currentPage === 'home') this.loadDeskTickets();
+      }, 30000);
+    },
+
+    async refreshConsoleRole() {
+      try {
+        const r = await this.api('/api/me');
+        if (!r.ok) return;
+        const me = await r.json();
+        this.consoleRole = me.console_role || '';
+        this.rememberDeskYou(me);
+        if (this.consoleRole === 'moderator') {
+          this.showAdvanced = false;
+          this.permTab = 'afk';
+          this.sessionTab = 'afk';
+        }
+      } catch {}
     },
 
     async loadHealth() {
       try {
         const r = await this.api('/api/status');
         if (r.ok) this.health = await r.json();
+      } catch {}
+    },
+
+    scrollDesk() {
+      this.$nextTick(() => {
+        const el = document.getElementById('desk-messages');
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    },
+
+    rememberDeskYou(me) {
+      const mail = ((me && me.email) || '').trim().toLowerCase();
+      if (mail) this.deskYou = mail;
+      else if ((this.consoleRole || (me && me.console_role)) === 'operator') this.deskYou = 'operator';
+    },
+
+    deskIdentity(msg) {
+      const mail = ((msg && msg.email) || '').trim().toLowerCase();
+      if (mail) return mail;
+      if (((msg && msg.role) || '') === 'operator') return 'operator';
+      return (msg && msg.role) || 'unknown';
+    },
+
+    deskIsMine(msg) {
+      return this.deskYou && this.deskIdentity(msg) === this.deskYou;
+    },
+
+    deskUnreadLabel() {
+      if (!this.deskUnread) return 'No new messages';
+      if (this.deskUnread === 1) return '1 new message';
+      return this.deskUnread + ' new messages';
+    },
+
+    deskReportsLabel() {
+      const n = this.deskReportsAlertCount();
+      if (this.isDeskAdmin) {
+        if (!n) return 'No new reports';
+        if (n === 1) return '1 new report';
+        return n + ' new reports';
+      }
+      if (!n) return 'No updates';
+      if (n === 1) return '1 update';
+      return n + ' updates';
+    },
+
+    deskReportsHint() {
+      if (!this.isDeskAdmin) {
+        return this.deskReportsAlertCount() ? 'A reply or a status change' : 'Open the inbox';
+      }
+      const issues = this.deskKindNewCount('issue');
+      const sugg = this.deskKindNewCount('suggestion');
+      if (!issues && !sugg) return 'Open the inbox';
+      const parts = [];
+      if (issues) parts.push(issues === 1 ? '1 issue' : issues + ' issues');
+      if (sugg) parts.push(sugg === 1 ? '1 suggestion' : sugg + ' suggestions');
+      return parts.join(' · ');
+    },
+
+    openDeskTab() {
+      this.currentPage = 'desk';
+      this.onPageChange('desk');
+    },
+
+    openDeskReports() {
+      const issues = this.deskKindAlertCount('issue');
+      const sugg = this.deskKindAlertCount('suggestion');
+      if (sugg && !issues) this.deskTicketKind = 'suggestion';
+      else if (issues) this.deskTicketKind = 'issue';
+      this.currentPage = 'desk';
+      this.openDeskInbox();
+    },
+
+    async markDeskRead() {
+      this.deskUnread = 0;
+      try {
+        await this.api('/api/desk-chat/read', { method: 'POST' });
+      } catch {}
+    },
+
+    addDeskMessage(msg) {
+      if (!msg || !msg.id) return;
+      if (this.deskMessages.some(m => m.id === msg.id)) return;
+      this.deskMessages.push(msg);
+      if (this.currentPage === 'desk') {
+        this.markDeskRead();
+        this.scrollDesk();
+      } else if (!this.deskIsMine(msg)) {
+        this.deskUnread += 1;
+      }
+    },
+
+    async loadDeskChat() {
+      try {
+        const r = await this.api('/api/desk-chat');
+        if (r.ok) {
+          const data = await r.json();
+          this.deskMessages = data.messages || [];
+          if (data.you) this.deskYou = data.you;
+          if (this.currentPage === 'desk') this.markDeskRead();
+          else this.deskUnread = data.unread || 0;
+          this.scrollDesk();
+        }
+      } catch {}
+    },
+
+    openDeskForm(kind) {
+      this.deskFormKind = kind === 'issue' ? 'issue' : 'suggestion';
+      this.deskFormSubject = '';
+      this.deskFormBody = '';
+      this.deskFormError = '';
+      this.clearDeskImages('form');
+      this.deskFormOpen = true;
+    },
+
+    closeDeskForm() {
+      this.deskFormOpen = false;
+      this.deskFormBusy = false;
+      this.clearDeskImages('form');
+    },
+
+    deskImageBucket(target) {
+      return target === 'form' ? this.deskFormImages : this.deskReplyImages;
+    },
+
+    bumpDeskImages() {
+      this.deskImageTick += 1;
+    },
+
+    deskImagesBusy(target) {
+      void this.deskImageTick;
+      return this.deskImageBucket(target).some(p => p.uploading);
+    },
+
+    canSendDeskReply() {
+      void this.deskImageTick;
+      if (this.deskImagesBusy('reply')) return false;
+      if ((this.deskTicketReply || '').trim()) return true;
+      return this.deskReplyImages.some(p => p.name && !p.uploading);
+    },
+
+    replaceDeskImage(bucket, entry, next) {
+      const i = bucket.findIndex(p => p === entry || p.url === entry.url);
+      if (i >= 0) bucket.splice(i, 1, next);
+      else bucket.push(next);
+      this.bumpDeskImages();
+    },
+
+    clearDeskImages(target) {
+      const bucket = this.deskImageBucket(target);
+      bucket.forEach(p => { if (p.url) URL.revokeObjectURL(p.url); });
+      bucket.splice(0, bucket.length);
+      this.bumpDeskImages();
+    },
+
+    removeDeskImage(target, index) {
+      const bucket = this.deskImageBucket(target);
+      const entry = bucket[index];
+      if (entry && entry.url) URL.revokeObjectURL(entry.url);
+      bucket.splice(index, 1);
+      this.bumpDeskImages();
+    },
+
+    pickDeskImage(target) {
+      this.deskImageTarget = target === 'form' ? 'form' : 'reply';
+      if (this.$refs.deskImageFile) this.$refs.deskImageFile.click();
+    },
+
+    onDeskImagePicked(e) {
+      const files = [...(e.target.files || [])];
+      e.target.value = '';
+      files.forEach(f => this.uploadDeskImage(f, this.deskImageTarget));
+    },
+
+    onDeskImagePaste(e, target) {
+      const items = [...(e.clipboardData && e.clipboardData.items || [])].filter(i => i.type.startsWith('image/'));
+      if (!items.length) return;
+      e.preventDefault();
+      items.forEach(i => { const f = i.getAsFile(); if (f) this.uploadDeskImage(f, target); });
+    },
+
+    onDeskImageDrop(e, target) {
+      const files = [...(e.dataTransfer && e.dataTransfer.files || [])].filter(f => f.type.startsWith('image/'));
+      files.forEach(f => this.uploadDeskImage(f, target));
+    },
+
+    async uploadDeskImage(file, target) {
+      const bucket = this.deskImageBucket(target);
+      if (bucket.length >= 4) return;
+      if (!file || !/^image\//.test(file.type)) {
+        if (target === 'form') this.deskFormError = 'Only PNG, JPEG, GIF or WebP screenshots.';
+        else this.deskReplyError = 'Only PNG, JPEG, GIF or WebP screenshots.';
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        if (target === 'form') this.deskFormError = 'Screenshots must be under 5 MB.';
+        else this.deskReplyError = 'Screenshots must be under 5 MB.';
+        return;
+      }
+      const entry = { name: '', url: URL.createObjectURL(file), uploading: true };
+      bucket.push(entry);
+      this.bumpDeskImages();
+      try {
+        const fd = new FormData();
+        fd.append('file', file, file.name || 'paste.png');
+        const r = await fetch('/api/desk-tickets/assets', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + this.token },
+          body: fd,
+        });
+        if (!r.ok) throw new Error();
+        const data = await r.json();
+        this.replaceDeskImage(bucket, entry, { name: data.name, url: entry.url, uploading: false });
+      } catch {
+        const i = bucket.findIndex(p => p === entry || p.url === entry.url);
+        if (i >= 0) bucket.splice(i, 1);
+        if (entry.url) URL.revokeObjectURL(entry.url);
+        this.bumpDeskImages();
+        if (target === 'form') this.deskFormError = 'Could not attach the screenshot.';
+        else this.deskReplyError = 'Could not attach the screenshot.';
+      }
+    },
+
+    deskTicketThread() {
+      const t = this.selectedDeskTicket();
+      if (!t) return [];
+      const first = {
+        id: 'orig-' + t.id,
+        ts: t.ts,
+        name: t.name,
+        email: t.email,
+        role: t.role,
+        text: t.description || '',
+        images: t.images || [],
+      };
+      return [first, ...(t.replies || [])];
+    },
+
+    async hydrateSelectedTicketImages() {
+      const t = this.selectedDeskTicket();
+      if (!t) return;
+      const names = [...(t.images || [])];
+      for (const r of (t.replies || [])) {
+        for (const n of (r.images || [])) names.push(n);
+      }
+      const urls = { ...this.deskImageUrls };
+      for (const name of names) {
+        if (!name || urls[name]) continue;
+        try {
+          const r = await this.api('/api/desk-tickets/assets/' + encodeURIComponent(name));
+          if (!r.ok) continue;
+          urls[name] = URL.createObjectURL(await r.blob());
+        } catch {}
+      }
+      this.deskImageUrls = urls;
+    },
+
+    async submitDeskForm() {
+      const subject = (this.deskFormSubject || '').trim();
+      const description = (this.deskFormBody || '').trim();
+      if (!subject || !description || this.deskFormBusy || this.deskImagesBusy('form')) return;
+      this.deskFormBusy = true;
+      this.deskFormError = '';
+      try {
+        const images = this.deskFormImages.filter(p => p.name).map(p => p.name);
+        const r = await this.api('/api/desk-tickets', {
+          method: 'POST',
+          body: JSON.stringify({ kind: this.deskFormKind, subject, description, images }),
+        });
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}));
+          this.deskFormError = data.detail || 'Could not send';
+          return;
+        }
+        const ticket = await r.json();
+        this.upsertDeskTicket(ticket);
+        this.closeDeskForm();
+      } catch (e) {
+        this.deskFormError = e.message || 'Could not send';
+      } finally {
+        this.deskFormBusy = false;
+      }
+    },
+
+    ticketKindLabel(kind) {
+      return kind === 'issue' ? 'Issue' : 'Suggestion';
+    },
+
+    normalizeStatus(status) {
+      const aliases = { done: 'finished', completed: 'finished' };
+      const mapped = aliases[status] || status || 'new';
+      const known = this.deskStatuses.some(s => s.id === mapped);
+      return known ? mapped : 'new';
+    },
+
+    ticketStatusLabel(status) {
+      const id = this.normalizeStatus(status);
+      if (id === 'all') return 'All';
+      const row = this.deskStatuses.find(s => s.id === id);
+      return row ? row.label : id;
+    },
+
+    deskFilterLabel() {
+      if (this.deskTicketStatus === 'all') return 'All';
+      return this.ticketStatusLabel(this.deskTicketStatus);
+    },
+
+    deskStatusIsAlert(status) {
+      return status === 'all' || status === 'new' || status === 'waiting_response' || status === 'needs_context';
+    },
+
+    deskKindNewCount(kind) {
+      const k = kind || this.deskTicketKind;
+      return (this.deskTickets || []).filter(t => t.kind === k && this.normalizeStatus(t.status) === 'new').length;
+    },
+
+    deskKindAlertCount(kind) {
+      const k = kind || this.deskTicketKind;
+      if (this.isDeskAdmin) return this.deskKindNewCount(k);
+      return (this.deskTickets || []).filter(t => t.kind === k && this.deskTicketUnseen(t)).length;
+    },
+
+    deskAttentionCount(kind) {
+      const k = kind || this.deskTicketKind;
+      return (this.deskTickets || []).filter(t => {
+        if (t.kind !== k) return false;
+        return this.deskStatusIsAlert(this.normalizeStatus(t.status));
+      }).length;
+    },
+
+    deskStatusCount(status, kind) {
+      const k = kind || this.deskTicketKind;
+      if (status === 'all') return this.deskKindNewCount(k);
+      return (this.deskTickets || []).filter(t => t.kind === k && this.normalizeStatus(t.status) === status).length;
+    },
+
+    deskKindTabClass(kind) {
+      const selected = this.deskTicketKind === kind;
+      const alert = this.deskKindAlertCount(kind) > 0;
+      if (selected && alert) return 'tab-alert';
+      if (selected) return 'tab-active';
+      if (alert) return 'tab-alert-quiet';
+      return 'tab-inactive';
+    },
+
+    deskFilterTriggerClass() {
+      return this.deskKindAlertCount() > 0 ? 'tab-alert' : 'tab-active';
+    },
+
+    deskFilterItemClass(status) {
+      const selected = this.deskTicketStatus === status;
+      if (!this.isDeskAdmin) {
+        const alert = status === 'all' && this.deskKindAlertCount() > 0;
+        if (selected && alert) return 'tab-alert';
+        if (selected) return 'tab-active';
+        if (alert) return 'tab-alert-quiet';
+        return 'tab-inactive';
+      }
+      const n = status === 'all' ? this.deskAttentionCount() : this.deskStatusCount(status);
+      const alert = this.deskStatusIsAlert(status) && n > 0;
+      if (selected && alert) return 'tab-alert';
+      if (selected) return 'tab-active';
+      if (alert) return 'tab-alert-quiet';
+      return 'tab-inactive';
+    },
+
+    setDeskFilter(status) {
+      this.deskTicketStatus = status;
+      this.deskFilterOpen = false;
+      this.selectFirstVisibleTicket();
+    },
+
+    deskNewTicketCount() {
+      return (this.deskTickets || []).filter(t => this.normalizeStatus(t.status) === 'new').length;
+    },
+
+    deskReportsAlertCount() {
+      if (this.isDeskAdmin) return this.deskNewTicketCount();
+      return this.deskUnseenCount();
+    },
+
+    deskUnseenCount() {
+      return (this.deskTickets || []).filter(t => this.deskTicketUnseen(t)).length;
+    },
+
+    deskInboxBadge() {
+      return this.deskReportsAlertCount();
+    },
+
+    deskTicketNeedsReply(t) {
+      const replies = (t && t.replies) || [];
+      if (!replies.length) return false;
+      return !this.deskIsMine(replies[replies.length - 1]);
+    },
+
+    deskTicketUnseen(t) {
+      if (!t) return false;
+      const updated = t.updated || t.ts || 0;
+      const seen = t.reporter_seen || 0;
+      return updated > seen + 0.01;
+    },
+
+    selectDeskTicket(id) {
+      this.deskTicketId = id || '';
+      if (id) this.markDeskTicketSeen(id);
+    },
+
+    async markDeskTicketSeen(ticketId) {
+      if (this.isDeskAdmin || !ticketId) return;
+      const t = (this.deskTickets || []).find(row => row.id === ticketId);
+      if (!t || !this.deskTicketUnseen(t)) return;
+      t.reporter_seen = Date.now() / 1000;
+      try {
+        const r = await this.api('/api/desk-tickets/' + ticketId + '/read', { method: 'POST' });
+        if (r.ok) {
+          const updated = await r.json();
+          this.upsertDeskTicket(updated);
+        }
+      } catch {}
+    },
+
+    visibleDeskTickets() {
+      const kind = this.deskTicketKind;
+      const status = this.deskTicketStatus;
+      return (this.deskTickets || []).filter(t => {
+        if (t.kind !== kind) return false;
+        if (status === 'all') return true;
+        return this.normalizeStatus(t.status) === status;
+      });
+    },
+
+    selectFirstVisibleTicket() {
+      const rows = this.visibleDeskTickets();
+      const viewing = this.currentPage === 'desk' && this.deskView === 'inbox';
+      if (rows.some(t => t.id === this.deskTicketId)) {
+        if (viewing) this.markDeskTicketSeen(this.deskTicketId);
+        return;
+      }
+      this.deskTicketId = rows.length ? rows[0].id : '';
+      if (viewing && this.deskTicketId) this.markDeskTicketSeen(this.deskTicketId);
+    },
+
+    selectedDeskTicket() {
+      return (this.deskTickets || []).find(t => t.id === this.deskTicketId) || null;
+    },
+
+    get deskTicket() {
+      return this.selectedDeskTicket() || {
+        kind: '', subject: '', description: '', status: 'new',
+        name: '', email: '', ts: 0, replies: [], images: [],
+      };
+    },
+
+    openDeskInbox() {
+      this.deskView = 'inbox';
+      this.loadDeskTickets();
+      if (!this.selectedDeskTicket()) {
+        const rows = this.visibleDeskTickets();
+        if (rows.length) this.deskTicketId = rows[0].id;
+      }
+    },
+
+    upsertDeskTicket(ticket) {
+      if (!ticket || !ticket.id) return;
+      if (!this.isDeskAdmin && !this.deskIsMine(ticket)) return;
+      const i = this.deskTickets.findIndex(t => t.id === ticket.id);
+      if (i >= 0) this.deskTickets.splice(i, 1, ticket);
+      else this.deskTickets.unshift(ticket);
+      if (this.deskTicketId === ticket.id) {
+        this.hydrateSelectedTicketImages();
+        if (this.currentPage === 'desk' && this.deskView === 'inbox') {
+          this.markDeskTicketSeen(ticket.id);
+        }
+      }
+    },
+
+    async loadDeskTickets() {
+      try {
+        const r = await this.api('/api/desk-tickets');
+        if (r.ok) {
+          const data = await r.json();
+          this.deskTickets = data.tickets || [];
+          this.selectFirstVisibleTicket();
+          this.hydrateSelectedTicketImages();
+        }
+      } catch {}
+    },
+
+    deskStatusEditTicket() {
+      return (this.deskTickets || []).find(t => t.id === this.deskStatusEditId) || null;
+    },
+
+    openDeskStatusMenu(event, ticket) {
+      if (!this.isDeskAdmin || !ticket || !ticket.id) return;
+      if (this.deskStatusEditId === ticket.id) {
+        this.deskStatusEditId = '';
+        return;
+      }
+      const r = event.currentTarget.getBoundingClientRect();
+      this.deskStatusEditId = ticket.id;
+      this.deskStatusMenuX = Math.round(r.right);
+      this.deskStatusMenuY = Math.round(r.bottom + 6);
+      this.deskFilterOpen = false;
+    },
+
+    async setDeskTicketStatusOn(ticketId, status) {
+      if (!this.isDeskAdmin || !ticketId || !status) return;
+      this.deskStatusEditId = '';
+      try {
+        const r = await this.api('/api/desk-tickets/' + ticketId, {
+          method: 'PATCH',
+          body: JSON.stringify({ status }),
+        });
+        if (r.ok) {
+          const updated = await r.json();
+          this.upsertDeskTicket(updated);
+          this.selectFirstVisibleTicket();
+        }
+      } catch {}
+    },
+
+    async setDeskTicketStatus(status) {
+      const t = this.selectedDeskTicket();
+      if (!t) return;
+      await this.setDeskTicketStatusOn(t.id, status);
+    },
+
+    async sendDeskTicketReply() {
+      const t = this.selectedDeskTicket();
+      const text = (this.deskTicketReply || '').trim();
+      const images = this.deskReplyImages.filter(p => p.name && !p.uploading).map(p => p.name);
+      if (!t || (!text && !images.length) || this.deskImagesBusy('reply')) return;
+      this.deskReplyError = '';
+      try {
+        const r = await this.api('/api/desk-tickets/' + t.id + '/replies', {
+          method: 'POST',
+          body: JSON.stringify({ text, images }),
+        });
+        if (!r.ok) {
+          const data = await r.json().catch(() => ({}));
+          this.deskReplyError = data.detail || 'Could not send';
+          return;
+        }
+        this.deskTicketReply = '';
+        this.clearDeskImages('reply');
+        const updated = await r.json();
+        this.upsertDeskTicket(updated);
+        this.selectFirstVisibleTicket();
+        this.$nextTick(() => {
+          const el = document.getElementById('ticket-thread');
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      } catch (e) {
+        this.deskReplyError = e.message || 'Could not send';
+      }
+    },
+
+    connectDeskWS() {
+      this.deskWsStatus = 'connecting';
+      this.deskWsGen += 1;
+      const gen = this.deskWsGen;
+      try {
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        if (this.deskWs) {
+          const old = this.deskWs;
+          this.deskWs = null;
+          try { old.close(); } catch {}
+        }
+        const ws = new WebSocket(`${protocol}//${location.host}/ws/desk`);
+        this.deskWs = ws;
+        ws.onopen = () => {
+          if (gen !== this.deskWsGen) return;
+          ws.send(JSON.stringify({ token: this.token }));
+        };
+        ws.onmessage = (e) => {
+          if (gen !== this.deskWsGen) return;
+          const data = JSON.parse(e.data);
+          if (data.type === 'history' && data.messages) {
+            this.deskMessages = data.messages;
+            this.deskWsStatus = 'connected';
+            this.scrollDesk();
+          } else if (data.type === 'message' && data.message) {
+            this.deskWsStatus = 'connected';
+            this.addDeskMessage(data.message);
+          } else if (data.type === 'ticket' && data.ticket) {
+            this.upsertDeskTicket(data.ticket);
+          } else if (data.error) {
+            this.deskWsStatus = 'auth error';
+          }
+        };
+        ws.onclose = () => {
+          if (gen !== this.deskWsGen) return;
+          this.deskWsStatus = 'disconnected';
+          setTimeout(() => {
+            if (this.authenticated && gen === this.deskWsGen) this.connectDeskWS();
+          }, 5000);
+        };
+        ws.onerror = () => {
+          if (gen !== this.deskWsGen) return;
+          this.deskWsStatus = 'error';
+        };
+      } catch (e) {
+        this.deskWsStatus = 'error';
+      }
+    },
+
+    async sendDeskChat() {
+      const text = (this.deskInput || '').trim();
+      if (!text) return;
+      this.deskInput = '';
+      const live = this.deskWs && this.deskWs.readyState === 1;
+      if (live) {
+        this.deskWs.send(JSON.stringify({ text }));
+        return;
+      }
+      try {
+        const r = await this.api('/api/desk-chat', {
+          method: 'POST',
+          body: JSON.stringify({ text }),
+        });
+        if (r.ok) this.addDeskMessage(await r.json());
       } catch {}
     },
 
@@ -2075,6 +3436,91 @@ function helixApp() {
           }
         }
       } catch {}
+    },
+
+    sessionUserKey(s) {
+      const peer = s.peer || '';
+      const user = peer.includes('|') ? peer.slice(0, peer.indexOf('|')) : peer;
+      return (s.channel || 'web') + ':' + user;
+    },
+
+    sessionUserLabel(s) {
+      const peer = s.peer || '';
+      let user = peer.includes('|') ? peer.slice(0, peer.indexOf('|')) : peer;
+      if (user.startsWith('dev:')) user = user.slice(4);
+      if (user === 'admin') return 'Operator';
+      return user || 'unknown';
+    },
+
+    usedSessionCount() {
+      return this.sessions.filter(s => (s.token_count || 0) > 0).length;
+    },
+
+    emptySessionCount() {
+      return this.sessions.filter(s => (s.token_count || 0) <= 0).length;
+    },
+
+    get sessionPeople() {
+      const groups = new Map();
+      for (const s of this.sessions) {
+        const key = this.sessionUserKey(s);
+        if (!groups.has(key)) {
+          groups.set(key, {
+            key,
+            label: this.sessionUserLabel(s),
+            channel: s.channel,
+            sessions: [],
+          });
+        }
+        groups.get(key).sessions.push(s);
+      }
+      return [...groups.values()].map(g => ({
+        ...g,
+        used: g.sessions.filter(s => (s.token_count || 0) > 0),
+        empty: g.sessions.filter(s => (s.token_count || 0) <= 0),
+      }));
+    },
+
+    isAfkSessionPerson(person) {
+      return this.isAfkPerson({ email: person.label }) && !this.isStressSessionPerson(person);
+    },
+
+    isStressSessionPerson(person) {
+      return this.isStressPerson({ email: person.label, name: person.label });
+    },
+
+    sessionAfkCount() {
+      return this.sessionPeople.filter(p => this.isAfkSessionPerson(p)).length;
+    },
+
+    sessionFridCount() {
+      return this.sessionPeople.filter(p => !this.isAfkSessionPerson(p) && !this.isStressSessionPerson(p)).length;
+    },
+
+    sessionStressCount() {
+      return this.sessionPeople.filter(p => this.isStressSessionPerson(p)).length;
+    },
+
+    filteredSessionPeople() {
+      const q = (this.sessionQuery || '').toLowerCase();
+      const tab = this.isModerator ? 'afk' : this.sessionTab;
+      let list = this.sessionPeople.filter(p => {
+        if (tab === 'stress') return this.isStressSessionPerson(p);
+        if (tab === 'afk') return this.isAfkSessionPerson(p);
+        return !this.isAfkSessionPerson(p) && !this.isStressSessionPerson(p);
+      });
+      if (q) {
+        list = list.filter(p =>
+          (p.label || '').toLowerCase().includes(q) ||
+          (p.key || '').toLowerCase().includes(q)
+        );
+      }
+      return list;
+    },
+
+    toggleSessionUser(key) {
+      this.expandedSessionUser = this.expandedSessionUser === key ? '' : key;
+      if (!this.expandedSessionUser) this.transcript = {};
     },
 
     async loadSessions() {
@@ -2095,13 +3541,24 @@ function helixApp() {
     async loadPermissions() {
       try {
         const r = await this.api('/api/permissions');
-        if (r.ok) this.permissions = await r.json();
+        if (r.ok) {
+          this.permissions = await r.json();
+          if (this.isModerator) this.permTab = 'afk';
+        }
       } catch {}
     },
 
     permDomain(email) {
       const at = (email || '').lastIndexOf('@');
       return at >= 0 ? email.slice(at + 1).toLowerCase() : '';
+    },
+
+    isStressPerson(p) {
+      const email = ((p && p.email) || '').toLowerCase();
+      const local = email.split('@')[0] || '';
+      if (local.startsWith('loadtest')) return true;
+      const name = ((p && p.name) || '').trim().toLowerCase();
+      return name.startsWith('loadtest');
     },
 
     isAfkPerson(p) {
@@ -2147,6 +3604,8 @@ function helixApp() {
     permLabel(access) {
       if (access === 'staff') return 'staff';
       if (access === 'student') return 'pupil';
+      if (access === 'moderator') return 'moderator';
+      if (access === 'admin') return 'admin';
       if (access === 'blocked') return 'blocked';
       return 'none';
     },
@@ -2158,19 +3617,67 @@ function helixApp() {
       return d.toLocaleString();
     },
 
-    async setPermission(email, access) {
+    async setPermission(email, access, opts = {}) {
+      const where = opts.where || 'row';
       this.permMsg = '';
+      this.permIssuedEmail = '';
+      this.permIssuedPassword = '';
+      const body = { email, access };
+      if (opts.issuePassword) body.issue_password = true;
       const r = access
-        ? await this.api('/api/permissions', { method: 'PUT', body: JSON.stringify({ email, access }) })
+        ? await this.api('/api/permissions', { method: 'PUT', body: JSON.stringify(body) })
         : await this.api('/api/permissions/' + encodeURIComponent(email), { method: 'DELETE' });
       if (!r.ok) {
+        const text = (await r.text()) || 'Could not save';
         this.permOk = false;
-        this.permMsg = (await r.text()) || 'Could not save';
+        if (where === 'form') this.permMsg = text;
+        else this.setPermRowNotice(email, text, false);
         return;
       }
-      this.permissions = await r.json();
+      const data = await r.json();
+      this.permissions = data;
       this.permOk = true;
-      this.permMsg = 'Saved';
+      if (data.issued_password && data.issued_email) {
+        this.issuedPasswords = { ...this.issuedPasswords, [data.issued_email]: data.issued_password };
+      }
+      if (where === 'form') {
+        this.permMsg = 'Saved';
+        if (data.issued_password) {
+          this.permIssuedEmail = data.issued_email;
+          this.permIssuedPassword = data.issued_password;
+        }
+      } else {
+        this.setPermRowNotice(email, 'Saved', true);
+      }
+    },
+
+    setPermRowNotice(email, text, ok) {
+      this.permRowNotice = { ...this.permRowNotice, [email]: { text, ok } };
+      if (!ok) return;
+      clearTimeout(this._permRowTimers?.[email]);
+      this._permRowTimers = this._permRowTimers || {};
+      this._permRowTimers[email] = setTimeout(() => {
+        const cur = { ...this.permRowNotice };
+        if (cur[email]?.text === text && cur[email]?.ok) {
+          delete cur[email];
+          this.permRowNotice = cur;
+        }
+      }, 2500);
+    },
+
+    switchPermTabFor(email) {
+      const local = (email.split('@')[0] || '').toLowerCase();
+      if (local.startsWith('loadtest')) { this.permTab = 'stress'; return; }
+      this.permTab = this.isAfkPerson({ email }) ? 'afk' : 'frid';
+    },
+
+    async copyIssuedPassword(email) {
+      const pw = this.issuedPasswords[email] || (email === this.permIssuedEmail ? this.permIssuedPassword : '');
+      if (!pw) return;
+      try {
+        await navigator.clipboard.writeText(pw);
+        if (email) this.setPermRowNotice(email, 'Copied', true);
+      } catch {}
     },
 
     async savePermission() {
@@ -2180,8 +3687,11 @@ function helixApp() {
         this.permMsg = 'Enter an email address';
         return;
       }
-      await this.setPermission(email, this.permAccess);
-      if (this.permOk) this.permEmail = '';
+      await this.setPermission(email, this.permAccess, { where: 'form', issuePassword: true });
+      if (this.permOk) {
+        this.switchPermTabFor(email.toLowerCase());
+        this.permEmail = '';
+      }
     },
 
     async resetPassword(email) {
@@ -2189,13 +3699,18 @@ function helixApp() {
       this.permMsg = '';
       const r = await this.api('/api/permissions/' + encodeURIComponent(email) + '/password', { method: 'DELETE' });
       if (!r.ok) {
-        this.permOk = false;
-        this.permMsg = (await r.text()) || 'Could not reset';
+        this.setPermRowNotice(email, (await r.text()) || 'Could not reset', false);
         return;
       }
       this.permissions = await r.json();
-      this.permOk = true;
-      this.permMsg = 'Password reset — they choose a new one next sign-in';
+      const next = { ...this.issuedPasswords };
+      delete next[email];
+      this.issuedPasswords = next;
+      if (this.permIssuedEmail === email) {
+        this.permIssuedEmail = '';
+        this.permIssuedPassword = '';
+      }
+      this.setPermRowNotice(email, 'Password reset — they choose a new one next sign-in', true);
     },
 
     async loadTranscript(sid) {
@@ -2360,9 +3875,20 @@ function helixApp() {
       }
     },
 
+    cronResultClass(cron) {
+      if (this.cronRunning[cron.id] || cron.last_status === 'running') return 'running';
+      if (cron.missed) return 'missed';
+      return cron.last_status || 'idle';
+    },
+
     cronResultLabel(cron) {
       if (this.cronRunning[cron.id] || cron.last_status === 'running') {
         return 'Running now — wait here for the report';
+      }
+      if (cron.missed) {
+        const due = cron.expected_at ? new Date(cron.expected_at).toLocaleString() : 'its last schedule';
+        const last = cron.last_run ? new Date(cron.last_run).toLocaleString() : 'never';
+        return 'Missed the ' + due + ' run — last ran ' + last;
       }
       if (cron.last_status === 'ok') return 'Last run succeeded';
       if (cron.last_status === 'error') return 'Last run failed';
@@ -2560,6 +4086,25 @@ function helixApp() {
                   ? 'Du er neste i køen. Ikke lukk siden — svaret kommer.'
                   : `Du er nummer ${data.position} i køen. Ikke lukk siden — svaret kommer.`
               );
+            }
+          } else if (data.type === "status") {
+            const last = this.chatMessages[this.chatMessages.length - 1];
+            if (last && last.role === 'assistant' && !last.content) {
+              const notes = {
+                read: "Leser i kunnskapsbasen…",
+                search: "Søker i filene…",
+                web: "Slår opp på nettet…",
+                write: "Oppdaterer dokumentasjonen…",
+                working: "Jobber med det…",
+              };
+              last.queued = true;
+              last.content = notes[data.kind] || notes.working;
+            }
+          } else if (data.replace) {
+            const last = this.chatMessages[this.chatMessages.length - 1];
+            if (last && last.role === 'assistant') {
+              last.queued = false;
+              last.content = data.chunk || '';
             }
           } else if (data.chunk) {
             const last = this.chatMessages[this.chatMessages.length - 1];

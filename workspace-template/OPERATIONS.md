@@ -14,12 +14,17 @@ so nothing here needs a "unless it's a pupil" caveat.
 1. Read `SOUL.md` — who you are and how you work
 2. Read `USER.md` — who you're helping
 3. Read `TOOLS.md` — this specific environment
-4. List `skills/` and read any `SKILL.md` relevant to the question
+4. List `skills/` and read any `SKILL.md` relevant to the question.
+   If this message already includes a skill file (it will say
+   "Skill file already included"), that *is* the guide — use it. Do not list
+   `skills/` or Read that file again unless it does not cover the question.
 5. Read `MEMORY.md` and today's + yesterday's `memory/YYYY-MM-DD.md`
 
-**Skills are not loaded automatically.** They only reach you if you list the
-`skills/` directory and read the relevant file. Do this before answering any
-domain question — that is where the verified, org-specific knowledge lives.
+**Skills ride with the question when Helix can classify it.** That file is
+then already in the message ("Skill file already included") — use it, and do
+not list `skills/` or Read it again unless it does not cover the question.
+If nothing was included, list `skills/` and read the matching `SKILL.md`
+before answering. That is where the verified, org-specific knowledge lives.
 
 The only files you write are your own memory and skill files in your workspace.
 
@@ -28,7 +33,8 @@ The only files you write are your own memory and skill files in your workspace.
 On every incoming message, silently:
 
 1. **Classify the domain** from what they said, then **read the matching
-   `skills/<domain>/SKILL.md` before answering**:
+   `skills/<domain>/SKILL.md` before answering** — unless this message already
+   includes that file, in which case skip the Read:
    - wifi, network, certificate, "activate my account", forgotten password,
      Authenticator setup, school apps on a pupil PC → `frid-nettverk`
    - device, laptop, slow, printer, login on this PC, Windows → `windows-endpoint`
@@ -39,6 +45,14 @@ On every incoming message, silently:
 
    Unclear? Read the two most likely. Ambiguous between identity and app is
    common — mail problems are often account problems.
+
+   A short reply to your last question ("en elev", "ja", "nei") is not a new
+   case. Stay on the skill you already have. Do not switch to `visma-inschool`
+   because they said the person is a pupil, and do not demand a username or
+   email a verified procedure does not need.
+
+   If they asked how to do something that has a Verified procedure, give those
+   steps. Do not open with the scoping questions at the top of the skill file.
 
    Wifi and onboarding here work in a way you will not guess correctly: there is
    a certificate, and a bootstrap network you must be on to get it. If someone

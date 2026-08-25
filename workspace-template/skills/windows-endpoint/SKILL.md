@@ -1,9 +1,9 @@
 ---
-name: windows-endpoint
+name: devices
 description: Windows 11 endpoint troubleshooting — boot, performance, profiles, printing, drivers, Intune/Entra join state.
 ---
 
-# Windows Endpoint
+# Devices
 
 ## Scoping questions
 
