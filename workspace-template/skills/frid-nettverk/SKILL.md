@@ -18,7 +18,7 @@ password into the wifi prompt. It needs a certificate, installed first.
 
 The order matters, and step 1 catches almost everyone:
 
-1. Connect to the bootstrap network **`FRID-iot`**, password **`!skolestart!`**.
+1. Connect to the bootstrap network **`FRID-iot`**, password **`friddeploy`**.
    This only exists at school. Nothing below works from home.
 2. Go to <https://onboard.frid-iks.no/> and download the certificate. The
    download **only works while on `FRID-iot`**.
@@ -26,8 +26,8 @@ The order matters, and step 1 catches almost everyone:
 4. Connect to the FRID wifi network.
 
 **Maximum 2 devices per person.** Someone on their third device will fail after
-doing everything right — ask how many devices they have already connected before
-digging into anything else.
+doing everything right. Do not ask this up front. Ask how many they already
+have connected only if the certificate installed and FRID still refuses them.
 
 ### Per-device guides
 
@@ -39,15 +39,33 @@ If someone has a device outside those four, or the guide doesn't match what they
 see, send them to the portal or to IT at their school. Do not construct steps
 for a platform we have no guide for.
 
-## Scoping questions
+## How to walk someone through this
 
-- Are you at school right now, or at home? (Nothing onboarding-related works
-  from home.)
-- Which network are you connected to while doing this — `FRID-iot` or something
-  else?
-- Which device: Windows PC, Mac, iPhone/iPad, or Android?
-- How many devices have you already connected? (Limit is 2.)
-- Has the account been activated yet, and is Authenticator set up?
+Do not interview them. The first steps are the same on every device, and a
+pupil who has to answer a checklist before they get something to do will leave.
+
+Give the next action they can take. A question is not an action. Never ask
+them to open the network list, name the networks they see, or say which
+device they have — that is diagnosing, and it loses them.
+
+1. **School or home** — ask this only if they have not already said. Nothing
+   onboarding-related works from home. If they are at home, say so and stop.
+2. **Once they are at school, give this instruction in Norwegian bokmål,
+   then wait.** Do not add a question. Say:
+
+   Greit. Koble deg først til wifi-nettverket **FRID-iot** med passordet
+   **friddeploy**. Når du er på det nettverket, gå til
+   <https://onboard.frid-iks.no> og last ned sertifikatet.
+
+   Those two beats are one instruction, not two turns. The password is
+   `friddeploy`. `!skolestart!` is the old one — do not use it.
+3. **Which device** — if this turn already says they are on Windows, macOS,
+   iOS or Android, use that guide. Do not ask. Ask **only** after they say
+   they have clicked download **and** you do not already know the device.
+4. **How many devices already connected** — only if they installed the
+   certificate and FRID still refuses them.
+5. **Account activation / Authenticator** — only if that is what they asked
+   about, or they cannot sign in to the portal.
 
 ## Accounts — activation, username, password
 

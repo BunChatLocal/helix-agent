@@ -1195,6 +1195,33 @@ class TestPupilKnowledgeIsInlined:
         prompt = build_system_prompt(is_new_session=True, tier="student")
         assert "no tools" in prompt.lower() or "no access to files" in prompt.lower()
 
+    def test_wifi_skill_defers_device_until_download(self):
+        """Pupils drop off if they are interviewed before they have something to do."""
+        skill = Path("workspace-template/skills/frid-nettverk/SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        student = Path("workspace-template/STUDENT.md").read_text(encoding="utf-8")
+        collapsed = " ".join(skill.lower().split())
+        assert "clicked download" in collapsed
+        assert "never ask them to open the network list" in collapsed
+        assert "koble deg først til wifi-nettverket" in collapsed
+        assert "friddeploy" in skill
+        assert "password **`friddeploy`**" in skill
+        assert "friddeploy" in student
+        assert "## Scoping questions" not in skill
+        assert "browser reports" in student.lower()
+        assert "list the networks they see" in student.lower()
+
+    def test_every_pupil_turn_repeats_the_wifi_device_deferral(self):
+        """Resumed sessions keep the old system prompt; the marker rides every turn."""
+        from core.context_engine import STUDENT_TURN_MARKER
+        marker = STUDENT_TURN_MARKER.lower()
+        assert "onboard.frid-iks.no" in marker
+        assert "friddeploy" in STUDENT_TURN_MARKER
+        assert "!skolestart!" not in STUDENT_TURN_MARKER
+        assert "hvilke nettverk" in marker
+        assert "last ned" in marker
+
 
 class TestSharedCoreIsActuallyShared:
     """The two shared files must hold nothing a pupil has to be told to ignore.
@@ -2452,7 +2479,7 @@ class TestQueueStatusEvents:
 class TestAgentLoopTierWiring:
     """The tier stored on the session must reach both the prompt and the CLI."""
 
-    async def _run(self, tier, channel="web", message="hei"):
+    async def _run(self, tier, channel="web", message="hei", client_os=""):
         from core.agent_loop import AgentLoop
 
         sm = MagicMock()
@@ -2479,7 +2506,9 @@ class TestAgentLoopTierWiring:
         with patch("core.agent_loop.call_claude", fake_call), \
              patch("core.agent_loop.build_system_prompt",
                    lambda is_new_session, tier, **kwargs: f"SYS:{tier}"):
-            async for _chunk in AgentLoop(sm).run(channel, "dev:x|1", message):
+            async for _chunk in AgentLoop(sm).run(
+                channel, "dev:x|1", message, client_os=client_os
+            ):
                 pass
         return seen
 
@@ -2515,6 +2544,18 @@ class TestAgentLoopTierWiring:
         seen = await self._run("student")
         assert STUDENT_TURN_MARKER in seen["user_message"]
         assert seen["user_message"].endswith("hei")
+
+    @pytest.mark.anyio
+    async def test_student_turn_includes_browser_os(self):
+        seen = await self._run("student", client_os="Windows")
+        assert "Windows PC" in seen["user_message"]
+        assert seen["user_message"].endswith("hei")
+
+    @pytest.mark.anyio
+    async def test_junk_os_hint_is_dropped(self):
+        seen = await self._run("student", client_os="<script>mac</script>")
+        assert "script" not in seen["user_message"]
+        assert "Windows PC" not in seen["user_message"]
 
     @pytest.mark.anyio
     async def test_pupil_screenshot_is_sent_inline_not_as_a_path(self):
@@ -3668,7 +3709,7 @@ class TestCommandTierGate:
             lambda token: dict(claims) if token == "tok" else None,
         )
 
-        seen = {"slash": [], "agent": []}
+        seen = {"slash": [], "agent": [], "kwargs": {}}
 
         async def fake_slash(message, channel, peer, sm, al, send_fn, **kwargs):
             seen["slash"].append(message)
@@ -3677,6 +3718,7 @@ class TestCommandTierGate:
 
         async def fake_run(channel, peer, message, **kwargs):
             seen["agent"].append(message)
+            seen["kwargs"] = kwargs
             yield "svar"
 
         agent_loop = MagicMock()
@@ -3693,12 +3735,15 @@ class TestCommandTierGate:
 
         return _RealTestClient(app_mod.app), seen
 
-    def _send(self, monkeypatch, claims: dict, message: str) -> dict:
+    def _send(self, monkeypatch, claims: dict, message: str, extra=None) -> dict:
         client, seen = self._client(monkeypatch, claims)
         with client.websocket_connect("/ws/chat") as ws:
             ws.send_json({"token": "tok"})
             assert ws.receive_json().get("status") == "connected"
-            ws.send_json({"message": message})
+            payload = {"message": message}
+            if extra:
+                payload.update(extra)
+            ws.send_json(payload)
             # Drain until the turn ends so the server has finished routing.
             for _ in range(10):
                 if ws.receive_json().get("done"):
@@ -3761,6 +3806,24 @@ class TestCommandTierGate:
         )
         assert seen["slash"] == []
         assert seen["agent"] == ["/status"]
+
+    def test_browser_os_reaches_the_agent(self, monkeypatch):
+        seen = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "role": "user", "tier": "student"},
+            "wifi",
+            extra={"os": "macOS"},
+        )
+        assert seen["kwargs"].get("client_os") == "macOS"
+
+    def test_junk_os_is_not_forwarded(self, monkeypatch):
+        seen = self._send(
+            monkeypatch,
+            {"sub": "dev:elev@afk.no", "role": "user", "tier": "student"},
+            "wifi",
+            extra={"os": "not-an-os"},
+        )
+        assert seen["kwargs"].get("client_os") == ""
 
     def test_student_cannot_reach_nettside(self, monkeypatch):
         """The /nettside branch fetches a URL server-side — students must miss it."""
@@ -4367,6 +4430,36 @@ class TestPupilImagesAreNotPermanent:
         assert fh.prune_stale_uploads(6 * 3600) == 1
         assert not old.exists()
         assert fresh.exists()
+
+
+class TestClientOs:
+    def test_hint_beats_user_agent(self):
+        from core.client_os import normalize
+        assert normalize("iOS", "Mozilla/5.0 (Windows NT 10.0)") == "iOS"
+
+    def test_user_agent_when_hint_is_empty(self):
+        from core.client_os import normalize
+        assert normalize("", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)") == "macOS"
+
+    def test_junk_hint_falls_back_to_user_agent(self):
+        from core.client_os import normalize, prompt_note
+        assert normalize("<script>", "Mozilla/5.0 (Linux; Android 14)") == "Android"
+        assert "Do not say you cannot see the device" in prompt_note("Windows")
+        assert "Windows PC" in prompt_note("Windows")
+        assert prompt_note("nope") == ""
+
+
+class TestPupilWaitNotes:
+    """The slow first reply needs something on screen besides bouncing dots."""
+
+    def test_chat_rotates_honest_then_optional_jokes(self):
+        page = Path("web/static/chat.html").read_text(encoding="utf-8")
+        assert "waitHonest" in page
+        assert "Leser…" in page
+        assert "Tar lenger tid enn forventet…" in page
+        assert "Netflix-pause…" in page
+        assert "startWaitNotes(true)" in page
+        assert "isPupil && Math.random()" in page
 
 
 class TestPupilAssetBoundary:

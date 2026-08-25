@@ -7,14 +7,14 @@
 <style>
   :root{
     --bg:#faf9f7; --panel:#f2efea; --panel-2:#e9e5df; --line:#e0dbd3;
-    --text:#1f1e1c; --muted:#6f6a63; --accent:#c86442; --accent-ink:#fff;
+    --text:#1f1e1c; --muted:#6f6a63; --accent:#0891b2; --accent-ink:#fff;
     --bubble-user:#ece7e0; --danger:#a13a2a;
     --radius:14px; --sidebar:270px;
   }
   @media (prefers-color-scheme:dark){
     :root:not([data-theme="light"]){
       --bg:#1f1e1d; --panel:#262523; --panel-2:#2f2e2b; --line:#3a3835;
-      --text:#f0eee9; --muted:#a29c93; --accent:#d97757; --accent-ink:#1f1e1d;
+      --text:#f0eee9; --muted:#a29c93; --accent:#06b6d4; --accent-ink:#fff;
       --bubble-user:#333230;
     }
   }
@@ -117,7 +117,7 @@
   .dev-panel{
     display:none;align-self:flex-start;margin:0 0 6px;padding:3px 9px;
     border-radius:7px;cursor:pointer;font-size:11px;font-weight:600;
-    letter-spacing:.04em;line-height:1.3;color:#f3d2c4;
+    letter-spacing:.04em;line-height:1.3;color:color-mix(in srgb,#fff 82%, var(--accent));
     border:1px solid color-mix(in srgb,var(--accent) 55%, var(--line));
     background:
       linear-gradient(180deg,
@@ -196,6 +196,12 @@
     margin-top:10px;color:var(--muted);font-size:15px;line-height:1.5;
     max-width:36em;white-space:normal;
   }
+  .wait-note{animation:waitfade .35s ease}
+  @keyframes waitfade{from{opacity:.35}to{opacity:1}}
+  @media (prefers-reduced-motion:reduce){
+    .wait-note{animation:none}
+    .dots span{animation:none;opacity:.65}
+  }
 
   .composer{border-top:1px solid var(--line);background:var(--bg);padding:14px 24px 20px}
   .composer-in{max-width:760px;margin:0 auto}
@@ -227,18 +233,18 @@
   .testbadge{
     padding:7px 11px;border-radius:8px;font-size:12px;font-weight:600;
     letter-spacing:.03em;text-align:center;
-    background:color-mix(in srgb,#c58a1a 22%,transparent);color:#8a5d00;
+    background:color-mix(in srgb,var(--accent) 22%,transparent);color:#0e7490;
   }
   @media (prefers-color-scheme:dark){
-    :root:not([data-theme="light"]) .testbadge{color:#f0c464}
+    :root:not([data-theme="light"]) .testbadge{color:#67e8f9}
   }
   #testBar{
     display:none;padding:6px 14px;font-size:12px;font-weight:600;text-align:center;
-    background:color-mix(in srgb,#c58a1a 22%,transparent);color:#8a5d00;
+    background:color-mix(in srgb,var(--accent) 22%,transparent);color:#0e7490;
   }
   #testBar.on{display:block}
   @media (prefers-color-scheme:dark){
-    :root:not([data-theme="light"]) #testBar{color:#f0c464}
+    :root:not([data-theme="light"]) #testBar{color:#67e8f9}
   }
 
   /* context meter */
@@ -249,7 +255,7 @@
     flex:1;height:5px;border-radius:3px;background:var(--panel-2);overflow:hidden;
   }
   .meter-fill{height:100%;background:var(--accent);width:0;transition:width .3s}
-  .meter.warn .meter-fill{background:#c58a1a}
+  .meter.warn .meter-fill{background:#0284c7}
   .meter.full .meter-fill{background:var(--danger)}
   .fullnotice{
     max-width:760px;margin:0 auto 12px;padding:14px 16px;border-radius:12px;
@@ -272,7 +278,7 @@
     font-size:13px;line-height:1;
   }
   .conv.expiring{
-    box-shadow:inset 0 0 0 1px color-mix(in srgb,#c58a1a 45%,transparent);
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent);
   }
   .conv.urgent{
     box-shadow:inset 0 0 0 1px color-mix(in srgb,#d4453a 55%,transparent),
@@ -366,7 +372,7 @@
         <span style="font-size:12px;color:var(--muted)" data-t="or">eller</span>
         <div style="flex:1;height:1px;background:var(--line)"></div>
       </div>
-      <div class="testbadge" data-t="testmode">TESTMODUS — ingen verifisering</div>
+      <div class="testbadge" data-t="testmode">IN DEVELOPMENT - Expect bugs and errors</div>
       <input id="devEmail" type="email" autocomplete="username"
              data-t-ph="emailph" placeholder="navn@eksempel.no" class="field">
       <input id="devPassword" type="password" autocomplete="current-password"
@@ -408,7 +414,7 @@
     <div class="side-foot">
       <div class="avatar" id="ini">–</div>
       <div class="who-wrap">
-        <button type="button" class="dev-panel" id="devPanelBtn" data-t="devpanel">Dev</button>
+        <button type="button" class="dev-panel" id="devPanelBtn" data-t="devpanel">dev-panel</button>
         <div id="who">–</div>
         <button type="button" class="logout" id="logoutBtn" data-t="logout">Logg ut</button>
       </div>
@@ -417,7 +423,7 @@
   </aside>
 
   <main>
-    <div id="testBar" data-t="testbar">TESTMODUS — innlogging er ikke verifisert</div>
+    <div id="testBar" data-t="testbar">IN DEVELOPMENT - Expect bugs and errors</div>
     <div class="top">
       <button class="burger" id="burger">☰</button>
       <strong style="font-size:15px" data-t="title">Zork</strong>
@@ -517,13 +523,13 @@ const I18N = {
     del:"Slette denne samtalen?",
     copy:"Kopier", copied:"Kopiert",
     untitled:"Ny samtale", other:"English",
-    or:"eller", testmode:"TESTMODUS — ingen verifisering",
-    testbar:"TESTMODUS — innlogging er ikke verifisert",
+    or:"eller", testmode:"IN DEVELOPMENT - Expect bugs and errors",
+    testbar:"IN DEVELOPMENT - Expect bugs and errors",
     testsignin:"Logg inn", emailph:"navn@eksempel.no",
     pwph:"passord", pwset:"lag passord", pwconfirm:"bekreft passord",
     err_pw_mismatch:"Passordene er ikke like.",
     logout:"Logg ut",
-    devpanel:"Dev",
+    devpanel:"dev-panel",
     err_email:"Skriv inn en gyldig e-postadresse.",
     ctx:"Kontekst",
     fulltext:"Denne samtalen er blitt lang. Komprimer den for å fortsette — jeg lager et sammendrag og husker det viktigste.",
@@ -552,7 +558,10 @@ const I18N = {
     statussearch:"Søker i filene…",
     statusweb:"Slår opp på nettet…",
     statuswrite:"Oppdaterer dokumentasjonen…",
-    statusworking:"Jobber med det…"
+    statusworking:"Jobber med det…",
+    waitHonest:["Leser…","Tenker…","Ser gjennom reglene…","Svarer…"],
+    waitLate:"Tar lenger tid enn forventet…",
+    waitFunny:["Netflix-pause…","Do-pause…","Snakker med rektor din…","Kaster tryllestav…","Beundrer arbeidet mitt…"]
   },
   en:{
     title:"Zork",
@@ -577,13 +586,13 @@ const I18N = {
     del:"Delete this conversation?",
     copy:"Copy", copied:"Copied",
     untitled:"New chat", other:"Norsk",
-    or:"or", testmode:"TEST MODE — no verification",
-    testbar:"TEST MODE — sign-in is not verified",
+    or:"or", testmode:"IN DEVELOPMENT - Expect bugs and errors",
+    testbar:"IN DEVELOPMENT - Expect bugs and errors",
     testsignin:"Sign in", emailph:"name@example.com",
     pwph:"password", pwset:"create password", pwconfirm:"confirm password",
     err_pw_mismatch:"The passwords do not match.",
     logout:"Sign out",
-    devpanel:"Dev",
+    devpanel:"dev-panel",
     err_email:"Enter a valid email address.",
     ctx:"Context",
     fulltext:"This conversation has grown long. Compact it to continue — I'll summarise and keep what matters.",
@@ -612,7 +621,10 @@ const I18N = {
     statussearch:"Searching the files…",
     statusweb:"Looking that up…",
     statuswrite:"Updating the documentation…",
-    statusworking:"Working on it…"
+    statusworking:"Working on it…",
+    waitHonest:["Reading…","Thinking…","Looking through the rules…","Responding…"],
+    waitLate:"Taking longer than expected…",
+    waitFunny:["Netflix break…","Toilet break…","Talking to your principal…","Casting spells…","Admiring my work…"]
   }
 };
 /* Norwegian is the default; English only if saved or the browser asks for it.
@@ -639,6 +651,7 @@ function applyLang(){
   renderConvs();
   applyChips();
   applyPwMode();
+  if(waitTimer && stream && !stream.dataset.raw) refreshWaitNote();
 }
 function toggleLang(){ lang = lang === "nb" ? "en" : "nb"; applyLang(); }
 
@@ -689,6 +702,10 @@ let isPupil = false;
 let setPassword = false;
 let pwCheck = 0;
 let pwTimer = 0;
+let waitTimer = 0;
+let waitStep = 0;
+let waitLast = "";
+const WAIT_DOTS = '<span class="dots"><span></span><span></span><span></span></span>';
 
 function applyPwMode(){
   const pw = $("devPassword");
@@ -862,6 +879,7 @@ function signOut(){
   document.body.classList.remove("pupil");
   $("devPanelBtn").classList.remove("on");
   if(ws){ ws.onclose = null; ws.close(); ws = null; }
+  stopWaitNotes();
   retry = 0; convs = []; convId = null; busy = false; stream = null;
   $("msgs").innerHTML = "";
   $("convList").innerHTML = "";
@@ -1158,12 +1176,11 @@ function connect(){
       // into dataset.raw — it is status, not part of the answer.
       if(!stream){ stream = add("a",""); stream.dataset.raw = ""; }
       if(d.position > 0){
+        stopWaitNotes();
         const note = d.position === 1 ? t("queuenext") : t("queuepos", d.position);
-        stream.innerHTML =
-          '<span class="dots"><span></span><span></span><span></span></span>'
-          + '<div class="queue-note">' + note + '</div>';
+        stream.innerHTML = WAIT_DOTS + '<div class="queue-note">' + note + '</div>';
       } else if(!stream.dataset.raw){
-        stream.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
+        startWaitNotes(false);
       }
       scroll();
       return;
@@ -1171,10 +1188,9 @@ function connect(){
     if(d.type === "status"){
       if(!stream){ stream = add("a",""); stream.dataset.raw = ""; }
       if(!stream.dataset.raw){
+        stopWaitNotes();
         const note = t("status" + (d.kind || "working")) || t("statusworking");
-        stream.innerHTML =
-          '<span class="dots"><span></span><span></span><span></span></span>'
-          + '<div class="queue-note">' + note + '</div>';
+        stream.innerHTML = WAIT_DOTS + '<div class="queue-note">' + note + '</div>';
       }
       scroll();
       return;
@@ -1182,12 +1198,16 @@ function connect(){
     if(d.replace){
       if(!stream){ stream = add("a",""); }
       stream.dataset.raw = d.chunk || "";
-      stream.innerHTML = stream.dataset.raw
-        ? render(stream.dataset.raw)
-        : '<span class="dots"><span></span><span></span><span></span></span>';
+      if(stream.dataset.raw){
+        stopWaitNotes();
+        stream.innerHTML = render(stream.dataset.raw);
+      } else {
+        startWaitNotes(false);
+      }
       scroll();
     } else if(d.chunk){
       if(!stream){ stream = add("a",""); stream.dataset.raw = ""; }
+      stopWaitNotes();
       stream.dataset.raw += d.chunk;
       stream.innerHTML = render(stream.dataset.raw);
       scroll();
@@ -1210,7 +1230,60 @@ function connect(){
   ws.onerror = () => {};
 }
 function reconnect(){ if(ws){ ws.onclose = null; ws.close(); } connect(); }
-function finish(){ busy = false; stream = null; $("send").disabled = !$("input").value.trim(); }
+function finish(){ stopWaitNotes(); busy = false; stream = null; $("send").disabled = !$("input").value.trim(); }
+
+function waitLines(){
+  return {
+    honest: I18N[lang].waitHonest,
+    late: I18N[lang].waitLate,
+    funny: I18N[lang].waitFunny
+  };
+}
+
+function nextWaitNote(){
+  const { honest, late, funny } = waitLines();
+  waitStep++;
+  if(waitStep <= honest.length) return honest[waitStep - 1];
+  if(waitStep === honest.length + 1) return late;
+  if(isPupil && Math.random() < 0.3 && !funny.includes(waitLast)){
+    return funny[Math.floor(Math.random() * funny.length)];
+  }
+  const rest = honest.concat([late]).filter(x => x !== waitLast);
+  return rest[Math.floor(Math.random() * rest.length)] || late;
+}
+
+function paintWait(note){
+  if(!stream || stream.dataset.raw) return;
+  waitLast = note;
+  stream.innerHTML = WAIT_DOTS
+    + '<div class="queue-note wait-note" aria-live="polite">' + esc(note) + '</div>';
+}
+
+function refreshWaitNote(){
+  const { honest, late, funny } = waitLines();
+  let note = late;
+  if(waitStep <= 0) note = honest[0];
+  else if(waitStep <= honest.length) note = honest[waitStep - 1];
+  else if(waitStep === honest.length + 1) note = late;
+  else if(funny.includes(waitLast)) note = funny[0];
+  paintWait(note);
+}
+
+function stopWaitNotes(){
+  if(waitTimer){ clearInterval(waitTimer); waitTimer = 0; }
+}
+
+function startWaitNotes(fresh){
+  stopWaitNotes();
+  if(fresh){ waitStep = 0; waitLast = ""; paintWait(nextWaitNote()); }
+  else if(waitLast) paintWait(waitLast);
+  else paintWait(nextWaitNote());
+  waitTimer = setInterval(() => {
+    if(!busy || !stream || stream.dataset.raw){ stopWaitNotes(); return; }
+    paintWait(nextWaitNote());
+    scroll();
+  }, 2400);
+}
 
 /* ---------------- composer ---------------- */
 const input = $("input");
@@ -1223,6 +1296,33 @@ input.onkeydown = e => {
   if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(); }
 };
 $("send").onclick = send;
+
+function detectOs(){
+  const u = navigator.userAgent || "";
+  if(/iPad|iPhone|iPod/.test(u) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+    return "iOS";
+  try{
+    const p = (navigator.userAgentData && navigator.userAgentData.platform) || "";
+    const mapped = mapOsHint(p);
+    if(mapped) return mapped;
+  }catch(_){}
+  if(/Android/.test(u)) return "Android";
+  if(/Win/.test(u)) return "Windows";
+  if(/Mac/.test(u)) return "macOS";
+  if(/CrOS/.test(u)) return "ChromeOS";
+  if(/Linux/.test(u)) return "Linux";
+  return "";
+}
+function mapOsHint(p){
+  const s = (p || "").toLowerCase();
+  if(s.includes("win")) return "Windows";
+  if(s.includes("mac")) return "macOS";
+  if(s.includes("android")) return "Android";
+  if(s.includes("cros") || s.includes("chrome")) return "ChromeOS";
+  if(s.includes("linux")) return "Linux";
+  if(/iphone|ipad|ios/.test(s)) return "iOS";
+  return "";
+}
 
 function send(){
   const text = input.value.trim();
@@ -1248,9 +1348,9 @@ function send(){
   input.value = ""; input.style.height = "auto";
   busy = true; $("send").disabled = true;
   const d = add("a", "");
-  d.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
   stream = d; stream.dataset.raw = "";
-  ws.send(JSON.stringify({ message: text, attachments: ids }));
+  startWaitNotes(true);
+  ws.send(JSON.stringify({ message: text, attachments: ids, os: detectOs() }));
   scroll();
 }
 

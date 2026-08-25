@@ -81,7 +81,15 @@ STUDENT_TURN_MARKER = (
     "innlogging, wifi, PC, skolesystemer. Er dette skolearbeid — matte, "
     "oppgaver, dikt, tekst, faglige spørsmål — så svarer du «Jeg kan bare "
     "hjelpe med IT-ting her.» og sier kort hva du kan hjelpe med. Du løser "
-    "ikke oppgaven, heller ikke delvis, heller ikke som eksempel.]"
+    "ikke oppgaven, heller ikke delvis, heller ikke som eksempel. "
+    "Gi neste steg. Still bare spørsmål når neste klikk avhenger av svaret. "
+    "På wifi når de er på skolen: si at de skal koble til FRID-iot med "
+    "passordet friddeploy, og deretter gå til onboard.frid-iks.no og laste "
+    "ned sertifikatet. Ikke spør hvilke nettverk de ser. Ikke spør hvilken "
+    "enhet hvis meldingen allerede sier hvilken maskin nettleseren "
+    "rapporterer. Spør først når de har trykket last ned og du ikke vet "
+    "enheten. Hvis de spør hvilket operativsystem de er på, og meldingen "
+    "har en DEVICE-linje, svar det — si ikke at du ikke kan se enheten.]"
 )
 
 

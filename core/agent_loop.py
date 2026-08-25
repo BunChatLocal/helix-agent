@@ -19,6 +19,7 @@ from core.session_manager import SessionManager
 from core.context_engine import build_system_prompt, STUDENT_TURN_MARKER
 from core.cli_backend import call_claude
 from core.knowledge import FOLLOW_UP_MIN_TOKENS, with_matching_skill
+from core.client_os import normalize as normalize_client_os, prompt_note as client_os_note
 
 logger = logging.getLogger("helix.agent")
 
@@ -72,6 +73,7 @@ class AgentLoop:
         model_override: Optional[str] = None,
         caller_name: str = "",
         caller_email: str = "",
+        client_os: str = "",
     ) -> AsyncGenerator[Union[str, dict], None]:
         """
         Main agent turn. Yields response text, or a status dict the web
@@ -113,16 +115,19 @@ class AgentLoop:
                 # stays their own words rather than our plumbing.
                 prompt_message = user_message
                 images: list[Path] = []
+                os_note = client_os_note(normalize_client_os(client_os))
                 if tier == TIER_STUDENT:
                     prompt_message, images = _extract_images(user_message)
-                    prompt_message = f"{STUDENT_TURN_MARKER}\n\n{prompt_message}"
+                    prompt_message = (
+                        f"{STUDENT_TURN_MARKER}\n\n{os_note}{prompt_message}"
+                    )
                 elif is_staff_like(tier):
                     # Skip the "list skills/ then Read SKILL.md" round-trip.
                     # The transcript below still stores what the person wrote.
                     # On a follow-up, skip injection unless the message is long
                     # enough to be a new case — "en elev" otherwise attaches
                     # visma-inschool and the bot asks for bruker@afk.no.
-                    prompt_message = with_matching_skill(
+                    prompt_message = os_note + with_matching_skill(
                         user_message,
                         tier,
                         min_tokens=0 if is_new_session else FOLLOW_UP_MIN_TOKENS,

@@ -39,6 +39,7 @@ from core.config import (
 )
 from core import dev_passwords as dev_pw
 from core.skill_manager import create_skill, list_skills, read_skill, write_skill
+from core.client_os import normalize as normalize_client_os
 from security.auth import RateLimiter
 from security.secrets import get_secret, set_secret
 from security.input_validator import sanitize_for_context
@@ -3210,6 +3211,10 @@ async def ws_chat(websocket: WebSocket):
             data = await websocket.receive_json()
             message = data.get("message", "")
             attachment_ids = data.get("attachments") or []
+            client_os = normalize_client_os(
+                str(data.get("os") or ""),
+                websocket.headers.get("user-agent") or "",
+            )
             if not message and not attachment_ids:
                 continue
 
@@ -3347,6 +3352,7 @@ async def ws_chat(websocket: WebSocket):
                         "web", peer, message,
                         caller_name=display_name,
                         caller_email=claims.get("email") or "",
+                        client_os=client_os,
                     ),
                 )
                 await websocket.send_json({
@@ -3418,6 +3424,7 @@ async def ws_chat(websocket: WebSocket):
                     "web", peer, clean_message,
                     caller_name=display_name,
                     caller_email=claims.get("email") or "",
+                    client_os=client_os,
                 ),
             )
 
