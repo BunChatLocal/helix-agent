@@ -55,7 +55,7 @@ def main():
             pass
 
     pupil = post("/api/auth/dev-login", {"email": "elev@afk.no", "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
-    staff = post("/api/auth/dev-login", {"email": "ansatt@frid.no", "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
+    staff = post("/api/auth/dev-login", {"email": "ansatt@test.no", "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
 
     print(f"{len(assets)} images in the knowledge base, "
           f"{len(cited)} cited by the pupil guides\n")

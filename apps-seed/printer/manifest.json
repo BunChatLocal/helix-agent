@@ -1,0 +1,8 @@
+{
+  "id": "printer",
+  "name": "Get printer",
+  "filename": "VikenPrint.msi",
+  "description": "Viken Print / YSoft SafeQ FlexiSpooler for the school printers.",
+  "platforms": ["windows"],
+  "run_hint": "I Zorken: trykk Skaff printer. Godkjenn i Windows hvis du blir spurt."
+}

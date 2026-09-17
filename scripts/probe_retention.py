@@ -33,7 +33,7 @@ def get(path: str, token: str) -> dict:
         return json.loads(r.read())
 
 
-for email in ("elev@afk.no", "ansatt@frid.no"):
+for email in ("elev@afk.no", "ansatt@test.no"):
     token = post("/api/auth/dev-login", {"email": email, "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
     me = get("/api/me", token)
     convs = get("/api/me/conversations", token)["conversations"]

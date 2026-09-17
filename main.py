@@ -237,10 +237,15 @@ async def main():
     init_web(session_manager, agent_loop, scheduler, queue_manager=queue_manager,
              audit_logger=audit)
 
+    import os
+    # Railway (and any container) sets PORT and must listen on all interfaces.
+    web_host = "0.0.0.0" if os.environ.get("PORT") else cfg.web.host
+    web_port = int(os.environ["PORT"]) if os.environ.get("PORT") else cfg.web.admin_port
+
     web_config = uvicorn.Config(
         fastapi_app,
-        host=cfg.web.host,
-        port=cfg.web.admin_port,
+        host=web_host,
+        port=web_port,
         log_level="warning",
         access_log=False,
     )
@@ -250,12 +255,12 @@ async def main():
         try:
             await web_server.serve()
         except SystemExit:
-            logger.error(f"Web UI failed to start — port {cfg.web.admin_port} may be in use")
+            logger.error(f"Web UI failed to start — port {web_port} may be in use")
         except Exception as e:
             logger.error(f"Web UI error: {e}")
 
     asyncio.create_task(_safe_serve())
-    logger.info(f"Web admin UI starting on http://{cfg.web.host}:{cfg.web.admin_port}")
+    logger.info(f"Web admin UI starting on http://{web_host}:{web_port}")
 
     # ── Channels ────────────────────────────────────────────────────────────
     adapters = []
@@ -379,7 +384,7 @@ async def main():
         asyncio.create_task(_execute_cron(cron.id))
 
     logger.info("Helix fully started.")
-    logger.info(f"  Admin UI: http://{cfg.web.host}:{cfg.web.admin_port}")
+    logger.info(f"  Admin UI: http://{web_host}:{web_port}")
 
     # ── Wait for shutdown ────────────────────────────────────────────────────
     stop_event = asyncio.Event()

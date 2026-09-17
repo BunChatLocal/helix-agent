@@ -56,7 +56,7 @@ async def main():
     print(f"limits — staff {limits.for_tier('staff')}, "
           f"pupil {limits.for_tier('student')} (per minute, per hour)")
 
-    token = post("/api/auth/dev-login", {"email": "ratetest@frid.no", "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
+    token = post("/api/auth/dev-login", {"email": "ratetest@test.no", "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
 
     half = staff_limit // 2
     first = await burst(token, half, "connection 1")
@@ -72,7 +72,7 @@ async def main():
         print("\nFAIL — connection 2 got a fresh allowance.")
 
     # A different person must be unaffected by the first one's spending.
-    other = post("/api/auth/dev-login", {"email": "ratetest2@frid.no", "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
+    other = post("/api/auth/dev-login", {"email": "ratetest2@test.no", "password": "helix-probe-login", "password_confirm": "helix-probe-login"})["token"]
     third = await burst(other, 3, "other person")
     print(f"other person: 3 sent, {third} refused "
           f"({'OK' if third == 0 else 'FAIL — limits are not per person'})")

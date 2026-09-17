@@ -1,0 +1,18 @@
+---
+description: Restart the local Helix process after each code or prompt change
+alwaysApply: true
+---
+
+# Restart Helix after each iteration
+
+When you change anything Helix loads at runtime — Python, `web/static/`, helper
+scripts, or `workspace-template/` / `~/.helix/workspace` prompts — restart the
+local process before you finish the turn.
+
+1. From the repo root: `.\stop.ps1` then `.\start.ps1`
+2. Confirm the admin UI answers on http://127.0.0.1:18791 (or the port in `~/.helix/config.json`)
+3. Tell the user Helix was restarted
+
+Do not skip this because chat.html or a workspace markdown file “does not need a restart”. Restart anyway so the running process matches the iteration.
+
+Skip only when the turn made no Helix-facing change (pure Q&A, no edits).

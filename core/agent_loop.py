@@ -16,19 +16,27 @@ from typing import AsyncGenerator, Optional, Union
 
 from core.config import get_config, TIER_STAFF, TIER_STUDENT, is_staff_like
 from core.session_manager import SessionManager
-from core.context_engine import build_system_prompt, STUDENT_TURN_MARKER
-from core.cli_backend import call_claude
-from core.knowledge import FOLLOW_UP_MIN_TOKENS, with_matching_skill
+from core.context_engine import build_system_prompt, turn_marker
+from core.cli_backend import call_claude, redact_internal_paths
+from core.knowledge import (
+    FOLLOW_UP_MIN_TOKENS,
+    classify_topic,
+    with_matching_skill,
+    _tokens as _knowledge_tokens,
+)
 from core.client_os import normalize as normalize_client_os, prompt_note as client_os_note
 
 logger = logging.getLogger("helix.agent")
 
 NO_REPLY = "NO_REPLY"
 
+# /chat wait-bubble phases. Read/Skill is using the guide; Glob/Grep is
+# still looking for which one.
 _TOOL_STATUS_KIND = {
-    "read": "read",
-    "glob": "search",
-    "grep": "search",
+    "read": "rules",
+    "skill": "rules",
+    "glob": "think",
+    "grep": "think",
     "webfetch": "web",
     "websearch": "web",
     "edit": "write",
@@ -38,6 +46,13 @@ _TOOL_STATUS_KIND = {
 
 def _tool_status_kind(name: str) -> str:
     return _TOOL_STATUS_KIND.get((name or "").lower(), "working")
+
+
+def _topic_for_turn(message: str, tier: str, is_new_session: bool) -> Optional[str]:
+    """Which skill this turn is about, or None when we should not re-pick."""
+    if not is_new_session and len(_knowledge_tokens(message)) < FOLLOW_UP_MIN_TOKENS:
+        return None
+    return classify_topic(message, tier)
 
 # The web layer prepends one of these per upload so the agent can open the file.
 # A pupil's agent has no file tools, so for that tier the path is pulled back out
@@ -57,6 +72,9 @@ class AgentLoop:
     def __init__(self, session_manager: SessionManager):
         self.session_manager = session_manager
         self._locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
+        # Last skill body prepended for this Helix session. Re-sending it on
+        # every follow-up costs TTFT; --resume already holds the file.
+        self._injected_skill: dict[str, str] = {}
 
     def _get_lock(self, session_id: str) -> asyncio.Lock:
         lock = self._locks.get(session_id)
@@ -96,6 +114,9 @@ class AgentLoop:
 
         async with self._get_lock(session_id):
             try:
+                if channel == "web":
+                    yield {"type": "status", "kind": "read"}
+
                 system = build_system_prompt(
                     is_new_session=is_new_session,
                     tier=tier,
@@ -118,20 +139,38 @@ class AgentLoop:
                 os_note = client_os_note(normalize_client_os(client_os))
                 if tier == TIER_STUDENT:
                     prompt_message, images = _extract_images(user_message)
-                    prompt_message = (
-                        f"{STUDENT_TURN_MARKER}\n\n{os_note}{prompt_message}"
-                    )
+
+                if channel == "web":
+                    yield {"type": "status", "kind": "think"}
+                picked = _topic_for_turn(user_message, tier, is_new_session)
+
+                if tier == TIER_STUDENT:
+                    prompt_message = f"{os_note}{prompt_message}"
                 elif is_staff_like(tier):
                     # Skip the "list skills/ then Read SKILL.md" round-trip.
                     # The transcript below still stores what the person wrote.
                     # On a follow-up, skip injection unless the message is long
                     # enough to be a new case — "en elev" otherwise attaches
                     # visma-inschool and the bot asks for bruker@afk.no.
-                    prompt_message = os_note + with_matching_skill(
-                        user_message,
-                        tier,
-                        min_tokens=0 if is_new_session else FOLLOW_UP_MIN_TOKENS,
-                    )
+                    # Same skill as last turn: --resume already has it.
+                    prev = self._injected_skill.get(session_id)
+                    if picked and picked == prev:
+                        prompt_message = os_note + user_message
+                    else:
+                        prompt_message = os_note + with_matching_skill(
+                            user_message,
+                            tier,
+                            min_tokens=0 if is_new_session else FOLLOW_UP_MIN_TOKENS,
+                        )
+                        if picked:
+                            self._injected_skill[session_id] = picked
+
+                marker = turn_marker(tier, channel)
+                if marker:
+                    prompt_message = f"{marker}\n\n{prompt_message}"
+
+                if channel == "web" and picked:
+                    yield {"type": "status", "kind": "rules"}
 
                 # Overflow waits for a slot rather than launching another
                 # claude.exe. Web gets live place-in-line events (not saved);
@@ -144,10 +183,12 @@ class AgentLoop:
                     is_new_session=is_new_session,
                     tier=tier,
                     images=images,
+                    channel=channel,
                 )
                 if channel == "web":
                     progress: asyncio.Queue = asyncio.Queue()
                     streamed: list[str] = []
+                    responded = False
 
                     async def on_wait(position: int, waiting: int) -> None:
                         await progress.put({
@@ -156,12 +197,27 @@ class AgentLoop:
                             "waiting": waiting,
                         })
 
+                    displayed = ""
+
                     async def on_text(delta: str) -> None:
-                        streamed.append(delta)
-                        await progress.put(delta)
+                        nonlocal responded, displayed
+                        if not responded:
+                            responded = True
+                            await progress.put({"type": "status", "kind": "respond"})
+                        displayed += delta
+                        redacted = redact_internal_paths(displayed)
+                        if redacted != displayed:
+                            displayed = redacted
+                            await progress.put({"replace": True, "chunk": redacted})
+                        else:
+                            streamed.append(delta)
+                            await progress.put(delta)
 
                     async def on_reset() -> None:
+                        nonlocal responded, displayed
                         streamed.clear()
+                        displayed = ""
+                        responded = False
                         await progress.put({"replace": True})
 
                     async def on_tool(name: str) -> None:
@@ -197,6 +253,9 @@ class AgentLoop:
                             except asyncio.QueueEmpty:
                                 break
                         response_text, used_session_id, usage = work.result()
+                        response_text = redact_internal_paths(response_text)
+                        if displayed:
+                            streamed = [displayed]
                     except BaseException:
                         if not work.done():
                             work.cancel()

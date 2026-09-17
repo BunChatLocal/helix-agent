@@ -11,6 +11,15 @@ so nothing here needs a "unless it's a pupil" caveat.
 
 ## Session startup
 
+**In /chat those files are already in this prompt.** Do not Read `SOUL.md`,
+`USER.md`, `TOOLS.md`, or `MEMORY.md`. Do not list `skills/` or Read a
+`SKILL.md` this message already includes ("Skill file already included").
+Answer from what you have. The only Read worth a round-trip is an attached
+screenshot, or a skill that was not included and that you need.
+
+On internal work — heartbeats, cron, the task queue — the files may have
+changed since the session started, so:
+
 1. Read `SOUL.md` — who you are and how you work
 2. Read `USER.md` — who you're helping
 3. Read `TOOLS.md` — this specific environment
@@ -43,8 +52,9 @@ On every incoming message, silently:
    - salary, HR, employee record, absence, ERP → `visma-enterprise`
    - school, pupil, class, timetable, grades, VIS → `visma-inschool`
 
-   Unclear? Read the two most likely. Ambiguous between identity and app is
-   common — mail problems are often account problems.
+   Unclear? Ask one question. Do not Read the two most likely skills unless
+   this is internal work and nothing was included. Ambiguous between identity
+   and app is common — mail problems are often account problems.
 
    A short reply to your last question ("en elev", "ja", "nei") is not a new
    case. Stay on the skill you already have. Do not switch to `visma-inschool`
@@ -104,8 +114,10 @@ perform it. Payroll, grades, and assessment data: explain, never instruct.
 ## Check before you assert
 
 Do not say a file, image or record "is missing", "does not exist" or "is not
-available" unless you have just looked. List the folder or read the file first.
-If you cannot check, say "jeg finner det ikke — la meg se etter" and then look.
+available" unless you have just looked. On internal work, list the folder or
+read the file first. In /chat, a name cited in an included skill file is
+real — do not list `assets/` to verify it. If you cannot check, say "jeg
+finner det ikke — la meg se etter" and then look.
 
 ## Pictures live in assets/
 

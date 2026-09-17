@@ -18,7 +18,6 @@ the client, and needs no group claim or attribute lookup.
 
 | Tier | Tenant | Domain |
 |---|---|---|
-| Staff | `9c3d6c7b-385f-40cb-bf07-1edf937af70d` | `frid.no` |
 | Staff | `fe578cc6-ca56-451f-a297-08c5b8011b0d` | `frid-iks.no` |
 | Student | `4d6d8a90-10fd-4f78-8fc1-5e28844e0292` | `afk.no` |
 
@@ -77,9 +76,10 @@ transcript goes through an admin-only endpoint. Employees do not have it.
 ## Moderators
 
 Staff chat, plus a restricted operator panel from `/chat` (Dev-panel). They may
-open Home, Insights, Skills (read-only), Sessions, and Users — but Users shows
-only AFK (`@afk.no`) accounts, and the only action there is resetting a password.
-They cannot create or edit skills, change roles, or see FRID / stress accounts.
+open Home, Team chat, Reports, Apps (download only), Insights, Skills (read-only),
+Sessions, and Users — but Users shows only AFK (`@afk.no`) accounts, and the
+only action there is resetting a password. They cannot create or edit skills,
+upload apps, change roles, or see FRID / stress accounts.
 
 ## Students
 
@@ -492,7 +492,8 @@ mints an identical `role=user` token with no tenant claim.
 Test sign-in maps the email domain to the tier, mirroring production exactly:
 
 - `@afk.no` → student
-- `@frid.no`, `@frid-iks.no` → staff
+- `@frid-iks.no`, `@test.no` → staff
+- `loadtest-p*@test.no` → student (stress probes share the test domain)
 - anything else → refused
 
 Mapping rather than a picker is deliberate: it exercises the same decision path
@@ -555,6 +556,23 @@ once rather than per attempt.
 And the image rule: pupil uploads never persisted, the temp sweep that makes six
 hours mean six hours, and `/api/assets/{name}` narrowed for pupils to the images
 their own guides cite.
+
+And the Apps shelf on the operator panel: `/api/apps` for anyone who can open
+the panel, upload and delete for operators and Users-tab admins only, files
+kept in `~/.helix/apps`. Nothing on the shelf is executed by Helix.
+
+And the PC helper from chat as well as Apps: anyone signed in to chat may
+start `/api/helper/sessions` with their chat token — pupils included.
+The first
+download installs a tray helper by the clock, registers `zorkhelper://`, and
+starts with Windows. Later checks talk to `127.0.0.1:18792` with no prompt.
+If the tray is installed but not running, the page opens `zorkhelper://wake`
+(the Roblox-style app link). Browsers still show “Open Zork Helper?” unless
+the person ticks Always allow, or Intune sets `AutoLaunchProtocolsFromOrigins`
+for the Helix origin. The install button must not download `.cmd` again.
+After a scan, the person can consent to an allowlisted install (Teams,
+Windows Update, or Skoleprogrammer from the Apps shelf). Helix still does
+not execute caller-supplied commands on the PC.
 
 Because the prompt is only built on a new Claude session, a conversation keeps the
 instructions it started with for its whole life. That is the desired behaviour —

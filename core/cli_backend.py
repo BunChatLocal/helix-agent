@@ -278,9 +278,76 @@ DEFAULT_TIMEOUT = 3600  # seconds — long enough for nmap scans, brute force, e
 # pasted screenshots travel inside the message (see `images` below). Nothing left
 # to escape from. See ROLES.md.
 TIER_TOOLS = {
-    "staff":   "Edit Read Write Glob Grep WebFetch WebSearch",
-    "student": "",
+    "staff":      "Edit Read Write Glob Grep WebFetch WebSearch",
+    "moderator":  "Edit Read Write Glob Grep WebFetch WebSearch",
+    "admin":      "Edit Read Write Glob Grep WebFetch WebSearch",
+    "student":    "",
 }
+# /chat (and Discord/Telegram) must not be able to create files. Write was
+# how a staff chat saved memory/ and then quoted C:\Users\... from a Read
+# error. Internal work (heartbeat, cron) still gets the write set above.
+# WebSearch/WebFetch stay off this list: a lookup is several seconds and
+# usually generic. FRID answers live in the skill files. Read is kept so
+# a staff paste can still be opened; Glob/Grep cover a skill Helix did
+# not inject.
+CHAT_TOOLS = "Read Glob Grep"
+
+
+def tools_for(tier: str, channel: str = "") -> str:
+    """Tool string for this caller. Empty means a toolless (stream-json in) invoke."""
+    from core.context_engine import USER_CHANNELS
+    base = TIER_TOOLS.get(tier, TIER_TOOLS["staff"])
+    if not base:
+        return ""
+    if channel in USER_CHANNELS:
+        return CHAT_TOOLS
+    return base
+
+
+def _tool_cli_flags(tools: str) -> list[str]:
+    """Restrict the tool list AND auto-approve those tools in print mode.
+
+    `--allowedTools` only skips the permission prompt. `--tools` is what
+    removes everything else (including Bash) from the model's context, so
+    a denied Bash call cannot burn a round-trip.
+    """
+    if not tools:
+        return ["--tools", ""]
+    return [
+        "--tools", ",".join(tools.split()),
+        "--allowedTools", tools,
+    ]
+
+
+def redact_internal_paths(text: str) -> str:
+    """Strip Helix's own folders out of text a person at /chat will see.
+
+    A Read error still hands the model an absolute path; this stops that path
+    reaching the bubble. IT advice about the *person's* PC is left alone.
+    """
+    if not text:
+        return text
+    needles: list[str] = []
+    for raw in (Path.home() / ".helix", Path.home() / ".claude"):
+        needles.append(str(raw))
+    try:
+        from core.config import get_config
+        needles.append(str(Path(get_config().workspace_path)))
+    except Exception:
+        pass
+    variants: list[str] = []
+    for n in needles:
+        if not n:
+            continue
+        variants.extend((n, n.replace("\\", "/"), n.replace("/", "\\")))
+    seen: list[str] = []
+    for n in sorted(set(variants), key=len, reverse=True):
+        if n and n not in seen:
+            seen.append(n)
+    out = text
+    for n in seen:
+        out = out.replace(n, "(internal)")
+    return out
 
 IMAGE_MEDIA_TYPES = {
     ".png": "image/png",
@@ -406,6 +473,11 @@ def _build_env() -> dict:
     env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
     env["DISABLE_AUTOUPDATER"] = "1"
     env["DISABLE_TELEMETRY"] = "1"
+    # Claude Code auto-memory writes ~/.helix/claude/projects/.../memory
+    # outside the tool allow-list. A pupil with no Write tools can still
+    # trigger it, and a staff chat then cites the path. Helix has its own
+    # MEMORY.md; this extra store must not exist.
+    env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
     # Pick up any token refresh from the user's normal CLI before each call
     sync_credentials()
     sanitize_helix_oauth_profile()
@@ -483,12 +555,22 @@ def _usage_from(data: dict, model: str) -> dict:
             # Window size is a property of the model, not something to add up.
             for key in ("contextWindow", "maxOutputTokens"):
                 entry[key] = max(entry.get(key, 0), value.get(key, 0))
+
+    def _as_int(value) -> int:
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
     return {
         "input_tokens": entry.get("inputTokens", 0),
         "output_tokens": entry.get("outputTokens", 0),
         "cache_read_input_tokens": entry.get("cacheReadInputTokens", 0),
         "context_window": entry.get("contextWindow", 0),
         "max_output_tokens": entry.get("maxOutputTokens", 0),
+        "num_turns": _as_int(data.get("num_turns")),
+        "duration_ms": _as_int(data.get("duration_ms")),
+        "duration_api_ms": _as_int(data.get("duration_api_ms")),
     }
 
 
@@ -686,6 +768,7 @@ async def _invoke(
     timeout: int,
     tier: str = "staff",
     images: Optional[list[Path]] = None,
+    channel: str = "",
     on_text: Optional[OnText] = None,
     on_reset: Optional[OnReset] = None,
     on_tool: Optional[OnTool] = None,
@@ -694,7 +777,7 @@ async def _invoke(
     Run claude -p with the given session flags.
     Returns (response_text, session_id_used, usage).
     """
-    tools = TIER_TOOLS.get(tier, TIER_TOOLS["staff"])
+    tools = tools_for(tier, channel)
     images = images or []
 
     # No tools means no way to open an attached file, so the pupil path carries
@@ -712,20 +795,18 @@ async def _invoke(
             "--input-format", "stream-json",
             "--output-format", "stream-json",
             "--verbose",
-            # Empty string disables every built-in tool.
-            "--tools", "",
+            *_tool_cli_flags(""),
         ]
     elif stream_output:
         cmd += [
             "--output-format", "stream-json",
             "--verbose",
-            # NO Bash, for anyone. This agent advises; it never executes.
-            "--allowedTools", tools,
+            *_tool_cli_flags(tools),
         ]
     else:
         cmd += [
             "--output-format", "json",
-            "--allowedTools", tools,
+            *_tool_cli_flags(tools),
         ]
     if live and stream_output:
         cmd.append("--include-partial-messages")
@@ -762,6 +843,12 @@ async def _invoke(
             "--setting-sources", "user",
             "--disable-slash-commands",
         ]
+        from core.context_engine import USER_CHANNELS
+        # Sonnet 4.6 defaults to high effort. /chat is first-line: low cuts
+        # the thinking that happens before any token. Heartbeat/cron keep
+        # the default. Haiku ignores an unsupported level.
+        if channel in USER_CHANNELS:
+            cmd += ["--effort", "low"]
         if prompt_path:
             cmd += ["--system-prompt-file", prompt_path]
         cmd += session_args
@@ -829,7 +916,19 @@ async def _invoke(
     if denials:
         logger.warning(f"Tool permission denied ({tier}): {str(denials)[:200]}")
 
-    return data.get("result", ""), data.get("session_id", ""), _usage_from(data, model)
+    usage = _usage_from(data, model)
+    logger.info(
+        "CLI done: model=%s tier=%s channel=%s turns=%s duration_ms=%s "
+        "api_ms=%s in=%s cache_read=%s out=%s",
+        model, tier, channel or "-",
+        usage.get("num_turns", 0),
+        usage.get("duration_ms", 0),
+        usage.get("duration_api_ms", 0),
+        usage.get("input_tokens", 0),
+        usage.get("cache_read_input_tokens", 0),
+        usage.get("output_tokens", 0),
+    )
+    return data.get("result", ""), data.get("session_id", ""), usage
 
 
 OnWait = Callable[[int, int], Awaitable[None]]
@@ -1066,6 +1165,7 @@ async def call_claude(
     timeout: int = DEFAULT_TIMEOUT,
     tier: str = "staff",
     images: Optional[list[Path]] = None,
+    channel: str = "",
     on_wait: Optional[OnWait] = None,
     on_text: Optional[OnText] = None,
     on_reset: Optional[OnReset] = None,
@@ -1093,7 +1193,7 @@ async def call_claude(
         try:
             result = await _call_claude_once(
                 model, system, user_message, claude_session_id,
-                is_new_session, timeout, tier, images,
+                is_new_session, timeout, tier, images, channel,
                 on_text=on_text, on_reset=on_reset, on_tool=on_tool,
             )
             queue.note_ok()
@@ -1113,7 +1213,7 @@ async def call_claude(
             try:
                 result = await _call_claude_once(
                     model, system, user_message, None, True, timeout, tier, images,
-                    on_text=on_text, on_reset=on_reset, on_tool=on_tool,
+                    channel, on_text=on_text, on_reset=on_reset, on_tool=on_tool,
                 )
                 queue.note_ok()
                 return result
@@ -1130,21 +1230,21 @@ async def call_claude(
 
 async def _call_claude_once(
     model, system, user_message, claude_session_id, is_new_session,
-    timeout, tier, images, on_text=None, on_reset=None, on_tool=None,
+    timeout, tier, images, channel="", on_text=None, on_reset=None, on_tool=None,
 ) -> Tuple[str, str, dict]:
     if is_new_session or not claude_session_id:
         new_id = str(uuid.uuid4())
         logger.info(f"Starting new Claude session: {new_id} ({tier})")
         return await _invoke(
             model, system, user_message, ["--session-id", new_id], timeout, tier, images,
-            on_text=on_text, on_reset=on_reset, on_tool=on_tool,
+            channel=channel, on_text=on_text, on_reset=on_reset, on_tool=on_tool,
         )
 
     try:
         logger.debug(f"Resuming Claude session: {claude_session_id}")
         return await _invoke(
             model, system, user_message, ["--resume", claude_session_id], timeout, tier, images,
-            on_text=on_text, on_reset=on_reset, on_tool=on_tool,
+            channel=channel, on_text=on_text, on_reset=on_reset, on_tool=on_tool,
         )
     except AuthExpiredError:
         raise
@@ -1157,5 +1257,5 @@ async def _call_claude_once(
         new_id = str(uuid.uuid4())
         return await _invoke(
             model, system, user_message, ["--session-id", new_id], timeout, tier, images,
-            on_text=on_text, on_reset=on_reset, on_tool=on_tool,
+            channel=channel, on_text=on_text, on_reset=on_reset, on_tool=on_tool,
         )

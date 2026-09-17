@@ -28,7 +28,7 @@ _WORD = re.compile(r"[a-zæøåäöü0-9][a-zæøåäöü0-9\-]{1,}", re.I)
 _SPACE = re.compile(r"\s+")
 _GREETING = re.compile(
     r"^(?:hei|heisann|hallo|hello|hi|hoi|yo|tja|god\s+(?:morgen|dag|kveld)|ok|okay|"
-    r"takk|thanks)\b[\s,.!:;–-]*",
+    r"takk|thanks|supert|super|bra|flott|fint|perfekt|nice|great)\b[\s,.!:;–-]*",
     re.I,
 )
 
@@ -63,7 +63,9 @@ def labelize(text: str) -> str:
     if not raw:
         return ""
     stripped = _GREETING.sub("", raw).strip(" .,:;–-")
-    phrase = stripped or raw
+    if not stripped:
+        return ""
+    phrase = stripped
     phrase = _SPACE.sub(" ", phrase).strip()
     if not phrase or phrase.lower() in {"hei", "hallo", "hello", "hi"}:
         return ""

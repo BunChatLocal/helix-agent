@@ -22,10 +22,15 @@ TIER_ADMIN = "admin"             # full commands plus the management API
 ACCESS_BLOCKED = "blocked"       # operator closed this account; sign-in and chat refuse
 ADMITTED_ACCESS = {TIER_STAFF, TIER_STUDENT, TIER_MODERATOR, TIER_ADMIN}
 STAFF_LIKE = {TIER_STAFF, TIER_MODERATOR, TIER_ADMIN}
+# Synthetic domain for test sign-in and stress probes. Not a real organisation.
+TEST_EMAIL_DOMAIN = "test.no"
 
 
 def is_staff_like(tier: str) -> bool:
-    """Staff, moderator and admin share the staff chat prompt."""
+    """Staff, moderator and admin share staff tools and STAFF.md.
+
+    The prompt still names the exact access so the model can tell them apart.
+    """
     return tier in STAFF_LIKE
 
 # ─── Sub-models ───────────────────────────────────────────────────────────────
@@ -217,7 +222,6 @@ class TiersConfig(BaseModel):
     and read the `issuer` field — it carries the directory id.
     """
     staff_tenant_ids: list[str] = Field(default_factory=lambda: [
-        "9c3d6c7b-385f-40cb-bf07-1edf937af70d",   # frid.no
         "fe578cc6-ca56-451f-a297-08c5b8011b0d",   # frid-iks.no
     ])
     student_tenant_ids: list[str] = Field(default_factory=lambda: [
@@ -226,12 +230,20 @@ class TiersConfig(BaseModel):
     # Test sign-in has no tenant claim, so it maps the email domain instead.
     # Same tiers, same refusal for anything unrecognised, so the mapping is
     # exercised in testing rather than first meeting reality on the day SSO
-    # goes live.
-    staff_domains: list[str] = Field(default_factory=lambda: ["frid.no", "frid-iks.no"])
+    # goes live. test.no is the synthetic domain for probes and test accounts.
+    staff_domains: list[str] = Field(default_factory=lambda: ["frid-iks.no", TEST_EMAIL_DOMAIN])
     student_domains: list[str] = Field(default_factory=lambda: ["afk.no"])
     # Per-person exceptions. Beats tenant and domain. Empty = everyone follows
-    # the defaults above. Set from the Permissions tab.
-    user_overrides: list[UserAccessOverride] = Field(default_factory=list)
+    # the defaults above. Set from the Permissions tab. A fresh local config
+    # includes admin@test.no so a clone can open the console without copying
+    # anyone's real account. Choose a password on first sign-in.
+    user_overrides: list[UserAccessOverride] = Field(default_factory=lambda: [
+        UserAccessOverride(
+            email="admin@test.no",
+            access="admin",
+            note="Local console. Choose a password on first sign-in. Not a real person.",
+        ),
+    ])
 
     @property
     def tenant_ids(self) -> list[str]:
@@ -257,6 +269,14 @@ class TiersConfig(BaseModel):
         domain = email.rsplit("@", 1)[-1].strip().lower() if "@" in email else ""
         if not domain:
             return None
+        local = email.rsplit("@", 1)[0].strip().lower()
+        # Stress probes all use @test.no. loadtest-p* stay pupils so mixed-tier
+        # runs still exercise the student path; everything else on the domain
+        # is staff.
+        if domain == TEST_EMAIL_DOMAIN:
+            if local.startswith("loadtest-p"):
+                return TIER_STUDENT
+            return TIER_STAFF
         if domain in [d.lower() for d in self.staff_domains]:
             return TIER_STAFF
         if domain in [d.lower() for d in self.student_domains]:

@@ -1,0 +1,20 @@
+.venv
+venv
+.git
+.github
+.cursor
+.pytest_cache
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.DS_Store
+*.log
+!deploy/helix-home/logs/
+!deploy/helix-home/logs/**
+helix-agent
+# Packed Helix home must not land in the image except a one-shot secrets
+# re-import. A leftover .restore-local + full config.json would overwrite
+# production users on the volume.
+deploy/helix-home/**
+!deploy/helix-home/secrets.json

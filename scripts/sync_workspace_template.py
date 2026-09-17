@@ -17,6 +17,8 @@ FILES = [
     "CLAUDE.md",
     "STUDENT.md",
     "STAFF.md",
+    "MODERATOR.md",
+    "ADMIN.md",
     "skills/frid-nettverk/SKILL.md",
 ]
 

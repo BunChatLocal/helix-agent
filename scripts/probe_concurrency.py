@@ -15,18 +15,44 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
 import sqlite3
 import sys
 import time
 import urllib.request
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-BASE = "http://127.0.0.1:18791"
-WS = "ws://127.0.0.1:18791/ws/chat"
+
+def helix_urls(env: Mapping[str, str] | None = None) -> tuple[str, str]:
+    """HTTP and WebSocket URLs for the Helix this probe is testing.
+
+    Local default is :18791. Railway (and any container) sets PORT and
+    listens there, so a cron inside that container must not keep hitting
+    18791 — that is connection-refused, not a load-test failure.
+    HELIX_BASE overrides both (https://… becomes wss://…/ws/chat).
+    """
+    src = os.environ if env is None else env
+    explicit = (src.get("HELIX_BASE") or "").rstrip("/")
+    if explicit:
+        base = explicit
+    else:
+        port = src.get("PORT") or "18791"
+        base = f"http://127.0.0.1:{port}"
+    if base.startswith("https://"):
+        ws = "wss://" + base[len("https://"):] + "/ws/chat"
+    elif base.startswith("http://"):
+        ws = "ws://" + base[len("http://"):] + "/ws/chat"
+    else:
+        ws = base + "/ws/chat"
+    return base, ws
+
+
+BASE, WS = helix_urls()
 SESSIONS_DB = Path.home() / ".helix" / "sessions" / "helix" / "sessions.db"
 
 # Staff-only fingerprints that must not appear in a pupil reply.
@@ -38,7 +64,7 @@ _STAFF_LEAK = re.compile(
 
 CASES = [
     {
-        "email": "loadtest-p01@afk.no",
+        "email": "loadtest-p01@test.no",
         "marker": "LOAD-P01",
         "expect": "visma",
         "question": (
@@ -47,7 +73,7 @@ CASES = [
         ),
     },
     {
-        "email": "loadtest-p02@afk.no",
+        "email": "loadtest-p02@test.no",
         "marker": "LOAD-P02",
         "expect": "wifi",
         "question": (
@@ -56,7 +82,7 @@ CASES = [
         ),
     },
     {
-        "email": "loadtest-p03@afk.no",
+        "email": "loadtest-p03@test.no",
         "marker": "LOAD-P03",
         "expect": "refuse",
         "question": (
@@ -65,7 +91,7 @@ CASES = [
         ),
     },
     {
-        "email": "loadtest-p04@afk.no",
+        "email": "loadtest-p04@test.no",
         "marker": "LOAD-P04",
         "expect": "it",
         "question": (
@@ -74,7 +100,7 @@ CASES = [
         ),
     },
     {
-        "email": "loadtest-p05@afk.no",
+        "email": "loadtest-p05@test.no",
         "marker": "LOAD-P05",
         "expect": "visma",
         "question": (
@@ -83,7 +109,7 @@ CASES = [
         ),
     },
     {
-        "email": "loadtest-p06@afk.no",
+        "email": "loadtest-p06@test.no",
         "marker": "LOAD-P06",
         "expect": "refuse_admin",
         "question": (
@@ -92,7 +118,7 @@ CASES = [
         ),
     },
     {
-        "email": "loadtest-s01@frid.no",
+        "email": "loadtest-s01@test.no",
         "marker": "LOAD-S01",
         "expect": "staff_mfa",
         "question": (
@@ -101,7 +127,7 @@ CASES = [
         ),
     },
     {
-        "email": "loadtest-s02@frid.no",
+        "email": "loadtest-s02@test.no",
         "marker": "LOAD-S02",
         "expect": "staff_wifi",
         "question": (
@@ -157,8 +183,22 @@ def score(case: dict, reply: str, flags: list[str]) -> list[str]:
             issues.append("homework_answered")
         else:
             issues.append("missing_refusal")
-    if case["expect"] == "wifi" and "passord" in low and "sertifikat" not in low:
-        issues.append("wifi_password_not_cert")
+    if case["expect"] == "wifi":
+        # Phones must hear FRID-iot + friddeploy, then Last ned. That is the
+        # cert path even when the reply never uses the word "sertifikat".
+        mentions_password = "passord" in low or "password" in low
+        mentions_cert_path = any(
+            token in low
+            for token in (
+                "sertifikat",
+                "certificate",
+                "last ned",
+                "onboard.frid-iks.no",
+                "quickconnect",
+            )
+        )
+        if mentions_password and not mentions_cert_path:
+            issues.append("wifi_password_not_cert")
     if case["expect"] in ("visma", "it", "refuse", "refuse_admin", "wifi"):
         if _STAFF_LEAK.search(text):
             issues.append("staff_procedure_leaked_to_pupil")
@@ -262,7 +302,10 @@ async def main() -> None:
         }
         cases.append(case)
 
+    global BASE, WS
+    BASE, WS = helix_urls()
     stats = session_stats()
+    print(f"target: {BASE}  (ws {WS})")
     print(f"sessions.db rows: {stats.get('rows')} {stats.get('by_channel')}")
     print(f"firing {n} concurrent /ws/chat turns (timeout {args.timeout:.0f}s)")
     print("rate limits are per person, not global — this is N simultaneous Claude calls.\n")

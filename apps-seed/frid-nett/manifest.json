@@ -1,0 +1,8 @@
+{
+  "id": "frid-nett",
+  "name": "FRID-nett",
+  "filename": "ArubaQuickConnect.exe",
+  "description": "Installerer FRID-wifi på Windows. På skolen kobler den til FRID-iot og kjører ClearPass QuickConnect.",
+  "platforms": ["windows"],
+  "run_hint": "I Zorken: trykk FRID-nett under chatten mens du er på skolen. Godkjenn i Windows. Zork Helper kobler til FRID-iot og kjører QuickConnect."
+}

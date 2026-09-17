@@ -4,7 +4,7 @@ Rewrites only `agent_name`, leaving every other key byte-for-byte as it was —
 `agent_id` in particular, which keys the session store and the log paths, so
 changing it would orphan every existing conversation.
 
-    python scripts/set_agent_name.py Zork
+    python scripts/set_agent_name.py Zorken
 """
 
 import json

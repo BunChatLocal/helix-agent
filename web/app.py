@@ -8,6 +8,7 @@ import asyncio
 import collections
 import json
 import logging
+import os
 import re
 import sys
 import time
@@ -17,25 +18,19 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-import base64
-import hashlib
-import hmac
-import secrets as secrets_mod
-from urllib.parse import urlencode
-
 import aiohttp
 import jwt
 from fastapi import (FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends,
-                     Request, status, UploadFile, File)
+                     Request, status, UploadFile, File, Form)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from core.config import (
     get_config, save_config,
     TIER_STAFF, TIER_STUDENT, TIER_MODERATOR, TIER_ADMIN, ACCESS_BLOCKED,
-    ADMITTED_ACCESS,
+    ADMITTED_ACCESS, STAFF_LIKE,
 )
 from core import dev_passwords as dev_pw
 from core.skill_manager import create_skill, list_skills, read_skill, write_skill
@@ -128,6 +123,11 @@ def init_web(session_manager, agent_loop, scheduler=None, queue_manager=None,
     _scheduler = scheduler
     _queue_manager = queue_manager
     _audit = audit_logger
+    try:
+        from core import apps as helix_apps
+        helix_apps.ensure_seeds()
+    except Exception:
+        logger.exception("ensure_seeds failed")
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -154,8 +154,7 @@ def _create_token(
 ) -> str:
     """Mint a session JWT.
 
-    role="admin" — the operator, via the web password, or a person given the
-    admin access role. Full management API.
+    role="admin" — a person given the admin access role. Full management API.
     role="user"  — signed in through Entra or test login. Chat only, own session
     only, unless their access role is admin.
 
@@ -164,9 +163,8 @@ def _create_token(
     role=admin and tier=staff, a FRID employee is role=user and tier=staff, a
     pupil is role=user and tier=student. See ROLES.md.
 
-    `sub` is the session key and stays opaque — an Entra object id, so renaming a
-    person does not detach them from their conversations. `email` is carried
-    alongside for the audit records, which have to be readable by a human.
+    `sub` is the session key. Email login uses `dev:<email>` so conversations
+    stay attached to the person. `email` is also carried for audit records.
     """
     cfg = get_config()
     payload = {
@@ -239,7 +237,7 @@ def _live_access(claims: dict) -> tuple[str, bool]:
 
 
 _CHAT_BLOCKED_MSG = (
-    "Du har ikke tilgang til Zork. Hvis du trenger hjelp, snakk med IT-avdelingen."
+    "Du har ikke tilgang til Zorken. Hvis du trenger hjelp, snakk med IT-avdelingen."
 )
 
 
@@ -292,7 +290,7 @@ def _request_claims(
 async def require_auth(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> dict:
-    """Any valid session — admin or staff user. Returns the claims."""
+    """Any valid session — pupil, staff, or operator. Returns the claims."""
     return _request_claims(credentials)
 
 
@@ -305,6 +303,19 @@ async def require_console(
     if kind is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     claims["_console"] = kind
+    return claims
+
+
+async def require_staff_like(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+) -> dict:
+    """Colleagues in chat: staff, moderator, admin, operator. Pupils are refused."""
+    claims = _request_claims(credentials)
+    if _console_kind(claims) == "operator":
+        return claims
+    tier, blocked = _live_access(claims)
+    if blocked or tier not in STAFF_LIKE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff only")
     return claims
 
 
@@ -322,231 +333,94 @@ async def require_admin(
 
 # ─── Auth endpoints ───────────────────────────────────────────────────────────
 
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_PW_MIN = dev_pw.MIN_LENGTH
+
+
 @app.post("/api/auth/login")
 async def login(request: Request, body: dict):
-    """Login with web password to get JWT."""
-    client_ip = request.client.host if request.client else "unknown"
+    """Operator panel sign-in with a named account, not a shared password.
 
-    # Brute-force protection: reject IPs that have failed too many times recently
+    Email + password only for people an admin has already granted moderator
+    or admin — it never creates an account.
+    """
+    client_ip = request.client.host if request.client else "unknown"
     if not _check_login_rate(client_ip):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Too many failed attempts. Try again in {_LOGIN_LOCKOUT_SECONDS // 60} minutes.",
         )
 
-    password = get_secret("WEB_PASSWORD")
-    if not password:
-        raise HTTPException(400, "Web password not set. Run: helix secrets set WEB_PASSWORD <pass>")
+    cfg = get_config()
+    if not _dev_login_available(cfg):
+        raise HTTPException(400, "Sign in with your email and password")
 
-    provided = body.get("password", "")
-    # Constant-time comparison to prevent timing attacks
-    if not hmac.compare_digest(provided.encode(), password.encode()):
+    email = (body.get("email") or "").strip().lower()
+    if not _EMAIL_RE.match(email) or len(email) > 254:
         _record_login_failure(client_ip)
-        raise HTTPException(401, "Invalid password")
+        raise HTTPException(400, "Enter your work email address")
 
+    access = cfg.tiers.access_for(email=email)
+    if access not in (TIER_MODERATOR, TIER_ADMIN):
+        _record_login_failure(client_ip)
+        raise HTTPException(
+            403,
+            "An admin has to grant you moderator or admin access first.",
+        )
+
+    if _is_stress_account(email):
+        raise HTTPException(403, "Stress accounts cannot open the operator panel.")
+
+    password = body.get("password") if isinstance(body.get("password"), str) else ""
+    stored = dev_pw.get_hash(email)
+    if stored is None:
+        _record_login_failure(client_ip)
+        raise HTTPException(
+            403,
+            "Ask an admin to issue a password for this account.",
+        )
+    if not password or not dev_pw.verify_password(password, stored):
+        _record_login_failure(client_ip)
+        raise HTTPException(401, "Invalid email or password")
+
+    name = body.get("name") or email.split("@")[0].replace(".", " ").title()
     return {
         "token": _create_token(
-            sub="admin", role="admin", name="Administrator", tier=TIER_STAFF,
+            sub=f"dev:{email}",
+            role=_chat_token_role(access),
+            name=name,
+            tier=access,
+            email=email,
         ),
-        "expires_in": get_config().web.jwt_expiry_hours * 3600,
+        "expires_in": cfg.web.jwt_expiry_hours * 3600,
     }
 
 
-# ─── Microsoft Entra ID single sign-on (staff) ────────────────────────────────
-#
-# Authorization-code flow with PKCE. Staff sign in with their work account; we
-# use the Entra object ID (oid) as the session key, so each person automatically
-# gets their own private conversation with no code or password to remember.
-
-_ENTRA_STATES: dict[str, dict] = {}          # state -> {verifier, created}
-_ENTRA_STATE_TTL = 600                       # seconds
-
-
-def _entra_cleanup_states() -> None:
-    now = time.time()
-    for k in [k for k, v in _ENTRA_STATES.items() if now - v["created"] > _ENTRA_STATE_TTL]:
-        _ENTRA_STATES.pop(k, None)
-
-
-def _entra_authority(cfg) -> str:
-    """Which Microsoft endpoint sign-in goes through.
-
-    FRID employees and pupils are in different tenants, and no single-tenant
-    authority can serve two directories — so once more than one tenant is
-    admitted, sign-in has to use the multi-tenant endpoint. That endpoint accepts
-    every work and school account in the world, which makes the tenant allow-list
-    in the callback the only thing standing between us and all of them. It is
-    therefore unconditional and fail-closed; do not weaken it.
-    """
-    allowed = cfg.tiers.tenant_ids
-    if allowed:
-        target = allowed[0] if len(allowed) == 1 else "organizations"
-        return f"https://login.microsoftonline.com/{target}"
-    tenant = cfg.entra.tenant_id if cfg.entra.restrict_to_tenant else "organizations"
-    return f"https://login.microsoftonline.com/{tenant}"
-
-
-def _entra_error(code: int) -> RedirectResponse:
-    """SSO is the /chat page. The admin UI at / is a password, not Entra."""
-    return RedirectResponse(f"/chat?login_error={code}", status_code=302)
-
-
-def _entra_success(token: str) -> RedirectResponse:
-    return RedirectResponse(f"/chat#token={token}", status_code=302)
+# ─── Microsoft Entra ID — removed ─────────────────────────────────────────────
+# Sign-in is email + password. Old /api/auth/microsoft/* URLs stay as 410 so
+# bookmarks and leftover Entra redirects do not look like a working SSO flow.
 
 
 @app.get("/api/auth/microsoft/enabled")
 async def entra_enabled():
-    """Unauthenticated: lets the login page decide whether to show the SSO button."""
-    cfg = get_config()
-    return {"enabled": bool(cfg.entra.enabled and cfg.entra.client_id and cfg.entra.tenant_id)}
+    return {"enabled": False}
 
 
 @app.get("/api/auth/microsoft/login")
 async def entra_login():
-    """Start sign-in: redirect the browser to Microsoft."""
-    cfg = get_config()
-    if not (cfg.entra.enabled and cfg.entra.client_id and cfg.entra.tenant_id):
-        raise HTTPException(400, "Microsoft sign-in is not configured")
-
-    _entra_cleanup_states()
-    verifier = secrets_mod.token_urlsafe(64)
-    challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(verifier.encode()).digest()
-    ).decode().rstrip("=")
-    state = secrets_mod.token_urlsafe(32)
-    _ENTRA_STATES[state] = {"verifier": verifier, "created": time.time()}
-
-    params = {
-        "client_id": cfg.entra.client_id,
-        "response_type": "code",
-        "redirect_uri": cfg.entra.redirect_uri,
-        "response_mode": "query",
-        "scope": "openid profile email User.Read",
-        "state": state,
-        "code_challenge": challenge,
-        "code_challenge_method": "S256",
-    }
-    url = f"{_entra_authority(cfg)}/oauth2/v2.0/authorize?{urlencode(params)}"
-    return RedirectResponse(url, status_code=302)
+    raise HTTPException(410, "Microsoft sign-in has been removed. Use email and password.")
 
 
 @app.get("/api/auth/microsoft/callback")
-async def entra_callback(request: Request):
-    """Microsoft redirects here with a code. Exchange it and mint our own JWT."""
-    cfg = get_config()
-    params = request.query_params
-
-    if params.get("error"):
-        desc = params.get("error_description", params.get("error", "unknown"))
-        logger.warning(f"Entra sign-in error: {desc}")
-        return _entra_error(1)
-
-    state = params.get("state", "")
-    code = params.get("code", "")
-    entry = _ENTRA_STATES.pop(state, None)
-    if not entry or not code:
-        # Unknown/replayed state — treat as CSRF and refuse.
-        return _entra_error(1)
-    if time.time() - entry["created"] > _ENTRA_STATE_TTL:
-        return _entra_error(1)
-
-    client_secret = get_secret("ENTRA_CLIENT_SECRET") or ""
-    data = {
-        "client_id": cfg.entra.client_id,
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": cfg.entra.redirect_uri,
-        "code_verifier": entry["verifier"],
-        "scope": "openid profile email User.Read",
-    }
-    if client_secret:
-        data["client_secret"] = client_secret
-
-    try:
-        async with aiohttp.ClientSession() as http:
-            async with http.post(
-                f"{_entra_authority(cfg)}/oauth2/v2.0/token",
-                data=data,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=aiohttp.ClientTimeout(total=20),
-            ) as resp:
-                payload = await resp.json()
-                if resp.status != 200:
-                    logger.warning(f"Entra token exchange failed: {payload.get('error_description', payload)}")
-                    return _entra_error(1)
-    except Exception as e:
-        logger.error(f"Entra token exchange error: {e}")
-        return _entra_error(1)
-
-    id_token = payload.get("id_token")
-    if not id_token:
-        return _entra_error(1)
-
-    # The id_token comes straight from Microsoft over TLS in response to our own
-    # PKCE-bound request, so we read the claims without re-verifying the
-    # signature. We still enforce tenant and audience ourselves below.
-    try:
-        claims = jwt.decode(id_token, options={"verify_signature": False})
-    except Exception:
-        return _entra_error(1)
-
-    oid = claims.get("oid") or claims.get("sub")
-    tid = claims.get("tid", "")
-    upn = claims.get("preferred_username") or claims.get("email") or ""
-    name = claims.get("name") or upn or "Ukjent bruker"
-
-    if not oid:
-        return _entra_error(1)
-    if claims.get("aud") and claims["aud"] != cfg.entra.client_id:
-        logger.warning("Entra sign-in rejected: audience mismatch")
-        return _entra_error(1)
-    # Override first, then tenant. An unlisted tenant with no override is refused.
-    access = cfg.tiers.access_for(email=upn, tid=tid)
-    if access == ACCESS_BLOCKED:
-        logger.warning(f"Entra sign-in rejected: {upn} is blocked")
-        return _entra_error(2)
-    if cfg.tiers.tenant_ids or cfg.tiers.user_overrides:
-        if not access or access not in ADMITTED_ACCESS:
-            logger.warning(f"Entra sign-in rejected: tenant {tid} is not admitted")
-            return _entra_error(2)
-        tier = access
-    elif cfg.entra.restrict_to_tenant and tid != cfg.entra.tenant_id:
-        logger.warning(f"Entra sign-in rejected: foreign tenant {tid}")
-        return _entra_error(1)
-    else:
-        tier = access or TIER_STAFF
-
-    if cfg.entra.allowed_group_ids:
-        groups = claims.get("groups") or []
-        if not set(groups) & set(cfg.entra.allowed_group_ids):
-            logger.warning(f"Entra sign-in rejected: {upn} not in an allowed group")
-            return _entra_error(2)
-
-    token = _create_token(
-        sub=f"entra:{oid}", role=_chat_token_role(tier), name=name, tier=tier,
-        email=upn,
-    )
-    logger.info(f"Entra sign-in: {name} <{upn}> as {tier}")
-    # Hand the token to the SPA via the fragment so it never lands in server
-    # logs or the Referer header.
-    return _entra_success(token)
+async def entra_callback():
+    raise HTTPException(410, "Microsoft sign-in has been removed. Use email and password.")
 
 
-# ─── Test sign-in ─────────────────────────────────────────────────────────────
+# ─── Email + password sign-in ─────────────────────────────────────────────────
 #
-# Lets you use the staff chat as an ordinary user before the Entra app
-# registration exists. Identity is still just an email you type, but a real
-# person must choose a password the first time they sign in. Stress accounts
-# (loadtest…) skip that so probes can still fire. Guards, in order:
-#   * off unless web.dev_login is explicitly true
-#   * refused outright whenever Entra SSO is enabled, so the two can never be
-#     live at once and this cannot linger after the real thing is wired up
-#   * password required after first login, except stress accounts
-#   * every use is logged, and the page shows a permanent TESTMODUS badge
-
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_PW_MIN = dev_pw.MIN_LENGTH
+# Identity is an email on an admitted domain. A person chooses a password the
+# first time they sign in. Stress accounts (loadtest…) skip that so probes can
+# still fire. Every use is logged.
 
 
 def _login_detail(code: str, message: str) -> dict:
@@ -554,7 +428,8 @@ def _login_detail(code: str, message: str) -> dict:
 
 
 def _dev_login_available(cfg) -> bool:
-    return bool(cfg.web.dev_login) and not cfg.entra.enabled
+    """Email + password is the only sign-in. Entra SSO is gone."""
+    return True
 
 
 def _needs_set_password(email: str, cfg) -> bool:
@@ -589,14 +464,6 @@ async def dev_login_status(request: Request, email: str = ""):
 @app.post("/api/auth/dev-login")
 async def dev_login(request: Request, body: dict):
     cfg = get_config()
-    if not cfg.web.dev_login:
-        raise HTTPException(404, "Not found")
-    if cfg.entra.enabled:
-        raise HTTPException(
-            403,
-            "Test sign-in is disabled because Entra SSO is enabled. "
-            "Set web.dev_login to false.",
-        )
 
     client_ip = request.client.host if request.client else "unknown"
     if not _check_login_rate(client_ip):
@@ -611,7 +478,7 @@ async def dev_login(request: Request, body: dict):
     access = cfg.tiers.access_for(email=email)
     if access == ACCESS_BLOCKED:
         _record_login_failure(client_ip)
-        raise HTTPException(403, "Denne kontoen er stengt for Zork.")
+        raise HTTPException(403, "Denne kontoen er stengt for Zorken.")
     if not access or access not in ADMITTED_ACCESS:
         _record_login_failure(client_ip)
         staff = ", ".join(f"@{d}" for d in cfg.tiers.staff_domains)
@@ -738,7 +605,104 @@ def _retention_days(tier: str) -> int:
 
 
 def _peer_prefix(claims: dict) -> str:
+    """Conversation namespace. Email wins so Entra-era chats can be reattached."""
+    email = _claims_email(claims)
+    if email:
+        return f"dev:{email}|"
     return f"{claims.get('sub') or 'admin'}|"
+
+
+_ENTRA_ADOPT_WINDOW = 15 * 60
+_entra_adopted: set[str] = set()
+
+
+def entra_rekey_plan(
+    email: str,
+    events: list[dict],
+    sessions: list[dict],
+    window: float = _ENTRA_ADOPT_WINDOW,
+) -> list[tuple[str, str]]:
+    """Match Entra-keyed web sessions to this email via chat_started timestamps.
+
+    Returns (session_id, new_peer) pairs. Greedy nearest-neighbour inside
+    `window` seconds so two people signing in at the same minute are not swapped
+    if a closer match exists.
+    """
+    email = (email or "").strip().lower()
+    if not email or "@" not in email:
+        return []
+    stamps = [
+        float(e.get("ts") or 0)
+        for e in events
+        if e.get("event") == "chat_started"
+        and (e.get("sender_id") or "").strip().lower() == email
+    ]
+    candidates = []
+    for s in sessions:
+        peer = str(s.get("peer") or "")
+        if s.get("channel") != "web" or not peer.startswith("entra:") or "|" not in peer:
+            continue
+        candidates.append(s)
+    pairs: list[tuple[float, str, str]] = []
+    for ts in stamps:
+        for s in candidates:
+            created = float(s.get("created_at") or 0)
+            active = float(s.get("last_active") or 0)
+            delta = min(abs(created - ts), abs(active - ts))
+            if delta <= window:
+                conv = str(s.get("peer")).split("|", 1)[1]
+                pairs.append((delta, s["session_id"], f"dev:{email}|{conv}"))
+    pairs.sort(key=lambda p: p[0])
+    used_sid: set[str] = set()
+    used_peer: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for _, sid, new_peer in pairs:
+        if sid in used_sid or new_peer in used_peer:
+            continue
+        used_sid.add(sid)
+        used_peer.add(new_peer)
+        out.append((sid, new_peer))
+    if out:
+        return out
+    # Only this person ever started a real chat — Entra keys must be theirs.
+    others = set()
+    for e in events:
+        if e.get("event") != "chat_started":
+            continue
+        addr = (e.get("sender_id") or "").strip().lower()
+        if not addr or "@" not in addr:
+            continue
+        local = addr.split("@", 1)[0]
+        if local.lower().startswith("loadtest"):
+            continue
+        others.add(addr)
+    if others != {email}:
+        return []
+    for s in candidates:
+        conv = str(s.get("peer")).split("|", 1)[1]
+        out.append((s["session_id"], f"dev:{email}|{conv}"))
+    return out
+
+
+async def _adopt_entra_conversations(email: str) -> None:
+    """Reattach Entra object-id conversations to this email, once per process."""
+    email = (email or "").strip().lower()
+    if not email or email in _entra_adopted or not _session_manager:
+        return
+    _entra_adopted.add(email)
+    try:
+        plan = entra_rekey_plan(
+            email,
+            _read_audit_events(365),
+            await _session_manager.list_sessions(),
+        )
+        for session_id, new_peer in plan:
+            await _session_manager.rekey_peer(session_id, new_peer)
+        if plan:
+            logger.info(f"Reattached {len(plan)} Entra conversation(s) to {email}")
+    except Exception as exc:
+        _entra_adopted.discard(email)
+        logger.warning(f"Could not reattach Entra conversations for {email}: {exc}")
 
 
 def _staff_peer(claims: dict, conversation_id: str) -> str:
@@ -760,6 +724,17 @@ _CMD_ENVELOPE = re.compile(
 # as gibberish in their own chat bubble.
 _ASSET_INSTRUCTION = re.compile(r"\[The images above are saved as permanent.*?\]", re.S)
 _ASSET_INSTRUCTION_OLD = re.compile(r"\[These images are stored as reusable.*?\]", re.S)
+
+# Pupils may ask about IT and nothing else. STUDENT.md mandates the opening
+# sentence of a refusal, which is what lets this be counted without a second
+# model call — including when the chat is then deleted. Reword that sentence
+# and this stops matching.
+_SCOPE_REFUSAL_NB = re.compile(r"jeg kan bare hjelpe med it", re.I)
+_OFF_TOPIC_HINT = re.compile(
+    r"\b(lekse|lekser|homework|schoolwork|essay|dikt|eksamen|"
+    r"semesteroppgave|skriv et |skriv en |write me |write an )\b",
+    re.I,
+)
 
 
 def _clean_for_display(msg: dict) -> dict:
@@ -894,6 +869,57 @@ def _maybe_log_knowledge_gap(
     return True
 
 
+_DELETE_ASK_CHARS = 4000
+_DELETE_ASK_MAX = 80
+_DELETE_SUMMARY_CHARS = 20000
+_DELETE_PREVIEW_ASKS = 2
+_DELETE_PREVIEW_CHARS = 180
+
+
+def _deletion_note(messages: list, tier: str) -> Optional[dict]:
+    """Brief operator note of what a deleted chat was about.
+
+    Built locally from the transcript so delete does not spend tokens. User
+    asks only — the agent's procedure is not the thing staff need to review.
+    """
+    asks: list[str] = []
+    refused = False
+    for msg in messages or []:
+        role = msg.get("role") or ""
+        if role == "user":
+            text = (_clean_for_display(msg).get("content") or "").strip()
+            if text:
+                asks.append(text.replace("\n", " "))
+        elif role == "assistant":
+            body = msg.get("content") or ""
+            if isinstance(body, str) and _SCOPE_REFUSAL_NB.search(body):
+                refused = True
+    if not asks:
+        return None
+    kept = [a[:_DELETE_ASK_CHARS] for a in asks[:_DELETE_ASK_MAX]]
+    snippets = [a[:_DELETE_PREVIEW_CHARS] for a in kept[:_DELETE_PREVIEW_ASKS]]
+    if len(asks) > _DELETE_PREVIEW_ASKS:
+        snippets.append(f"… +{len(asks) - _DELETE_PREVIEW_ASKS} more")
+    blob = " ".join(asks)
+    topic = _classify_topic(blob, tier) or ""
+    flagged = bool(refused or (not topic and _OFF_TOPIC_HINT.search(blob)))
+    if refused:
+        flag_reason = "refused"
+    elif flagged:
+        flag_reason = "off_topic"
+    else:
+        flag_reason = ""
+    return {
+        "content_preview": asks[0],
+        "summary": " · ".join(snippets)[:_DELETE_SUMMARY_CHARS],
+        "asks": kept,
+        "topic": topic,
+        "turns": len(asks),
+        "flagged": flagged,
+        "flag_reason": flag_reason,
+    }
+
+
 def _title_from_transcript(messages: list) -> str:
     """Derive a conversation title from its first user message.
 
@@ -920,6 +946,7 @@ async def my_conversations(claims: dict = Depends(require_auth)):
     """List only the caller's own conversations, newest first."""
     if not _session_manager:
         return {"conversations": []}
+    await _adopt_entra_conversations(_claims_email(claims))
     prefix = _peer_prefix(claims)
     retention = _retention_days(_tier(claims))
     now = time.time()
@@ -980,9 +1007,30 @@ async def my_conversation_messages(conversation_id: str, claims: dict = Depends(
 
 @app.delete("/api/me/conversations/{conversation_id}")
 async def delete_my_conversation(conversation_id: str, claims: dict = Depends(require_auth)):
+    """Wipe the conversation so it cannot be resumed, and leave a brief note.
+
+    The transcript, session row and Claude resume id all go. A short summary
+    of what they asked stays in the audit log for the operator Insights view.
+    """
     peer = _staff_peer(claims, conversation_id)
     if _session_manager:
-        await _session_manager.reset_session("web", peer)
+        match = next(
+            (s for s in await _session_manager.list_sessions()
+             if s.get("channel") == "web" and s.get("peer") == peer),
+            None,
+        )
+        if match:
+            try:
+                msgs = await _session_manager.async_read_transcript(match["session_id"])
+                note = _deletion_note(msgs, _tier(claims))
+                if note:
+                    _audit_chat(
+                        "chat_deleted", claims,
+                        session_id=match["session_id"], **note,
+                    )
+            except Exception as exc:
+                logger.warning(f"Could not summarise deleted chat {conversation_id}: {exc}")
+            await _session_manager.reset_session("web", peer)
     return {"ok": True}
 
 
@@ -1286,6 +1334,8 @@ async def whoami(claims: dict = Depends(require_auth)):
     if blocked:
         tier = TIER_STUDENT
     kind = _console_kind(claims)
+    from core import pc_helper
+    helper_online = bool(pc_helper.presence_for(_helper_owner(claims)).get("online"))
     return {
         "name": claims.get("name") or "",
         "email": _claims_email(claims),
@@ -1295,6 +1345,7 @@ async def whoami(claims: dict = Depends(require_auth)):
         "console_role": kind,
         "test_mode": _dev_login_available(cfg),
         "retention_days": _retention_days(tier),
+        "helper_online": helper_online,
     }
 
 
@@ -1783,6 +1834,46 @@ async def list_sessions():
     return await _session_manager.list_sessions()
 
 
+def _deleted_chat_row(entry: dict) -> dict:
+    return {
+        "ts": entry.get("ts"),
+        "email": entry.get("sender_id") or "",
+        "name": entry.get("name") or "",
+        "tier": entry.get("tier") or "",
+        "channel": entry.get("channel") or "web",
+        "session_id": entry.get("session_id") or "",
+        "title": entry.get("content_preview") or "",
+        "summary": entry.get("summary") or entry.get("content_preview") or "",
+        "asks": [
+            a for a in (entry.get("asks") or [])
+            if isinstance(a, str) and a.strip()
+        ],
+        "topic": entry.get("topic") or "",
+        "turns": entry.get("turns") or 0,
+        "flagged": bool(entry.get("flagged")),
+        "flag_reason": entry.get("flag_reason") or "",
+    }
+
+
+@app.get("/api/sessions/deleted", dependencies=[Depends(require_console)])
+async def list_deleted_sessions(days: int = 365):
+    """Notes left when someone deleted a /chat conversation.
+
+    The transcript is gone. This is what Sessions shows on that person.
+    """
+    days = min(max(days, 1), 365)
+    deleted = [
+        e for e in _read_audit_events(days)
+        if e.get("event") == "chat_deleted"
+    ]
+    return {
+        "deleted": [
+            _deleted_chat_row(e)
+            for e in sorted(deleted, key=lambda ev: ev.get("ts") or 0, reverse=True)
+        ]
+    }
+
+
 @app.delete("/api/sessions/{channel}/{peer}", dependencies=[Depends(require_console)])
 async def reset_session(channel: str, peer: str):
     if not _session_manager:
@@ -2033,7 +2124,7 @@ def _moderator_permissions_view(payload: dict) -> dict:
 
 @app.get("/api/permissions")
 async def get_permissions(claims: dict = Depends(require_console)):
-    """Who may use Zork, and as what."""
+    """Who may use Zorken, and as what."""
     payload = _permissions_payload()
     if claims.get("_console") == "moderator":
         return _moderator_permissions_view(payload)
@@ -2441,12 +2532,18 @@ async def _run_load_probe(n: int) -> tuple[int, str]:
     kwargs = {}
     if sys.platform == "win32":
         kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+    env = os.environ.copy()
+    # Same process as Helix: Railway sets PORT; the probe used to hardcode
+    # 18791 and every turn got connection-refused.
+    if env.get("PORT") and not (env.get("HELIX_BASE") or "").strip():
+        env["HELIX_BASE"] = f"http://127.0.0.1:{env['PORT']}"
     proc = await asyncio.create_subprocess_exec(
         sys.executable, str(script), "--n", str(n),
         "--timeout", str(per_turn),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         cwd=str(script.parent.parent),
+        env=env,
         **kwargs,
     )
     try:
@@ -2677,6 +2774,7 @@ async def chat_insights(days: int = 30, recent: int = 50):
 
     started = [e for e in events if e["event"] == "chat_started"]
     refusals = [e for e in events if e["event"] == "chat_scope_refusal"]
+    deleted = [e for e in events if e["event"] == "chat_deleted"]
     blocked = [e for e in events if e["event"] == "chat_command_blocked"]
     throttled = [e for e in events if e["event"] == "chat_rate_limited"]
     gap_events = [e for e in events if e["event"] == "chat_knowledge_gap"]
@@ -2768,6 +2866,8 @@ async def chat_insights(days: int = 30, recent: int = 50):
             "rate_limited": len(throttled),
             "people": len(by_person),
             "undocumented": len(gaps),
+            "deleted": len(deleted),
+            "flagged_deleted": sum(1 for e in deleted if e.get("flagged")),
         },
         "coverage": coverage,
         "by_topic": top(by_topic, 20),
@@ -2798,6 +2898,10 @@ async def chat_insights(days: int = 30, recent: int = 50):
                 "reply": e.get("reply") or "",
             }
             for e in sorted(refusals, key=lambda e: e.get("ts") or 0, reverse=True)[:200]
+        ],
+        "recent_deleted": [
+            _deleted_chat_row(e)
+            for e in sorted(deleted, key=lambda e: e.get("ts") or 0, reverse=True)[:200]
         ],
         "recent_gaps": [
             {
@@ -2937,6 +3041,479 @@ async def skill_to_template_api(skill_id: str):
         raise HTTPException(404, "Skill not found")
     except ValueError as e:
         raise HTTPException(422, str(e))
+
+
+# ─── Apps shelf ───────────────────────────────────────────────────────────────
+#
+# IT tools the panel can hand out — Office checkers, installers, and so on.
+# Console users download; only operators and Users-tab admins upload. Nothing
+# here is executed on the server.
+
+
+def _apps_uploader(claims: dict) -> str:
+    return _claims_email(claims) or claims.get("_console") or "admin"
+
+
+@app.get("/api/apps", dependencies=[Depends(require_console)])
+async def apps_list():
+    from core import apps as helix_apps
+    return {"apps": helix_apps.list_apps()}
+
+
+@app.get("/api/apps/{app_id}/download", dependencies=[Depends(require_console)])
+async def apps_download(app_id: str):
+    from core import apps as helix_apps
+    row = helix_apps.get_app(app_id)
+    if not row:
+        raise HTTPException(404, "Not found")
+    path = helix_apps.file_path(row["id"], row.get("filename") or "")
+    if path is None:
+        raise HTTPException(404, "Not found")
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=row.get("filename") or path.name,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/apps", dependencies=[Depends(require_admin)])
+async def apps_put(
+    file: UploadFile = File(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    platforms: str = Form(""),
+    run_hint: str = Form(""),
+    app_id: str = Form(""),
+    claims: dict = Depends(require_admin),
+):
+    from core import apps as helix_apps
+    try:
+        filename = helix_apps.safe_filename(file.filename or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    data = await file.read(helix_apps.MAX_BYTES + 1)
+    if len(data) > helix_apps.MAX_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            "File is larger than 200 MB",
+        )
+    try:
+        row = helix_apps.put_app(
+            name=name,
+            data=data,
+            filename=filename,
+            description=description,
+            platforms=platforms,
+            run_hint=run_hint,
+            app_id=app_id,
+            uploaded_by=_apps_uploader(claims),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    logger.info(f"App {row['id']} uploaded ({row['size']} bytes) by {claims.get('sub')}")
+    _audit_chat("app_uploaded", claims, title=row["id"], content_preview=row["filename"])
+    return row
+
+
+@app.delete("/api/apps/{app_id}", dependencies=[Depends(require_admin)])
+async def apps_delete(app_id: str, claims: dict = Depends(require_admin)):
+    from core import apps as helix_apps
+    if not helix_apps.delete_app(app_id):
+        raise HTTPException(404, "Not found")
+    logger.info(f"App {app_id} deleted by {claims.get('sub')}")
+    _audit_chat("app_deleted", claims, title=app_id)
+    return {"status": "deleted", "id": app_id}
+
+
+def _public_base_url(request: Request) -> str:
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme or "http")
+    proto = proto.split(",")[0].strip().lower()
+    if proto not in ("http", "https"):
+        proto = "http"
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "")
+    host = host.split(",")[0].strip()
+    if not host:
+        host = request.url.netloc
+    if any(c in host for c in "'\"\\\n\r /"):
+        raise HTTPException(400, "Bad host")
+    return f"{proto}://{host}"
+
+
+def _helper_owner(claims: dict) -> str:
+    return _claims_email(claims) or claims.get("sub") or claims.get("_console") or ""
+
+
+def _helper_secret(request: Request, body: dict | None = None) -> str:
+    header = (request.headers.get("x-helper-secret") or "").strip()
+    if header:
+        return header
+    if isinstance(body, dict):
+        return str(body.get("secret") or "").strip()
+    return ""
+
+
+def _helper_owned(sid: str, claims: dict):
+    from core import pc_helper
+    row = pc_helper.get(sid)
+    if not row or not pc_helper.owned_by(row, _helper_owner(claims)):
+        raise HTTPException(404, "Not found")
+    return row
+
+
+@app.get("/api/helper/presence", dependencies=[Depends(require_auth)])
+async def helper_presence(claims: dict = Depends(require_auth)):
+    from core import pc_helper
+    return pc_helper.presence_for(_helper_owner(claims))
+
+
+@app.post("/api/helper/sessions", dependencies=[Depends(require_auth)])
+async def helper_create(request: Request, claims: dict = Depends(require_auth)):
+    from core import pc_helper
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    owner = _helper_owner(claims)
+    try:
+        row = pc_helper.create_session(
+            owner=owner,
+            base_url=_public_base_url(request),
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    kind = str(body.get("kind") or "").strip().lower()
+    if kind in {"scan", "install"}:
+        pc_helper.set_session_intent(row["id"], kind, body.get("items"))
+        row = pc_helper.get(row["id"]) or row
+    via_tray = False
+    if str(body.get("via") or "").strip().lower() == "tray":
+        queued = pc_helper.queue_job(owner=owner, session_id=row["id"], kind="scan")
+        via_tray = bool(queued and queued.get("via") == "tray")
+        row = pc_helper.get(row["id"]) or row
+    view = pc_helper.public_view(row)
+    view["via_tray"] = via_tray
+    view["helper_online"] = bool(pc_helper.presence_for(owner).get("online"))
+    view["handoff"] = row.get("secret") or ""
+    view["local_port"] = pc_helper.LOCAL_HELPER_PORT
+    return view
+
+
+@app.get("/api/helper/sessions/{sid}", dependencies=[Depends(require_auth)])
+async def helper_status(sid: str, claims: dict = Depends(require_auth)):
+    from core import pc_helper
+    row = _helper_owned(sid, claims)
+    return pc_helper.public_view(row)
+
+
+@app.post("/api/helper/sessions/{sid}/enqueue", dependencies=[Depends(require_auth)])
+async def helper_enqueue(sid: str, request: Request, claims: dict = Depends(require_auth)):
+    from core import pc_helper
+    _helper_owned(sid, claims)
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    kind = str(body.get("kind") or "").strip().lower()
+    if kind in {"scan", "install"}:
+        pc_helper.set_session_intent(sid, kind, body.get("items"))
+    queued = pc_helper.queue_job(
+        owner=_helper_owner(claims),
+        session_id=sid,
+        kind=kind,
+        items=body.get("items"),
+    )
+    if not queued:
+        raise HTTPException(409, "Nothing to queue")
+    return queued
+
+
+@app.get("/api/helper/sessions/{sid}/launcher", dependencies=[Depends(require_auth)])
+async def helper_launcher(sid: str, request: Request, claims: dict = Depends(require_auth)):
+    from core import pc_helper
+    row = _helper_owned(sid, claims)
+    os_name = (request.query_params.get("os") or "").strip().lower()
+    ua = (request.headers.get("user-agent") or "").lower()
+    want_mac = os_name in {"mac", "macos", "darwin", "osx"}
+    if not want_mac and os_name not in {"win", "windows"}:
+        want_mac = "macintosh" in ua or (
+            "mac" in ua and "iphone" not in ua and "ipad" not in ua and "ipod" not in ua
+        )
+    if want_mac:
+        cmd = pc_helper.launcher_mac(row["base_url"], row["id"], row["secret"])
+        return Response(
+            content=cmd,
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": 'attachment; filename="ZorkHelper.command"',
+                "Cache-Control": "no-store",
+            },
+        )
+    job_kind, job_items = pc_helper.session_intent(row)
+    cmd = pc_helper.launcher_cmd(
+        row["base_url"], row["id"], row["secret"],
+        job_kind=job_kind, job_items=job_items,
+    )
+    return Response(
+        content=cmd,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": 'attachment; filename="ZorkHelper.cmd"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.get("/api/helper/{sid}/script")
+async def helper_script(sid: str, request: Request):
+    from core import pc_helper
+    secret = _helper_secret(request)
+    row = pc_helper.mark_connected(sid, secret) or pc_helper.check_secret(sid, secret)
+    if not row:
+        raise HTTPException(404, "Not found")
+    return Response(
+        content=pc_helper.scan_script(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/helper/{sid}/script-mac")
+async def helper_script_mac(sid: str, request: Request):
+    from core import pc_helper
+    secret = _helper_secret(request)
+    row = pc_helper.mark_connected(sid, secret) or pc_helper.check_secret(sid, secret)
+    if not row:
+        raise HTTPException(404, "Not found")
+    return Response(
+        content=pc_helper.scan_mac_script(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/helper/{sid}/bootstrap")
+async def helper_bootstrap_script(sid: str, request: Request):
+    from core import pc_helper
+    row = pc_helper.check_secret(sid, _helper_secret(request))
+    if not row:
+        raise HTTPException(404, "Not found")
+    kind, items = pc_helper.session_intent(row)
+    return Response(
+        content=pc_helper.bootstrap_script(job_kind=kind, job_items=items),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/helper/{sid}/tray")
+async def helper_tray_script(sid: str, request: Request):
+    from core import pc_helper
+    if not pc_helper.check_secret(sid, _helper_secret(request)):
+        raise HTTPException(404, "Not found")
+    return Response(
+        content=pc_helper.tray_script(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/helper/{sid}/open")
+async def helper_open_script(sid: str, request: Request):
+    from core import pc_helper
+    if not pc_helper.check_secret(sid, _helper_secret(request)):
+        raise HTTPException(404, "Not found")
+    return Response(
+        content=pc_helper.open_script(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/helper/{sid}/install-script")
+async def helper_install_script(sid: str, request: Request):
+    from core import pc_helper
+    if not pc_helper.check_secret(sid, _helper_secret(request)):
+        raise HTTPException(404, "Not found")
+    return Response(
+        content=pc_helper.install_script(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/helper/{sid}/tool/skoleprogrammer")
+async def helper_skoleprogrammer(sid: str, request: Request):
+    from core import pc_helper
+    if not pc_helper.check_secret(sid, _helper_secret(request)):
+        raise HTTPException(404, "Not found")
+    found = pc_helper.skoleprogrammer_file()
+    if not found:
+        raise HTTPException(404, "Not found")
+    row, path = found
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=row.get("filename") or path.name,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/helper/{sid}/tool/fridnett")
+async def helper_fridnett(sid: str, request: Request):
+    from core import pc_helper
+    if not pc_helper.check_secret(sid, _helper_secret(request)):
+        raise HTTPException(404, "Not found")
+    found = pc_helper.fridnett_file()
+    if not found:
+        raise HTTPException(404, "Not found")
+    row, path = found
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=row.get("filename") or path.name,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/helper/{sid}/tool/printer")
+async def helper_printer(sid: str, request: Request):
+    from core import pc_helper
+    if not pc_helper.check_secret(sid, _helper_secret(request)):
+        raise HTTPException(404, "Not found")
+    found = pc_helper.printer_file()
+    if not found:
+        raise HTTPException(404, "Not found")
+    row, path = found
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=row.get("filename") or path.name,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/helper/{sid}/device")
+async def helper_register_device(sid: str, request: Request):
+    from core import pc_helper
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    row = pc_helper.register_device(
+        sid, _helper_secret(request, body), str(body.get("hostname") or ""),
+    )
+    if not row:
+        raise HTTPException(404, "Not found")
+    return row
+
+
+@app.post("/api/helper/{sid}/attach")
+async def helper_attach(sid: str, request: Request):
+    from core import pc_helper
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    row = pc_helper.attach_session(sid, _helper_secret(request, body if isinstance(body, dict) else {}))
+    if not row:
+        raise HTTPException(404, "Not found")
+    return row
+
+
+@app.post("/api/helper/device/{did}/heartbeat")
+async def helper_heartbeat(did: str, request: Request):
+    from core import pc_helper
+    row = pc_helper.heartbeat(did, _helper_secret(request))
+    if not row:
+        raise HTTPException(404, "Not found")
+    return row
+
+
+@app.get("/api/helper/device/{did}/job")
+async def helper_take_job(did: str, request: Request):
+    from core import pc_helper
+    row = pc_helper.take_job(did, _helper_secret(request))
+    if not row:
+        raise HTTPException(404, "Not found")
+    return row
+
+
+@app.post("/api/helper/{sid}/connect")
+async def helper_connect(sid: str, request: Request):
+    from core import pc_helper
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    row = pc_helper.mark_connected(sid, _helper_secret(request, body if isinstance(body, dict) else {}))
+    if not row:
+        raise HTTPException(404, "Not found")
+    return {"status": row["status"]}
+
+
+@app.post("/api/helper/{sid}/progress")
+async def helper_progress(sid: str, request: Request):
+    from core import pc_helper
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    activity = body.get("activity") if "activity" in body else None
+    row = pc_helper.add_progress(
+        sid, _helper_secret(request, body), str(body.get("text") or ""), activity=activity,
+    )
+    if not row:
+        raise HTTPException(404, "Not found")
+    return {"status": row["status"]}
+
+
+@app.post("/api/helper/{sid}/result")
+async def helper_result(sid: str, request: Request):
+    from core import pc_helper
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "invalid json")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "invalid json")
+    data = body.get("data") if isinstance(body.get("data"), dict) else body
+    row = pc_helper.set_result(sid, _helper_secret(request, body), data)
+    if not row:
+        raise HTTPException(404, "Not found")
+    return {"status": "done"}
+
+
+@app.post("/api/helper/{sid}/error")
+async def helper_error(sid: str, request: Request):
+    from core import pc_helper
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    row = pc_helper.set_error(
+        sid, _helper_secret(request, body), str(body.get("message") or "Helper failed"),
+    )
+    if not row:
+        raise HTTPException(404, "Not found")
+    return {"status": "error"}
 
 
 # ─── File Browser API ─────────────────────────────────────────────────────────
@@ -3106,17 +3683,6 @@ async def files_mkdir(body: dict):
     return {"status": "created", "path": path}
 
 
-# ─── Scope refusals ───────────────────────────────────────────────────────────
-#
-# Pupils may ask about IT and nothing else, and every refusal is logged so a
-# pupil working steadily through ways around it is visible (ROLES.md).
-#
-# STUDENT.md mandates the exact opening sentence of a refusal, which is what lets
-# this be counted without a second model call. It is a heuristic keyed to that
-# wording: reword the sentence in STUDENT.md and this stops matching.
-_SCOPE_REFUSAL_NB = re.compile(r"jeg kan bare hjelpe med it", re.I)
-
-
 # ─── WebSocket chat ───────────────────────────────────────────────────────────
 
 async def _relay_agent_chunks(websocket: WebSocket, agen) -> str:
@@ -3152,14 +3718,14 @@ async def ws_chat(websocket: WebSocket):
         return
 
     # Session routing. `peer` is the session key: sessions are unique per
-    # (agent_id, channel, peer), so deriving it from the verified token claim
-    # gives every signed-in person their own private conversation. Entra users
-    # get "entra:<oid>" — stable, unique, and revoked when the account is.
-    # It comes from the JWT, never from client-supplied data.
+    # (agent_id, channel, peer). Email login uses `dev:<email>|<conversation-id>`.
+    # Conversations that were stored under Entra object ids are reattached
+    # to that email the first time they open the chat.
     # The client picks which of its own conversations to open. The user half of
     # the key comes from the token, so a tampered id can only ever land inside
     # the caller's own namespace.
     conversation_id = auth_msg.get("conversation_id") or ""
+    await _adopt_entra_conversations(_claims_email(claims))
     if _CONV_ID_RE.match(conversation_id):
         peer = f"{_peer_prefix(claims)}{conversation_id}"
     else:
@@ -3502,11 +4068,20 @@ if _STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
+async def home():
+    """Pupils type zorken.chat. Send them to chat, not the operator panel."""
+    return RedirectResponse(url="/chat", status_code=302)
+
+
+@app.get("/admin", response_class=HTMLResponse)
 async def dashboard():
     index = _STATIC_DIR / "index.html"
     if index.exists():
-        return HTMLResponse(index.read_text(encoding="utf-8"))
+        return HTMLResponse(
+            index.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-store, must-revalidate"},
+        )
     return HTMLResponse("<h1>Helix Admin UI</h1><p>Static files not found.</p>")
 
 

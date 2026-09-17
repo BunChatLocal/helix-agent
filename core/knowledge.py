@@ -81,6 +81,7 @@ ALIASES: dict[str, tuple[str, ...]] = {
         "henger", "fryser", "krasjer", "skriver", "printer", "utskrift",
         "skjerm", "oppstart", "starter", "batteri", "lader", "driver",
         "mus", "tastatur", "bluetooth", "usb", "lyd", "kamera",
+        "projektor", "projector", "smartboard", "tavle",
         "slow", "printing", "boot", "crash",
     ),
     "entra-azure": (
@@ -93,9 +94,9 @@ ALIASES: dict[str, tuple[str, ...]] = {
     ),
     "m365-office": (
         "outlook", "mail", "epost", "post", "teams", "onedrive", "sharepoint",
-        "excel", "word", "powerpoint", "kalender", "møte", "innkalling",
-        "vedlegg", "deling", "delt", "innboks", "sende", "mottar", "signatur",
-        "email", "inbox", "calendar", "attachment",
+        "excel", "word", "powerpoint", "onenote", "office", "kalender", "møte",
+        "innkalling", "vedlegg", "deling", "delt", "innboks", "sende", "mottar",
+        "signatur", "email", "inbox", "calendar", "attachment",
     ),
     "frid-nettverk": (
         "wifi", "wifien", "nett", "nettet", "nettverk", "internett", "trådløs",
@@ -370,6 +371,67 @@ def coverage_report(
     return rows
 
 
+# Praise at the start of a turn. Stripped before we decide whether this is a
+# support question, so "Supert. Word krasjer" is still a Word problem and
+# "Supert." alone is not a gap.
+_PRAISE_PREFIX = re.compile(
+    r"^(?:supert|super|bra(?:\s+jobba)?|flott(?:\s+jobba)?|fint|kjempebra|"
+    r"perfekt|perfect|nice|awesome|great|godt\s+jobba|takk(?:\s+skal\s+du\s+ha)?|"
+    r"thanks|thank\s+you|ok|okay|ja|yes)\b[\s,.!:;–-]*",
+    re.I,
+)
+# The operator telling the agent how to write a guide, not reporting a fault.
+_AUTHORING = re.compile(
+    r"\b(?:separere|neste\s+stegene|stegene\s+basert|"
+    r"jeg\s+gir\s+deg|la\s+det\s+være\s+plass|plass\s+til\s+(?:mac|windows)|"
+    r"erstatt(?:e)?\s+bildet|slett(?:e)?\s+bildet|oppdater(?:e)?\s+bildet|"
+    r"skill-?fil(?:en)?)\b",
+    re.I,
+)
+# Something is broken, or they named a system people get stuck on.
+_SYMPTOM = re.compile(
+    r"\b(?:feil|error|krasj(?:er)?|henger|fryser|treg|treig|boot|crash|"
+    r"virker\s+ikke|funker\s+ikke|fungerer\s+ikke|får\s+ikke|kan\s+ikke|"
+    r"går\s+ikke|starter\s+ikke|problem(?:er)?)\b",
+    re.I,
+)
+_IT_PROBLEM_TERMS = {
+    "word", "excel", "outlook", "teams", "onenote", "powerpoint", "onedrive",
+    "sharepoint", "office", "epost", "mail", "printer", "skriver", "utskrift",
+    "projektor", "projector", "smartboard", "tavle", "passord", "mfa",
+    "lisens", "visma", "inschool", "lønn", "egenmelding", "wifi", "intune",
+    "krasjer", "henger", "fryser", "treg", "batteri", "driver",
+}
+
+
+def _strip_praise(text: str) -> str:
+    rest = (text or "").strip()
+    while rest:
+        nxt = _PRAISE_PREFIX.sub("", rest, count=1).strip(" .,:;–-")
+        if nxt == rest:
+            break
+        rest = nxt
+    return rest
+
+
+def looks_like_support_question(text: str) -> bool:
+    """True when someone is stuck on IT, not thanking the agent or editing a guide.
+
+    Undocumented notices are for faults in Office, printers, projectors and the
+    other school systems. Praise, and instructions to split a procedure by
+    Windows/Mac, are not that.
+    """
+    rest = _strip_praise(text)
+    if len(rest) < 8:
+        return False
+    tokens = _tokens(rest)
+    named = _matches(_IT_PROBLEM_TERMS, tokens) > 0
+    broken = bool(_SYMPTOM.search(rest))
+    if _AUTHORING.search(rest) and not (named and broken):
+        return False
+    return named or broken
+
+
 def lacks_premade_answer(
     text: str,
     tier: str = "",
@@ -379,9 +441,10 @@ def lacks_premade_answer(
 
     A documented skill (verified procedures or org anchors) is a premade
     answer for questions that classify into it. An empty skill is not.
-    Unclassified text — greetings, thanks, nothing that names a system — is
-    not a gap.
+    Unclassified text — greetings, thanks, praise, guide-editing — is not a gap.
     """
+    if not looks_like_support_question(text):
+        return None
     skill = classify_topic(text, tier, workspace=workspace)
     if not skill:
         return None

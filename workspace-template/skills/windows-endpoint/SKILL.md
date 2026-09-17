@@ -40,9 +40,13 @@ Check profile size, roaming/known-folder redirect state, and whether it's only
 first logon after an update. Compare with the same user on another device.
 
 **Printing**
-Separate the queue from the driver from the connection. `Get-PrintJob` shows
-stuck jobs; a job stuck across users points at the server or driver, a single
-user's stuck job points at the client.
+On this Windows PC in Zorken, missing school print (Viken Print / SafeQ)
+is one click: tell them to press **Skaff printer** under the chat. Zork
+Helper installs it. Do not send them to AppsAnywhere for that.
+
+After it is installed, separate the queue from the driver from the connection.
+`Get-PrintJob` shows stuck jobs; a job stuck across users points at the server
+or driver, a single user's stuck job points at the client.
 
 **Post-update regressions**
 `Get-ComputerInfo` for build number, correlate with the update ring. If several

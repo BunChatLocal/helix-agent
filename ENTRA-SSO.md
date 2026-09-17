@@ -5,14 +5,13 @@ account. Each person automatically gets their own private conversations, keyed o
 their Entra object ID. No codes, no passwords, nothing to remember or lose.
 
 **The one fact that shapes everything below: they are not in the same directory.**
-FRID employees sign in from the FRID tenants, pupils from Akershus fylkeskommune's.
+FRID employees sign in from the FRID IKS tenant, pupils from Akershus fylkeskommune's.
 The `tid` claim in the token is what separates them, and it is what decides whether
 someone is treated as staff or as a pupil — see `ROLES.md` for the permission model
 that hangs off it.
 
 | Tier | Tenant | Domain |
 |---|---|---|
-| Staff | `9c3d6c7b-385f-40cb-bf07-1edf937af70d` | `frid.no` |
 | Staff | `fe578cc6-ca56-451f-a297-08c5b8011b0d` | `frid-iks.no` |
 | Pupil | `4d6d8a90-10fd-4f78-8fc1-5e28844e0292` | `afk.no` |
 
@@ -133,13 +132,12 @@ Then edit `~/.helix/config.json`:
 },
 "tiers": {
   "staff_tenant_ids": [
-    "9c3d6c7b-385f-40cb-bf07-1edf937af70d",
     "fe578cc6-ca56-451f-a297-08c5b8011b0d"
   ],
   "student_tenant_ids": [
     "4d6d8a90-10fd-4f78-8fc1-5e28844e0292"
   ],
-  "staff_domains": ["frid.no", "frid-iks.no"],
+  "staff_domains": ["frid-iks.no", "test.no"],
   "student_domains": ["afk.no"]
 }
 ```
@@ -248,7 +246,7 @@ sessions and cannot see each other's messages.
 ## Testing without Entra
 
 Until the app registration exists, `web.dev_login` lets you sign in by typing any
-email address. The domain decides the tier — `@frid.no` or `@frid-iks.no` gives
+email address. The domain decides the tier — `@frid-iks.no` or `@test.no` gives
 staff, `@afk.no` gives a pupil, anything else is refused — so the tiering is
 exercised in testing rather than first meeting reality on the day SSO goes live.
 

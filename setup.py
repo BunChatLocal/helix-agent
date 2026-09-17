@@ -189,7 +189,7 @@ def _setup_claude_permissions():
         f"Read({uploads_raw}/**)",
         f"Edit({uploads_raw}/**)",
         # Deliberately NO "Bash". The agent advises and never executes. The
-        # primary enforcement is --allowedTools in core/cli_backend.py, which
+        # primary enforcement is `--tools` in core/cli_backend.py, which
         # never offers the tool at all; this omission is the second layer.
     ]
     for entry in needed:
@@ -268,6 +268,10 @@ def _setup_claude_permissions():
     # Sharing the login also exposes claude.ai account connectors (Exa, Spotify,
     # etc.), which --strict-mcp-config does NOT block. Turn them off explicitly.
     settings["disableClaudeAiConnectors"] = True
+    # Claude Code auto-memory is a separate store from Helix MEMORY.md and is
+    # not gated by --allowedTools. A /chat conversation must not persist the
+    # person into ~/.helix/claude/projects/.../memory.
+    settings["autoMemoryEnabled"] = False
 
     HELIX_CLAUDE_SETTINGS.write_text(json.dumps(settings, indent=2), encoding="utf-8")
     print(f"  Helix Claude config written to {HELIX_CLAUDE_SETTINGS}")

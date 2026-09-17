@@ -102,6 +102,17 @@ def _now_ts() -> float:
     return datetime.now(_tz()).timestamp()
 
 
+def _remove_transcripts(agent_id: str, session_id: str) -> None:
+    """Delete the live transcript and any leftover archive. Never raises."""
+    live = _transcript_path(agent_id, session_id)
+    for path in (live, live.with_suffix(".jsonl.archived")):
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError as exc:
+            logger.warning(f"Could not delete transcript {path}: {exc}")
+
+
 def _reset_due(last_active_ts: float, cfg) -> bool:
     """True if the daily reset has passed since last activity (uses configured timezone)."""
     cfg_session = cfg.session
@@ -444,8 +455,30 @@ class SessionManager:
             await self._db.commit()
             return cur.rowcount or 0
 
+    async def rekey_peer(self, session_id: str, new_peer: str) -> bool:
+        """Move a conversation to another peer key without touching the transcript.
+
+        Used when sign-in changes (Entra object-id keys → email keys) so the
+        same person still sees their chats. False if the new key is already taken.
+        """
+        async with self._lock:
+            try:
+                cur = await self._db.execute(
+                    "UPDATE sessions SET peer=? WHERE session_id=? AND agent_id=?",
+                    (new_peer, session_id, self.agent_id),
+                )
+                await self._db.commit()
+            except (aiosqlite.IntegrityError, sqlite3.IntegrityError):
+                return False
+            return (cur.rowcount or 0) > 0
+
     async def reset_session(self, channel: str, peer: str) -> None:
-        """Force-reset: delete session row + archive transcript."""
+        """Force-reset: delete the session row, transcript, and Claude resume id.
+
+        Nothing is left to send back to the model on the next turn — the
+        conversation no longer occupies context. Callers that need a paper
+        trail (the /chat delete path) write it before calling this.
+        """
         async with self._lock:
             async with self._db.execute(
                 "SELECT session_id FROM sessions WHERE agent_id=? AND channel=? AND peer=?",
@@ -456,9 +489,7 @@ class SessionManager:
                 sid = row["session_id"]
                 await self._db.execute("DELETE FROM sessions WHERE session_id=?", (sid,))
                 await self._db.commit()
-                tp = _transcript_path(self.agent_id, sid)
-                if tp.exists():
-                    tp.rename(tp.with_suffix(".jsonl.archived"))
+                _remove_transcripts(self.agent_id, sid)
 
     async def purge_older_than(self, days: int, student_days: int = 0) -> int:
         """Delete sessions untouched past their retention window.
@@ -498,15 +529,7 @@ class SessionManager:
             removed = 0
             per_label: dict[str, int] = {}
             for sid, label in doomed:
-                for path in (
-                    _transcript_path(self.agent_id, sid),
-                    _transcript_path(self.agent_id, sid).with_suffix(".jsonl.archived"),
-                ):
-                    try:
-                        if path.exists():
-                            path.unlink()
-                    except OSError as exc:
-                        logger.warning(f"Could not delete transcript {path}: {exc}")
+                _remove_transcripts(self.agent_id, sid)
                 await self._db.execute("DELETE FROM sessions WHERE session_id=?", (sid,))
                 removed += 1
                 per_label[label] = per_label.get(label, 0) + 1

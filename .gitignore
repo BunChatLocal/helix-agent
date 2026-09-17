@@ -10,3 +10,10 @@ venv/
 *.log
 .DS_Store
 .venv/
+# Accidental nested clone with its own .git and .venv.
+helix-agent/
+# Packed Helix home (Claude login, chats, secrets). Never commit.
+deploy/helix-home/
+docker-seed/
+# Optional local duplicate. The committed MSI lives in apps-seed/printer/.
+apps-payload/

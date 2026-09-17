@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Zork</title>
+<title>Zorken</title>
 <style>
   :root{
     --bg:#faf9f7; --panel:#f2efea; --panel-2:#e9e5df; --line:#e0dbd3;
@@ -149,7 +149,7 @@
     border-bottom:1px solid var(--line);background:var(--panel);
   }
   .burger{border:0;background:transparent;cursor:pointer;font-size:21px;line-height:1;padding:2px 6px}
-  .thread{flex:1;overflow-y:auto;scroll-behavior:smooth}
+  .thread{flex:1;overflow-y:auto}
   .thread-in{max-width:760px;margin:0 auto;padding:32px 24px 20px}
 
   .empty{max-width:560px;margin:0 auto;padding:15vh 24px;text-align:center}
@@ -219,7 +219,78 @@
     background:var(--accent);color:var(--accent-ink);cursor:pointer;font-size:15px;
   }
   .send:disabled{opacity:.4;cursor:default}
-  .hint{margin:9px 2px 0;font-size:12px;color:var(--muted);text-align:center}
+  .hint{margin:0;font-size:12px;color:var(--muted);text-align:center}
+  .hint-row{
+    display:flex;align-items:center;justify-content:center;gap:12px;
+    flex-wrap:wrap;margin:9px 2px 0;
+  }
+  .pc-check-btn{
+    border:1px solid var(--line);background:var(--panel);color:var(--text);
+    border-radius:20px;padding:6px 12px;cursor:pointer;font-size:13px;
+  }
+  .pc-check-btn:hover{background:var(--panel-2)}
+  .pc-check-btn:disabled{opacity:.45;cursor:default}
+  .pc-fridnett-btn, .pc-printer-btn{
+    border:0;background:#2563eb;color:#fff;border-radius:20px;
+    padding:6px 12px;cursor:pointer;font-size:13px;font-weight:600
+  }
+  .pc-fridnett-btn:hover, .pc-printer-btn:hover{filter:brightness(1.06)}
+  .pc-fridnett-btn:disabled, .pc-printer-btn:disabled{opacity:.45;cursor:default}
+  .pc-card{
+    max-width:100%;padding:14px 16px;border:1px solid var(--line);
+    border-radius:var(--radius);background:var(--panel);
+  }
+  .pc-card h3{margin:0 0 8px;font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .pc-spinner{
+    width:16px;height:16px;border:2px solid var(--line);
+    border-top-color:#2563eb;border-radius:50%;
+    animation:pc-spin .7s linear infinite;flex:0 0 auto;
+  }
+  @keyframes pc-spin{to{transform:rotate(360deg)}}
+  .pc-bar{
+    height:10px;border-radius:999px;background:var(--line);overflow:hidden;margin:10px 0 6px;
+  }
+  .pc-bar > span{
+    display:block;height:100%;width:0;background:#2563eb;border-radius:999px;
+    transition:width .25s ease;
+  }
+  .pc-bar.pc-bar-busy > span{
+    width:32%;animation:pc-bar-slide 1.2s ease-in-out infinite;
+  }
+  @keyframes pc-bar-slide{
+    0%{transform:translateX(-120%)}
+    100%{transform:translateX(380%)}
+  }
+  .pc-bar-label{font-size:13px;font-weight:600;margin:0 0 2px;color:var(--text)}
+  .pc-card ol{margin:0 0 10px;padding-left:1.2em;color:var(--muted);font-size:14px}
+  .pc-card .pc-log{font-size:13px;color:var(--muted);margin:8px 0 0;padding:0;list-style:none}
+  .pc-card .pc-log li{margin:0 0 4px}
+  .pc-card .pc-err{color:var(--danger);font-size:14px;margin:0}
+  .pc-card table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+  .pc-card th,.pc-card td{text-align:left;padding:6px 8px 6px 0;border-top:1px solid var(--line)}
+  .pc-card th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;border-top:0}
+  .pc-ok{color:#16a34a}
+  .pc-warn{color:#d97706}
+  .pc-miss{color:var(--danger)}
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]) .pc-ok{color:#4ade80}
+    :root:not([data-theme="light"]) .pc-warn{color:#fbbf24}
+    :root:not([data-theme="light"]) .pc-miss{color:#f87171}
+  }
+  .pc-pills{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:4px}
+  .pc-pill{font-size:14px;line-height:1.5;font-weight:500}
+  .pc-meta{font-size:13px;color:var(--muted);margin:0 0 4px}
+  .pc-actions{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .pc-install{
+    border:0;background:#2563eb;color:#fff;border-radius:20px;
+    padding:8px 16px;cursor:pointer;font-size:13px;font-weight:600
+  }
+  .pc-install:disabled{opacity:.45;cursor:default}
+  .pc-sketchup{
+    border:1px solid var(--line);background:transparent;color:var(--text);
+    border-radius:20px;padding:8px 16px;cursor:pointer;font-size:13px;font-weight:600
+  }
+  .pc-sketchup-note{margin:10px 0 0;font-size:13px;color:var(--muted);line-height:1.45}
   .pii{margin:6px 2px 0;font-size:12px;color:var(--muted);text-align:center;line-height:1.45}
   body.pupil #meter{display:none !important}
   body.pupil #compactBtn{display:none}
@@ -229,6 +300,14 @@
     color:var(--danger);
   }
   .offline.on{display:block}
+  .loopback-notice{
+    max-width:760px;margin:0 auto 12px;padding:14px 16px;border-radius:12px;
+    border:1px solid color-mix(in srgb,var(--danger) 35%, var(--line));
+    background:color-mix(in srgb,var(--danger) 10%, var(--panel));
+  }
+  .loopback-notice[hidden]{display:none !important}
+  .loopback-notice strong{display:block;margin:0 0 6px;font-size:15px}
+  .loopback-notice p{margin:0 0 12px;font-size:14px;line-height:1.5}
 
   .testbadge{
     padding:7px 11px;border-radius:8px;font-size:12px;font-weight:600;
@@ -246,6 +325,44 @@
   @media (prefers-color-scheme:dark){
     :root:not([data-theme="light"]) #testBar{color:#67e8f9}
   }
+
+  #cronPulse{
+    display:none;justify-content:flex-end;flex:none;
+    padding:8px 16px 0;z-index:8;
+  }
+  #cronPulse.on{display:flex}
+  .cron-pulse-card{
+    width:min(260px,100%);padding:8px 11px 8px;
+    border:1px solid var(--line);border-radius:10px;
+    background:var(--panel);font-size:12px;line-height:1.35;
+    color:var(--text);text-align:left;
+  }
+  .cron-pulse-card.ok{border-color:color-mix(in srgb,#059669 42%, var(--line))}
+  .cron-pulse-card.error{border-color:color-mix(in srgb,var(--danger) 55%, var(--line))}
+  .cron-pulse-card.missed,.cron-pulse-card.running{
+    border-color:color-mix(in srgb,#d97706 50%, var(--line));
+  }
+  .cron-pulse-title{font-weight:650;letter-spacing:-.01em}
+  .cron-pulse-card.ok .cron-pulse-title{color:#047857}
+  .cron-pulse-card.error .cron-pulse-title{color:var(--danger)}
+  .cron-pulse-card.missed .cron-pulse-title,
+  .cron-pulse-card.running .cron-pulse-title{color:#b45309}
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]) .cron-pulse-card.ok .cron-pulse-title{color:#34d399}
+    :root:not([data-theme="light"]) .cron-pulse-card.error .cron-pulse-title{color:#f87171}
+    :root:not([data-theme="light"]) .cron-pulse-card.missed .cron-pulse-title,
+    :root:not([data-theme="light"]) .cron-pulse-card.running .cron-pulse-title{color:#fbbf24}
+  }
+  .cron-pulse-meta{color:var(--muted);font-size:11.5px}
+  .cron-pulse-drop{margin-top:6px;border-top:1px solid var(--line);padding-top:5px}
+  .cron-pulse-drop summary{
+    cursor:pointer;list-style:none;font-size:11.5px;color:var(--muted);font-weight:600;
+  }
+  .cron-pulse-drop summary::-webkit-details-marker{display:none}
+  .cron-pulse-drop summary::after{content:" ▾";font-size:10px}
+  .cron-pulse-drop[open] summary::after{content:" ▴"}
+  .cron-pulse-item{margin-top:7px}
+  .cron-pulse-item .cron-pulse-title{font-size:12px}
 
   /* context meter */
   .meter{max-width:760px;margin:0 auto 10px;display:none}
@@ -310,9 +427,52 @@
   .msg-img{max-width:260px;border-radius:11px;margin:6px 0;display:block;border:1px solid var(--line)}
   /* Documentation images are meant to be read, so give them more room. */
   .msg.a .msg-img{max-width:min(560px,100%);margin:12px 0}
+  .msg-img[src]{cursor:zoom-in}
   .img-missing{
     padding:9px 13px;border-radius:9px;border:1px dashed var(--line);
     color:var(--muted);font-size:13px;margin:10px 0;display:inline-block;
+  }
+
+  #lightbox{
+    position:fixed;inset:0;z-index:70;display:none;place-items:center;
+    padding:64px 28px 28px;
+    background:color-mix(in srgb, var(--text) 58%, transparent);
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);
+  }
+  #lightbox.on{display:grid}
+  #lightbox figure{
+    margin:0;max-width:min(1080px,100%);max-height:100%;
+    display:flex;flex-direction:column;align-items:center;gap:12px;
+  }
+  #lightbox img{
+    max-width:100%;max-height:min(82vh, calc(100dvh - 120px));
+    object-fit:contain;border-radius:12px;background:var(--panel);
+    box-shadow:0 22px 56px rgba(0,0,0,.38);
+  }
+  #lightbox figcaption{
+    max-width:36em;color:var(--accent-ink);font-size:14px;line-height:1.45;
+    text-align:center;text-shadow:0 1px 8px rgba(0,0,0,.35);
+  }
+  .lb-close,.lb-nav{
+    border:1px solid var(--line);background:var(--panel);color:var(--text);
+    cursor:pointer;display:grid;place-items:center;
+  }
+  .lb-close{
+    position:absolute;top:max(12px, env(safe-area-inset-top));
+    right:max(12px, env(safe-area-inset-right));
+    width:44px;height:44px;border-radius:50%;font-size:22px;line-height:1;z-index:1;
+  }
+  .lb-close:hover,.lb-nav:hover{background:var(--panel-2)}
+  .lb-nav{
+    position:absolute;top:50%;transform:translateY(-50%);
+    width:44px;height:44px;border-radius:50%;font-size:28px;line-height:1;
+  }
+  .lb-prev{left:max(10px, env(safe-area-inset-left))}
+  .lb-next{right:max(10px, env(safe-area-inset-right))}
+  .lb-nav[hidden]{display:none}
+  @media (prefers-reduced-motion:reduce){
+    #lightbox{backdrop-filter:none;-webkit-backdrop-filter:none}
   }
 
   /* bottom notice */
@@ -357,21 +517,9 @@
 <div id="signin">
   <div class="card">
     <div class="logo"><img src="/static/logo.png" width="36" height="42" alt=""></div>
-    <h1 data-t="title">Zork</h1>
+    <h1 data-t="title">Zorken</h1>
     <p data-t="sub">Logg inn med kontoen din for å få IT-hjelp.</p>
-    <button class="ms-btn" id="msBtn">
-      <svg width="17" height="17" viewBox="0 0 23 23" aria-hidden="true">
-        <path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/>
-        <path fill="#05a6f0" d="M1 12h10v10H1z"/><path fill="#ffba08" d="M12 12h10v10H12z"/>
-      </svg>
-      <span data-t="signin">Logg inn med Microsoft</span>
-    </button>
-    <div id="devWrap" style="display:none">
-      <div id="devOr" style="display:flex;align-items:center;gap:10px;margin:22px 0 14px">
-        <div style="flex:1;height:1px;background:var(--line)"></div>
-        <span style="font-size:12px;color:var(--muted)" data-t="or">eller</span>
-        <div style="flex:1;height:1px;background:var(--line)"></div>
-      </div>
+    <div id="devWrap">
       <div class="testbadge" data-t="testmode">IN DEVELOPMENT - Expect bugs and errors</div>
       <input id="devEmail" type="email" autocomplete="username"
              data-t-ph="emailph" placeholder="navn@eksempel.no" class="field">
@@ -396,6 +544,16 @@
       <button class="btn" id="modalIgnore" data-t="ignore">Ignorer</button>
     </div>
   </div>
+</div>
+
+<div id="lightbox" role="dialog" aria-modal="true" aria-label="Forstørret bilde">
+  <button type="button" class="lb-close" id="lbClose" aria-label="Lukk">×</button>
+  <button type="button" class="lb-nav lb-prev" id="lbPrev" aria-label="Forrige bilde" hidden>‹</button>
+  <figure>
+    <img id="lbImg" alt="">
+    <figcaption id="lbCap"></figcaption>
+  </figure>
+  <button type="button" class="lb-nav lb-next" id="lbNext" aria-label="Neste bilde" hidden>›</button>
 </div>
 
 <div id="app">
@@ -426,8 +584,19 @@
     <div id="testBar" data-t="testbar">IN DEVELOPMENT - Expect bugs and errors</div>
     <div class="top">
       <button class="burger" id="burger">☰</button>
-      <strong style="font-size:15px" data-t="title">Zork</strong>
+      <strong style="font-size:15px" data-t="title">Zorken</strong>
       <button type="button" class="logout" id="logoutTop" data-t="logout">Logg ut</button>
+    </div>
+    <div id="cronPulse">
+      <div class="cron-pulse-card" id="cronPulseCard">
+        <div class="cron-pulse-title" id="cronPulseTitle"></div>
+        <div class="cron-pulse-meta" id="cronPulseStatus"></div>
+        <div class="cron-pulse-meta" id="cronPulseWhen"></div>
+        <details class="cron-pulse-drop" id="cronPulseMore" hidden>
+          <summary data-t="cronmore">Andre cron-jobber</summary>
+          <div id="cronPulseList"></div>
+        </details>
+      </div>
     </div>
 
     <div class="thread" id="thread">
@@ -435,10 +604,13 @@
         <h2 data-t="greet">Hei! Hva kan jeg hjelpe deg med?</h2>
         <p data-t="greetsub">Beskriv problemet med dine egne ord — du trenger ikke vite hva det heter.</p>
         <div class="chips">
-          <button class="chip" data-t="ex1">Jeg får ikke opp e-posten min</button>
-          <button class="chip" data-t="ex2">PC-en er treg</button>
-          <button class="chip" data-t="ex3">Jeg får ikke logget inn</button>
-          <button class="chip" data-t="ex4">Skriveren virker ikke</button>
+          <button type="button" class="chip example" data-t="ex1">Jeg får ikke opp e-posten min</button>
+          <button type="button" class="chip example" data-t="ex2">PC-en er treg</button>
+          <button type="button" class="chip example" data-t="ex3">Jeg får ikke logget inn</button>
+          <button type="button" class="chip example" data-t="ex4">Skriveren virker ikke</button>
+          <button type="button" class="chip pc-check" id="pcFridNettChip" hidden data-t="pcfridnett">FRID-nett</button>
+          <button type="button" class="chip pc-check" id="pcPrinterChip" hidden data-t="pcprinter">Skaff printer</button>
+          <button type="button" class="chip pc-check" id="pcCheckChip" hidden data-t="pccheck">Sjekk denne PC-en</button>
         </div>
       </div>
       <div class="thread-in" id="msgs"></div>
@@ -447,6 +619,11 @@
     <div class="composer">
       <div id="toast"></div>
       <div class="offline" id="offline" data-t="offline">Frakoblet — prøver å koble til igjen…</div>
+      <div class="loopback-notice" id="loopbackNotice" hidden>
+        <strong data-t="pcloopbacktitle">Tillat Zork Helper i nettleseren</strong>
+        <p data-t="pcloopbackbody">Du trykket Blokker. Zorken trenger Tillat for å snakke med Zork Helper på denne PC-en. Klikk på låsen til venstre for adressen → Apper på enheten → Tillat. Last siden på nytt etterpå.</p>
+        <button type="button" class="btn primary" id="loopbackRetry" data-t="pcloopbackretry">Prøv igjen</button>
+      </div>
 
       <div class="fullnotice" id="fullNotice">
         <p data-t="fulltext">Denne samtalen er blitt lang. Komprimer den for å fortsette — jeg lager et sammendrag og husker det viktigste.</p>
@@ -472,7 +649,12 @@
           <textarea id="input" rows="1" data-t-ph="ph" placeholder="Skriv meldingen din…"></textarea>
           <button class="send" id="send" disabled>↑</button>
         </div>
-        <div class="hint" id="hint" data-t="hint">Enter sender · Shift+Enter gir ny linje</div>
+        <div class="hint-row">
+          <div class="hint" id="hint" data-t="hint">Enter sender · Shift+Enter gir ny linje</div>
+          <button type="button" class="pc-fridnett-btn" id="pcFridNettBtn" hidden data-t="pcfridnett">FRID-nett</button>
+          <button type="button" class="pc-printer-btn" id="pcPrinterBtn" hidden data-t="pcprinter">Skaff printer</button>
+          <button type="button" class="pc-check-btn" id="pcCheckBtn" hidden data-t="pccheck">Sjekk denne PC-en</button>
+        </div>
         <div class="pii" data-t="pii">Ikke lim inn fødselsnummer, fulle navn eller passord.</div>
       </div>
     </div>
@@ -501,9 +683,9 @@ window.addEventListener("error", ev => {
 /* ---------------- i18n ---------------- */
 const I18N = {
   nb:{
-    title:"Zork",
+    title:"Zorken",
     sub:"Logg inn med kontoen din for å få IT-hjelp.",
-    signin:"Logg inn med Microsoft",
+    signin:"Logg inn",
     new:"Ny samtale", recent:"Samtaler",
     greet:"Hei! Hva kan jeg hjelpe deg med?",
     greetsub:"Beskriv problemet med dine egne ord — du trenger ikke vite hva det heter.",
@@ -512,14 +694,81 @@ const I18N = {
     p1:"Jeg kommer ikke på wifi", p2:"Jeg får ikke logget inn",
     p3:"Skriveren virker ikke", p4:"Jeg kommer ikke inn i InSchool",
     s1:"Noen trenger MFA-reset", s2:"Lisens mangler",
-    s3:"Visma InSchool", s4:"Skriveren virker ikke",
+    s3:"Visma InSchool",     s4:"Skriveren virker ikke",
+    pccheck:"Sjekk denne PC-en",
+    pcfridnett:"FRID-nett",
+    pcfridnettnote:"Du må være på skolen, med wifi på. Trykk FRID-nett. Godkjenn i Windows hvis du blir spurt. Zork Helper kobler til FRID-iot, åpner innlogging og installerer skolenettet.",
+    pcfridnettwait:"Et lite vindu åpner seg. Logg inn der med skolekontoen. Klikk Start QuickConnect når du ser den. Zork Helper tar resten.",
+    pcfridnettgo:"Installer skolenettet",
+    pcfridnettdone:"Done!",
+    pcfridnettdonenote:"Du er koblet til riktig nettverk (FRID).",
+    pcprinter:"Skaff printer",
+    pcprinternote:"Trykk Skaff printer. Godkjenn i Windows hvis du blir spurt. Zork Helper laster ned og installerer skoleskriveren.",
+    pcprinterwait:"Zork Helper laster ned skriverprogrammet og installerer det. Godkjenn i Windows hvis du blir spurt. Nedlastingen kan ta noen minutter.",
+    pcprinterdl:"Laster ned skriveren…",
+    pcprinterinst:"Installerer skriveren…",
+    pcprinteruac:"Godkjenn i Windows for å installere skriveren.",
+    pcprinteruacnote:"Se etter et vindu bak nettleseren. Godkjenn i Windows hvis du blir spurt.",
+    pcprinterstart:"Starter skriverinstallasjonen…",
+    pcprinterstartnote:"Zork Helper starter. Et vindu kan ligge bak nettleseren.",
+    pcprinterdone:"Done!",
+    pcprinterdonenote:"Skoleskriveren er installert. Da kan du skrive ut.",
+    pcprinterfail:"Klarte ikke å installere skriveren",
+    pcprinterfailnote:"Prøv Skaff printer igjen. Godkjenn i Windows hvis du blir spurt.",
+    pcwait:"Sjekker denne PC-en…",
+    pcopen:"Klikk Åpne hvis Windows eller nettleseren spør.",
+    pcuac:"Etter første gang ligger Zork Helper ved klokken nede til høyre.",
+    pcstay:"Bli på denne siden til sjekken er ferdig.",
+    pctrayscan:"Zork Helper sjekker denne PC-en.",
+    pchelperon:"Zork Helper er klar ved klokken",
+    pcwake:"Klikk Åpne hvis Windows spør.",
+    pcinstall:"Installer / oppdater med Zork Helper",
+    pcsketchup:"SketchUp",
+    pcsketchupnote:"SketchUp trengs bare i noen fag. Last det ned bare hvis du skal bruke det i timen, eller en lærer har bedt deg om det.",
+    pcsketchupgo:"Installer SketchUp",
+    pcinstalling:"Zork Helper installerer…",
+    pcapprove:"Godkjenn i Windows hvis du blir spurt.",
+    pcinstalldone:"Installasjon ferdig",
+    pcrescan:"Sjekker PC-en på nytt…",
+    pcreboot:"Start PC-en på nytt for å fullføre Windows Update.",
+    pcrebootshort:"omstart",
+    pcdone:"Sjekk ferdig",
+    pcfail:"Sjekken feilet",
+    pcnowin:"Sjekken kjører på Windows-PC og Mac, ikke på telefon.",
+    pcopenmac:"Åpne Nedlastinger. Høyreklikk ZorkHelper.command → Åpne. Godkjenn hvis macOS spør.",
+    pcstartfail:"Klarte ikke starte sjekken. Prøv igjen.",
+    pcloopbacktitle:"Tillat Zork Helper i nettleseren",
+    pcloopbackbody:"Du trykket Blokker. Zorken trenger Tillat for å snakke med Zork Helper på denne PC-en. Klikk på låsen til venstre for adressen → Apper på enheten → Tillat. Last siden på nytt etterpå.",
+    pcloopbackretry:"Prøv igjen",
+    pcadmin:"administrator",
+    pcnotadmin:"ikke administrator",
+    pcprog:"Program",
+    pcstatus:"Status",
+    pcver:"Versjon",
+    pcok:"OK",
+    cronok:"OK",
+    cronfail:"FEIL",
+    cronrun:"KJØRER",
+    cronmiss:"MISSET",
+    cronsilent:"STILLE",
+    cronidle:"—",
+    cronsucceeded:"siste kjøring lyktes",
+    cronfailed:"siste kjøring feilet",
+    cronsilentmsg:"siste kjøring ga ingen svar",
+    cronrunning:"kjører nå",
+    cronmissed:"siste planlagte kjøring ble misset",
+    cronnotrun:"ikke kjørt ennå",
+    cronnever:"aldri",
+    cronmore:"Andre cron-jobber",
+    pcchk:"sjekk",
+    pcmiss:"mangler",
     pii:"Ikke lim inn fødselsnummer, fulle navn eller passord.",
     ph:"Skriv meldingen din…",
     hint:"Enter sender · Shift+Enter gir ny linje",
     offline:"Frakoblet — prøver å koble til igjen…",
     err_login:"Innloggingen mislyktes. Prøv igjen.",
     err_group:"Du har ikke tilgang til denne tjenesten.",
-    err_cfg:"Microsoft-innlogging er ikke satt opp ennå.",
+    err_cfg:"Innlogging er ikke tilgjengelig.",
     del:"Slette denne samtalen?",
     copy:"Kopier", copied:"Kopiert",
     untitled:"Ny samtale", other:"English",
@@ -552,6 +801,10 @@ const I18N = {
     tooshortShort:"Ikke noe svar å ta vare på ennå — slettes automatisk senere.",
     ratelimit:"Du har sendt mange meldinger på kort tid. Vent litt, så kan du sende igjen.",
     imgmissing:"Bildet er ikke tilgjengelig",
+    zoomClose:"Lukk",
+    zoomPrev:"Forrige bilde",
+    zoomNext:"Neste bilde",
+    zoomView:"Forstørret bilde",
     queuenext:"Du er neste i køen. Ikke lukk siden — svaret kommer.",
     queuepos:n=>`Du er nummer ${n} i køen. Ikke lukk siden — svaret kommer.`,
     statusread:"Leser i kunnskapsbasen…",
@@ -559,14 +812,17 @@ const I18N = {
     statusweb:"Slår opp på nettet…",
     statuswrite:"Oppdaterer dokumentasjonen…",
     statusworking:"Jobber med det…",
-    waitHonest:["Leser…","Tenker…","Ser gjennom reglene…","Svarer…"],
+    waitRead:"Leser…",
+    waitThink:"Tenker…",
+    waitRules:"Ser gjennom reglene…",
+    waitRespond:"Svarer…",
     waitLate:"Tar lenger tid enn forventet…",
     waitFunny:["Netflix-pause…","Do-pause…","Snakker med rektor din…","Kaster tryllestav…","Beundrer arbeidet mitt…"]
   },
   en:{
-    title:"Zork",
+    title:"Zorken",
     sub:"Sign in with your account for IT help.",
-    signin:"Sign in with Microsoft",
+    signin:"Sign in",
     new:"New chat", recent:"Chats",
     greet:"Hi! What can I help you with?",
     greetsub:"Describe the problem in your own words — you don't need to know what it's called.",
@@ -575,14 +831,81 @@ const I18N = {
     p1:"I can't get on wifi", p2:"I can't sign in",
     p3:"The printer isn't working", p4:"I can't get into InSchool",
     s1:"Someone needs an MFA reset", s2:"A licence is missing",
-    s3:"Visma InSchool", s4:"The printer isn't working",
+    s3:"Visma InSchool",     s4:"The printer isn't working",
+    pccheck:"Check this PC",
+    pcfridnett:"FRID-nett",
+    pcfridnettnote:"You need to be at school, with wifi on. Press FRID-nett. Approve in Windows if you are asked. Zork Helper joins FRID-iot, opens sign-in and installs the school network.",
+    pcfridnettwait:"A small window opens. Sign in there with your school account. Click Start QuickConnect when you see it. Zork Helper does the rest.",
+    pcfridnettgo:"Install the school network",
+    pcfridnettdone:"Done!",
+    pcfridnettdonenote:"You are connected to the right network (FRID).",
+    pcprinter:"Get printer",
+    pcprinternote:"Press Get printer. Approve in Windows if you are asked. Zork Helper downloads and installs the school printer.",
+    pcprinterwait:"Zork Helper is downloading the printer software and installing it. Approve in Windows if you are asked. The download can take a few minutes.",
+    pcprinterdl:"Downloading the printer…",
+    pcprinterinst:"Installing the printer…",
+    pcprinteruac:"Approve in Windows to install the printer.",
+    pcprinteruacnote:"Look for a window behind the browser. Approve in Windows if you are asked.",
+    pcprinterstart:"Starting the printer install…",
+    pcprinterstartnote:"Zork Helper is starting. A window may be behind the browser.",
+    pcprinterdone:"Done!",
+    pcprinterdonenote:"The school printer is installed. You can print.",
+    pcprinterfail:"Could not install the printer",
+    pcprinterfailnote:"Press Get printer again. Approve in Windows if you are asked.",
+    pcwait:"Checking this PC…",
+    pcopen:"Click Open if Windows or the browser asks.",
+    pcuac:"After the first time, Zork Helper stays by the clock on the taskbar.",
+    pcstay:"Stay on this page until the check finishes.",
+    pctrayscan:"Zork Helper is checking this PC.",
+    pchelperon:"Zork Helper is ready by the clock",
+    pcwake:"Click Open if Windows asks.",
+    pcinstall:"Install / update with Zork Helper",
+    pcsketchup:"SketchUp",
+    pcsketchupnote:"SketchUp is only needed for some classes. Download it only if you will use it in class, or a teacher has told you to.",
+    pcsketchupgo:"Install SketchUp",
+    pcinstalling:"Zork Helper is installing…",
+    pcapprove:"Approve in Windows if you are asked.",
+    pcinstalldone:"Installation finished",
+    pcrescan:"Checking this PC again…",
+    pcreboot:"Restart this PC to finish Windows Update.",
+    pcrebootshort:"restart",
+    pcdone:"Check finished",
+    pcfail:"Check failed",
+    pcnowin:"This check runs on a Windows PC or a Mac, not on a phone.",
+    pcopenmac:"Open Downloads. Right-click ZorkHelper.command → Open. Approve if macOS asks.",
+    pcstartfail:"Could not start the check. Try again.",
+    pcloopbacktitle:"Allow Zork Helper in the browser",
+    pcloopbackbody:"You clicked Block. Zorken needs Allow to talk to Zork Helper on this PC. Click the padlock to the left of the address → Apps on device → Allow. Then reload the page.",
+    pcloopbackretry:"Try again",
+    pcadmin:"administrator",
+    pcnotadmin:"not administrator",
+    pcprog:"Program",
+    pcstatus:"Status",
+    pcver:"Version",
+    pcok:"OK",
+    cronok:"OK",
+    cronfail:"FAIL",
+    cronrun:"RUN",
+    cronmiss:"MISS",
+    cronsilent:"SILENT",
+    cronidle:"—",
+    cronsucceeded:"last run succeeded",
+    cronfailed:"last run failed",
+    cronsilentmsg:"last run finished with no reply",
+    cronrunning:"running now",
+    cronmissed:"missed last scheduled run",
+    cronnotrun:"not run yet",
+    cronnever:"never",
+    cronmore:"Other crons",
+    pcchk:"check",
+    pcmiss:"missing",
     pii:"Don't paste national ID numbers, full names, or passwords.",
     ph:"Type your message…",
     hint:"Enter to send · Shift+Enter for a new line",
     offline:"Disconnected — trying to reconnect…",
     err_login:"Sign-in failed. Please try again.",
     err_group:"You don't have access to this service.",
-    err_cfg:"Microsoft sign-in isn't configured yet.",
+    err_cfg:"Sign-in is not available.",
     del:"Delete this conversation?",
     copy:"Copy", copied:"Copied",
     untitled:"New chat", other:"Norsk",
@@ -615,6 +938,10 @@ const I18N = {
     tooshortShort:"No answer to keep yet — deleted automatically later.",
     ratelimit:"You've sent a lot of messages in a short time. Wait a moment and try again.",
     imgmissing:"Image unavailable",
+    zoomClose:"Close",
+    zoomPrev:"Previous image",
+    zoomNext:"Next image",
+    zoomView:"Enlarged image",
     queuenext:"You're next in the queue. Don't close the page — the answer is coming.",
     queuepos:n=>`You are number ${n} in the queue. Don't close the page — the answer is coming.`,
     statusread:"Reading the knowledge base…",
@@ -622,7 +949,10 @@ const I18N = {
     statusweb:"Looking that up…",
     statuswrite:"Updating the documentation…",
     statusworking:"Working on it…",
-    waitHonest:["Reading…","Thinking…","Looking through the rules…","Responding…"],
+    waitRead:"Reading…",
+    waitThink:"Thinking…",
+    waitRules:"Looking through the rules…",
+    waitRespond:"Responding…",
     waitLate:"Taking longer than expected…",
     waitFunny:["Netflix break…","Toilet break…","Talking to your principal…","Casting spells…","Admiring my work…"]
   }
@@ -640,6 +970,7 @@ const t = (k, ...a) => {
 
 function applyLang(){
   document.documentElement.lang = lang === "nb" ? "nb" : "en";
+  document.title = t("title");
   document.querySelectorAll("[data-t]").forEach(el => {
     const v = I18N[lang][el.dataset.t];
     if(typeof v === "string") el.textContent = v;
@@ -651,7 +982,10 @@ function applyLang(){
   renderConvs();
   applyChips();
   applyPwMode();
-  if(waitTimer && stream && !stream.dataset.raw) refreshWaitNote();
+  applyLightboxLang();
+  applyPcCheckVisibility();
+  paintCronPulse(cronPulseRows);
+  if(busy && stream && !stream.dataset.raw) refreshWaitNote();
 }
 function toggleLang(){ lang = lang === "nb" ? "en" : "nb"; applyLang(); }
 
@@ -699,13 +1033,30 @@ function render(text){
 let token = null, ws = null, convId = null, convs = [], busy = false;
 let stream = null, retry = 0, codes = [];
 let isPupil = false;
+let isAdminConsole = false;
+let cronPulseRows = [];
+let cronPulseTimer = null;
+let helperWifiKnown = false;
+let helperWifiSsid = "";
+let helperWifiConnected = false;
+let helperWifiProbed = false;
+let helperOnSchoolFrid = false;
+let helperSeenThisTab = false;
+let helperWifiTimer = null;
+let helperOnlineLocal = false;
 let setPassword = false;
 let pwCheck = 0;
 let pwTimer = 0;
 let waitTimer = 0;
-let waitStep = 0;
+let waitPhase = "";
 let waitLast = "";
+let waitOvertime = false;
+const WAIT_LATE_MS = 20000;
 const WAIT_DOTS = '<span class="dots"><span></span><span></span><span></span></span>';
+const WAIT_KIND = {
+  read: "waitRead", think: "waitThink", rules: "waitRules", respond: "waitRespond",
+  search: "statussearch", web: "statusweb", write: "statuswrite", working: "statusworking"
+};
 
 function applyPwMode(){
   const pw = $("devPassword");
@@ -740,13 +1091,6 @@ function applyPwMode(){
   if(token) start(); else $("signin").style.display = "grid";
 })();
 
-/* Test sign-in is the login people see while it is on. Microsoft SSO stays
-   wired (button, click handler, /api/auth/microsoft/*) but is hidden here. */
-if(window.HELIX_FLAGS && window.HELIX_FLAGS.dev_login){
-  $("devWrap").style.display = "block";
-  $("devOr").style.display = "none";
-  $("msBtn").style.display = "none";
-}
 
 async function checkEmailPassword(){
   const email = $("devEmail").value.trim();
@@ -817,17 +1161,6 @@ $("devEmail").onkeydown = e => { if(e.key === "Enter") $("devBtn").click(); };
 $("devPassword").onkeydown = e => { if(e.key === "Enter") $("devBtn").click(); };
 $("devConfirm").onkeydown = e => { if(e.key === "Enter") $("devBtn").click(); };
 
-$("msBtn").onclick = async () => {
-  try{
-    const r = await fetch("/api/auth/microsoft/enabled");
-    const j = await r.json();
-    if(!j.enabled){
-      const e = $("signinErr"); e.textContent = t("err_cfg"); e.style.display = "block";
-      return;
-    }
-  }catch(_){}
-  location.href = "/api/auth/microsoft/login";
-};
 $("langA").onclick = toggleLang;
 $("langB").onclick = toggleLang;
 $("logoutBtn").onclick = signOut;
@@ -835,7 +1168,7 @@ $("logoutTop").onclick = signOut;
 $("devPanelBtn").onclick = () => {
   if(!token) return;
   localStorage.setItem("helix_token", token);
-  location.href = "/";
+  location.href = "/admin";
 };
 
 /* ---------------- app ---------------- */
@@ -854,7 +1187,13 @@ async function start(){
     isPupil = me.tier === "student";
     document.body.classList.toggle("pupil", isPupil);
     $("devPanelBtn").classList.toggle("on", !!me.console);
+    isAdminConsole = me.console_role === "admin" || me.console_role === "operator";
     applyChips();
+    applyPcCheckVisibility();
+    refreshHelperPresence(me.helper_online);
+    startWifiWatch();
+    watchLoopbackPermission();
+    startCronPulse();
   }catch(_){}
   await loadConvs();
   convId = convs.length ? convs[0].id : await newId();
@@ -874,24 +1213,172 @@ async function api(path, opts={}){
 function signOut(){
   const stored = localStorage.getItem("helix_token");
   if(stored && token && stored === token) localStorage.removeItem("helix_token");
-  sessionStorage.removeItem("helix_token"); token = null;
+  sessionStorage.removeItem("helix_token");   token = null;
   isPupil = false;
+  isAdminConsole = false;
+  stopCronPulse();
   document.body.classList.remove("pupil");
   $("devPanelBtn").classList.remove("on");
   if(ws){ ws.onclose = null; ws.close(); ws = null; }
   stopWaitNotes();
+  stopHelperPoll();
+  stopWifiWatch();
+  helperWifiKnown = false;
+  helperWifiSsid = "";
+  helperWifiConnected = false;
+  helperWifiProbed = false;
+  helperOnSchoolFrid = false;
+  helperOnlineLocal = false;
+  helperFridDone = false;
+  helperPrinterDone = false;
+  helperPrinterJob = false;
+  helperPrinterTold = false;
+  helperSession = null;
+  helperCard = null;
+  if(loopbackPermStatus){
+    loopbackPermStatus.onchange = null;
+    loopbackPermStatus = null;
+  }
+  setLoopbackDenied(false);
   retry = 0; convs = []; convId = null; busy = false; stream = null;
   $("msgs").innerHTML = "";
   $("convList").innerHTML = "";
   $("who").textContent = "–";
   $("ini").textContent = "–";
   $("testBar").classList.remove("on");
+  paintCronPulse([]);
   $("offline").classList.remove("on");
+  closeLightbox();
   $("signinErr").style.display = "none";
   $("app").classList.remove("on");
   $("signin").style.display = "grid";
   closeSide();
 }
+
+function cronPulseKind(row){
+  if(!row) return "idle";
+  if(row.last_status === "running") return "running";
+  if(row.last_status === "error") return "error";
+  if(row.missed) return "missed";
+  return row.last_status || "idle";
+}
+function cronPulseMark(row){
+  const kind = cronPulseKind(row);
+  if(kind === "ok") return t("cronok");
+  if(kind === "error") return t("cronfail");
+  if(kind === "running") return t("cronrun");
+  if(kind === "missed") return t("cronmiss");
+  if(kind === "silent") return t("cronsilent");
+  return t("cronidle");
+}
+function cronPulseStatusText(row){
+  const kind = cronPulseKind(row);
+  if(kind === "ok") return t("cronsucceeded");
+  if(kind === "error") return t("cronfailed");
+  if(kind === "running") return t("cronrunning");
+  if(kind === "missed") return t("cronmissed");
+  if(kind === "silent") return t("cronsilentmsg");
+  if(row && row.last_run) return t("cronsucceeded");
+  return t("cronnotrun");
+}
+function formatCronWhen(iso){
+  if(!iso) return t("cronnever");
+  const d = new Date(iso);
+  if(Number.isNaN(d.getTime())) return t("cronnever");
+  const p = n => String(n).padStart(2, "0");
+  return p(d.getDate()) + "." + p(d.getMonth() + 1) + "." + d.getFullYear()
+    + " - " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function cronPulseSeverity(row){
+  const kind = cronPulseKind(row);
+  if(kind === "error") return 0;
+  if(kind === "missed") return 1;
+  if(kind === "running") return 2;
+  if(kind === "silent") return 3;
+  if(kind === "ok") return 4;
+  return 5;
+}
+function fillCronPulseBlock(titleEl, statusEl, whenEl, row){
+  titleEl.textContent = cronPulseMark(row) + " - " + (row.name || row.id || "cron");
+  statusEl.textContent = cronPulseStatusText(row);
+  whenEl.textContent = formatCronWhen(row.last_run);
+}
+function paintCronPulse(rows){
+  cronPulseRows = Array.isArray(rows) ? rows.slice() : [];
+  const box = $("cronPulse");
+  const card = $("cronPulseCard");
+  const more = $("cronPulseMore");
+  const list = $("cronPulseList");
+  if(!box || !card) return;
+  const show = isAdminConsole && cronPulseRows.length > 0;
+  box.classList.toggle("on", show);
+  if(!show){
+    if(more) more.hidden = true;
+    return;
+  }
+  const ranked = cronPulseRows.slice().sort((a, b) => {
+    const diff = cronPulseSeverity(a) - cronPulseSeverity(b);
+    if(diff) return diff;
+    return String(b.last_run || "").localeCompare(String(a.last_run || ""));
+  });
+  const head = ranked[0];
+  card.className = "cron-pulse-card " + cronPulseKind(head);
+  fillCronPulseBlock($("cronPulseTitle"), $("cronPulseStatus"), $("cronPulseWhen"), head);
+  if(!more || !list) return;
+  const rest = ranked.slice(1);
+  more.hidden = rest.length === 0;
+  list.replaceChildren();
+  rest.forEach(row => {
+    const item = document.createElement("div");
+    item.className = "cron-pulse-item";
+    const title = document.createElement("div");
+    title.className = "cron-pulse-title";
+    const status = document.createElement("div");
+    status.className = "cron-pulse-meta";
+    const when = document.createElement("div");
+    when.className = "cron-pulse-meta";
+    fillCronPulseBlock(title, status, when, row);
+    item.append(title, status, when);
+    list.appendChild(item);
+  });
+}
+async function loadCronPulse(){
+  if(!isAdminConsole || !token){
+    paintCronPulse([]);
+    return;
+  }
+  try{
+    const r = await fetch("/api/crons", {
+      headers: { Authorization: "Bearer " + token },
+    });
+    if(!r.ok){
+      paintCronPulse([]);
+      return;
+    }
+    const rows = await r.json();
+    paintCronPulse(Array.isArray(rows) ? rows : []);
+  }catch(_){
+    paintCronPulse([]);
+  }
+}
+function stopCronPulse(){
+  if(cronPulseTimer){
+    clearInterval(cronPulseTimer);
+    cronPulseTimer = null;
+  }
+}
+function startCronPulse(){
+  stopCronPulse();
+  if(!isAdminConsole){
+    paintCronPulse([]);
+    return;
+  }
+  loadCronPulse();
+  cronPulseTimer = setInterval(loadCronPulse, 60000);
+}
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "visible" && isAdminConsole) loadCronPulse();
+});
 
 async function loadConvs(){
   try{ convs = (await api("/api/me/conversations")).conversations || []; }
@@ -961,7 +1448,7 @@ async function openConv(id){
   $("empty").style.display = msgs.length ? "none" : "block";
   renderConvs();
   await refreshCtx();
-  scroll();
+  jumpToLatest();
 
   // Re-warn on open when deletion is actually close, even if already warned.
   const c = convs.find(x => x.id === id);
@@ -997,8 +1484,6 @@ async function hookAssets(el){
         assetCache.set(name, URL.createObjectURL(await r.blob()));
       }
       img.src = assetCache.get(name);
-      img.onclick = () => window.open(img.src, "_blank");
-      img.style.cursor = "zoom-in";
     }catch(_){
       img.replaceWith(Object.assign(document.createElement("div"),
         {className:"img-missing", textContent:"🖼 " + t("imgmissing")}));
@@ -1006,6 +1491,75 @@ async function hookAssets(el){
   }
   scroll();
 }
+
+let lbSet = [];
+let lbIndex = 0;
+
+function applyLightboxLang(){
+  $("lightbox").setAttribute("aria-label", t("zoomView"));
+  $("lbClose").setAttribute("aria-label", t("zoomClose"));
+  $("lbPrev").setAttribute("aria-label", t("zoomPrev"));
+  $("lbNext").setAttribute("aria-label", t("zoomNext"));
+}
+
+function imagesInBubble(img){
+  const bubble = img.closest(".bubble");
+  return bubble ? [...bubble.querySelectorAll("img.msg-img[src]")] : [img];
+}
+
+function paintLightbox(){
+  const img = lbSet[lbIndex];
+  if(!img) return;
+  $("lbImg").src = img.src;
+  $("lbImg").alt = img.alt || "";
+  const cap = (img.alt || "").trim();
+  $("lbCap").textContent = cap;
+  $("lbCap").hidden = !cap;
+  const many = lbSet.length > 1;
+  $("lbPrev").hidden = !many;
+  $("lbNext").hidden = !many;
+}
+
+function openLightbox(img){
+  if(!img || !img.src) return;
+  lbSet = imagesInBubble(img);
+  lbIndex = Math.max(0, lbSet.indexOf(img));
+  applyLightboxLang();
+  paintLightbox();
+  $("lightbox").classList.add("on");
+  $("lbClose").focus();
+}
+
+function closeLightbox(){
+  $("lightbox").classList.remove("on");
+  $("lbImg").removeAttribute("src");
+  lbSet = [];
+}
+
+function stepLightbox(dir){
+  if(lbSet.length < 2) return;
+  lbIndex = (lbIndex + dir + lbSet.length) % lbSet.length;
+  paintLightbox();
+}
+
+$("msgs").addEventListener("click", e => {
+  const img = e.target.closest("img.msg-img");
+  if(!img || !img.src) return;
+  e.preventDefault();
+  openLightbox(img);
+});
+$("lbClose").onclick = closeLightbox;
+$("lbPrev").onclick = e => { e.stopPropagation(); stepLightbox(-1); };
+$("lbNext").onclick = e => { e.stopPropagation(); stepLightbox(1); };
+$("lightbox").onclick = e => { if(e.target.id === "lightbox") closeLightbox(); };
+document.addEventListener("keydown", e => {
+  if($("lightbox").classList.contains("on")){
+    if(e.key === "Escape"){ e.preventDefault(); closeLightbox(); return; }
+    if(e.key === "ArrowLeft"){ e.preventDefault(); stepLightbox(-1); return; }
+    if(e.key === "ArrowRight"){ e.preventDefault(); stepLightbox(1); return; }
+  }
+  if(e.key === "Escape") closeModal();
+});
 
 function hookCopy(el, source){
   const blocks = [...source.matchAll(/```\w*\n?([\s\S]*?)```/g)].map(m => m[1].replace(/\n$/,""));
@@ -1017,7 +1571,11 @@ function hookCopy(el, source){
     };
   });
 }
-const scroll = () => { const th = $("thread"); th.scrollTop = th.scrollHeight; };
+const scroll = () => {};
+function jumpToLatest(){
+  const th = $("thread");
+  if(th) th.scrollTop = th.scrollHeight;
+}
 
 /* ---------------- context meter ---------------- */
 let ctxBlocked = false;
@@ -1124,7 +1682,6 @@ function closeModal(){ $("modal").classList.remove("on"); expiringConv = null; }
 
 $("modalIgnore").onclick = closeModal;          // does nothing; chat still expires
 $("modal").onclick = e => { if(e.target.id === "modal") closeModal(); };
-document.addEventListener("keydown", e => { if(e.key === "Escape") closeModal(); });
 
 $("modalKeep").onclick = async () => {
   if(!expiringConv) return;
@@ -1187,11 +1744,7 @@ function connect(){
     }
     if(d.type === "status"){
       if(!stream){ stream = add("a",""); stream.dataset.raw = ""; }
-      if(!stream.dataset.raw){
-        stopWaitNotes();
-        const note = t("status" + (d.kind || "working")) || t("statusworking");
-        stream.innerHTML = WAIT_DOTS + '<div class="queue-note">' + note + '</div>';
-      }
+      if(!stream.dataset.raw) applyPhase(d.kind || "working");
       scroll();
       return;
     }
@@ -1230,26 +1783,26 @@ function connect(){
   ws.onerror = () => {};
 }
 function reconnect(){ if(ws){ ws.onclose = null; ws.close(); } connect(); }
-function finish(){ stopWaitNotes(); busy = false; stream = null; $("send").disabled = !$("input").value.trim(); }
-
-function waitLines(){
-  return {
-    honest: I18N[lang].waitHonest,
-    late: I18N[lang].waitLate,
-    funny: I18N[lang].waitFunny
-  };
+function finish(){
+  stopWaitNotes();
+  busy = false;
+  stream = null;
+  $("send").disabled = !$("input").value.trim();
+  if(!helperTimer) setPcCheckBusy(false);
 }
 
-function nextWaitNote(){
-  const { honest, late, funny } = waitLines();
-  waitStep++;
-  if(waitStep <= honest.length) return honest[waitStep - 1];
-  if(waitStep === honest.length + 1) return late;
-  if(isPupil && Math.random() < 0.3 && !funny.includes(waitLast)){
-    return funny[Math.floor(Math.random() * funny.length)];
+function honestWaitNote(kind){
+  return t(WAIT_KIND[kind] || "statusworking");
+}
+
+function pickWaitNote(kind){
+  const funny = I18N[lang].waitFunny || [];
+  if(Math.random() < 1/3 && funny.length){
+    const opts = funny.filter(x => x !== waitLast);
+    const pool = opts.length ? opts : funny;
+    return pool[Math.floor(Math.random() * pool.length)];
   }
-  const rest = honest.concat([late]).filter(x => x !== waitLast);
-  return rest[Math.floor(Math.random() * rest.length)] || late;
+  return honestWaitNote(kind);
 }
 
 function paintWait(note){
@@ -1259,30 +1812,50 @@ function paintWait(note){
     + '<div class="queue-note wait-note" aria-live="polite">' + esc(note) + '</div>';
 }
 
+function restartLateTimer(){
+  if(waitTimer){ clearTimeout(waitTimer); waitTimer = 0; }
+  waitTimer = setTimeout(() => {
+    waitTimer = 0;
+    if(!busy || !stream || stream.dataset.raw) return;
+    waitOvertime = true;
+    paintWait(t("waitLate"));
+    scroll();
+  }, WAIT_LATE_MS);
+}
+
+function applyPhase(kind){
+  if(!stream || stream.dataset.raw) return;
+  const next = kind || "working";
+  const same = next === waitPhase && waitLast;
+  waitPhase = next;
+  waitOvertime = false;
+  if(!same) paintWait(pickWaitNote(waitPhase));
+  restartLateTimer();
+}
+
 function refreshWaitNote(){
-  const { honest, late, funny } = waitLines();
-  let note = late;
-  if(waitStep <= 0) note = honest[0];
-  else if(waitStep <= honest.length) note = honest[waitStep - 1];
-  else if(waitStep === honest.length + 1) note = late;
-  else if(funny.includes(waitLast)) note = funny[0];
-  paintWait(note);
+  if(!stream || stream.dataset.raw) return;
+  paintWait(waitOvertime ? t("waitLate") : honestWaitNote(waitPhase || "read"));
 }
 
 function stopWaitNotes(){
-  if(waitTimer){ clearInterval(waitTimer); waitTimer = 0; }
+  if(waitTimer){ clearTimeout(waitTimer); waitTimer = 0; }
 }
 
 function startWaitNotes(fresh){
-  stopWaitNotes();
-  if(fresh){ waitStep = 0; waitLast = ""; paintWait(nextWaitNote()); }
-  else if(waitLast) paintWait(waitLast);
-  else paintWait(nextWaitNote());
-  waitTimer = setInterval(() => {
-    if(!busy || !stream || stream.dataset.raw){ stopWaitNotes(); return; }
-    paintWait(nextWaitNote());
-    scroll();
-  }, 2400);
+  if(fresh){
+    waitPhase = "read";
+    waitLast = "";
+    waitOvertime = false;
+    applyPhase("read");
+    return;
+  }
+  if(waitLast){
+    paintWait(waitLast);
+    if(!waitOvertime) restartLateTimer();
+    return;
+  }
+  applyPhase(waitPhase || "read");
 }
 
 /* ---------------- composer ---------------- */
@@ -1299,8 +1872,10 @@ $("send").onclick = send;
 
 function detectOs(){
   const u = navigator.userAgent || "";
-  if(/iPad|iPhone|iPod/.test(u) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+  const plat = navigator.platform || "";
+  if(/iPad|iPhone|iPod/.test(u) || (plat === "MacIntel" && navigator.maxTouchPoints > 1))
     return "iOS";
+  if(/^Win/i.test(plat)) return "Windows";
   try{
     const p = (navigator.userAgentData && navigator.userAgentData.platform) || "";
     const mapped = mapOsHint(p);
@@ -1312,6 +1887,17 @@ function detectOs(){
   if(/CrOS/.test(u)) return "ChromeOS";
   if(/Linux/.test(u)) return "Linux";
   return "";
+}
+
+function isMacPc(){
+  return detectOs() === "macOS";
+}
+function isWindowsPc(){
+  if(isMacPc() || detectOs() === "iOS") return false;
+  return detectOs() === "Windows" || helperOnlineLocal;
+}
+function isHelperPc(){
+  return isWindowsPc() || isMacPc();
 }
 function mapOsHint(p){
   const s = (p || "").toLowerCase();
@@ -1328,30 +1914,38 @@ function send(){
   const text = input.value.trim();
   const ready = pending.filter(p => p.id && !p.uploading);
   if((!text && !ready.length) || busy || ctxBlocked) return;
+  sendTurn(text, ready);
+}
+
+function sendTurn(text, ready, {echo = true} = {}){
+  ready = ready || [];
   if(!ws || ws.readyState !== 1){ $("offline").classList.add("on"); return; }
   $("empty").style.display = "none";
 
-  // Echo the user's turn, images first
-  const wrap = document.createElement("div");
-  wrap.className = "msg u";
-  const bub = document.createElement("div");
-  bub.className = "bubble";
-  ready.forEach(p => {
-    const im = document.createElement("img");
-    im.className = "msg-img"; im.src = p.url; bub.appendChild(im);
-  });
-  if(text) bub.appendChild(document.createTextNode(text));
-  wrap.appendChild(bub); $("msgs").appendChild(wrap);
+  if(echo){
+    const wrap = document.createElement("div");
+    wrap.className = "msg u";
+    const bub = document.createElement("div");
+    bub.className = "bubble";
+    ready.forEach(p => {
+      const im = document.createElement("img");
+      im.className = "msg-img"; im.src = p.url; bub.appendChild(im);
+    });
+    if(text) bub.appendChild(document.createTextNode(text));
+    wrap.appendChild(bub); $("msgs").appendChild(wrap);
+    if(looksLikeWifiAsk(text) && isWindowsPc()) offerFridNettCard();
+  }
 
   const ids = ready.map(p => p.id);
   pending = []; renderThumbs();
   input.value = ""; input.style.height = "auto";
   busy = true; $("send").disabled = true;
+  setPcCheckBusy(true);
   const d = add("a", "");
   stream = d; stream.dataset.raw = "";
   startWaitNotes(true);
   ws.send(JSON.stringify({ message: text, attachments: ids, os: detectOs() }));
-  scroll();
+  jumpToLatest();
 }
 
 /* ---------------- image attachments ---------------- */
@@ -1419,14 +2013,1182 @@ document.addEventListener("drop", e => {
 
 function applyChips(){
   const keys = isPupil ? ["p1","p2","p3","p4"] : ["s1","s2","s3","s4"];
-  document.querySelectorAll(".chip").forEach((c, i) => {
+  document.querySelectorAll(".chip.example").forEach((c, i) => {
     if(keys[i]) c.textContent = t(keys[i]);
   });
 }
 
-document.querySelectorAll(".chip").forEach(c => c.onclick = () => {
+function applyPcCheckVisibility(){
+  const win = isWindowsPc();
+  const show = isHelperPc();
+  const showFrid = win && helperWifiProbed && !onFridNetwork();
+  const showPrinter = win;
+  ["pcCheckChip", "pcCheckBtn"].forEach(id => {
+    const el = $(id);
+    if(el) el.hidden = !show;
+  });
+  ["pcFridNettChip", "pcFridNettBtn"].forEach(id => {
+    const el = $(id);
+    if(el) el.hidden = !showFrid;
+  });
+  ["pcPrinterChip", "pcPrinterBtn"].forEach(id => {
+    const el = $(id);
+    if(el) el.hidden = !showPrinter;
+  });
+}
+
+function refreshHelperPresence(online){
+  const title = online ? t("pchelperon") : "";
+  ["pcCheckChip", "pcCheckBtn", "pcFridNettChip", "pcFridNettBtn", "pcPrinterChip", "pcPrinterBtn"].forEach(id => {
+    const el = $(id);
+    if(el) el.title = title;
+  });
+}
+
+let helperBusy = false;
+let helperTimer = null;
+let helperSession = null;
+let helperCard = null;
+let helperInstallBusy = false;
+let helperAwaitingInstall = false;
+let helperToldAgent = false;
+let helperLastTold = "";
+let helperAwaitTimer = null;
+let helperSketchupNotice = false;
+let helperFridOffer = false;
+let helperFridJob = false;
+let helperFridDone = false;
+let helperPrinterJob = false;
+let helperPrinterDone = false;
+let helperPrinterTold = false;
+
+function stopHelperPoll(){
+  if(helperTimer){
+    clearInterval(helperTimer);
+    helperTimer = null;
+  }
+}
+
+function expectInstallStart(){
+  helperAwaitingInstall = true;
+  helperInstallBusy = true;
+  if(helperAwaitTimer) clearTimeout(helperAwaitTimer);
+  helperAwaitTimer = setTimeout(() => {
+    if(!helperAwaitingInstall) return;
+    helperAwaitingInstall = false;
+    const activity = helperSession && helperSession.activity;
+    if(activity === "installing") return;
+    if(helperPrinterJob && !helperIsPrinterDone(helperSession) && !helperIsPrinterFailed(helperSession)){
+      helperInstallBusy = true;
+      paintHelperCard(helperSession);
+      return;
+    }
+    helperInstallBusy = false;
+    if(helperSession) helperSession.needs_open = false;
+    flash(t("pcopen"));
+    paintHelperCard(helperSession);
+  }, helperPrinterJob ? 180000 : 15000);
+}
+
+function setPcCheckBusy(on){
+  helperBusy = on;
+  ["pcCheckChip", "pcCheckBtn", "pcFridNettChip", "pcFridNettBtn", "pcPrinterChip", "pcPrinterBtn"].forEach(id => {
+    const el = $(id);
+    if(el) el.disabled = on;
+  });
+}
+
+function looksLikeWifiAsk(text){
+  return /(wifi|wi-?fi|tr[åa]dl[øo]s|internett|på nett|nettverk|frid-iot|frid-?nett|skolenett)/i.test(text || "");
+}
+
+function onFridNetwork(){
+  if(helperOnSchoolFrid) return true;
+  if(!helperWifiKnown) return false;
+  return isSchoolFridSsid(helperWifiSsid);
+}
+function isSchoolFridSsid(ssid){
+  const s = String(ssid || "").trim();
+  if(!s) return false;
+  if(/^FRID[-_ ]?iot$/i.test(s) || /^FRID[-_ ]?gie?st$/i.test(s)) return false;
+  return /^FRID(\b|[-_ ]|$)/i.test(s);
+}
+
+function offerFridNettCard(){
+  if(!isWindowsPc()) return;
+  if(onFridNetwork()) return;
+  helperFridOffer = true;
+  paintHelperCard(helperSession);
+}
+
+function ensureHelperCard(){
+  if(helperCard && helperCard.isConnected) return helperCard;
+  $("empty").style.display = "none";
+  const wrap = document.createElement("div");
+  wrap.className = "msg a";
+  const bub = document.createElement("div");
+  bub.className = "bubble";
+  const card = document.createElement("div");
+  card.className = "pc-card";
+  bub.appendChild(card);
+  wrap.appendChild(bub);
+  $("msgs").appendChild(wrap);
+  helperCard = card;
+  return card;
+}
+
+function missingInstallIds(result, session){
+  const rows = ((result && result.items) || []).filter(row => row && row.id && row.id !== "sketchup");
+  if(helperLogsSayReboot(session)){
+    return rows.filter(row => !row.ok && !row.reboot && row.id !== "winupdate").map(row => row.id);
+  }
+  return rows.filter(row => !row.ok && !row.reboot).map(row => row.id);
+}
+
+function helperLogsSayReboot(session){
+  return ((session && session.log) || []).some(line =>
+    /start pc-en p[aå] nytt|restart this pc/i.test((line && line.text) || "")
+  );
+}
+
+function needsReboot(result, session){
+  if(((result && result.items) || []).some(row => row && row.reboot)) return true;
+  return helperLogsSayReboot(session);
+}
+
+function isNoiseLog(text){
+  return /^(Ferdig|Sjekken er ferdig\.?|Hjelperen er i gang\.?)$/i.test((text || "").trim());
+}
+
+function lastHelperLine(session){
+  const logs = (session && session.log) || [];
+  for(let i = logs.length - 1; i >= 0; i--){
+    const text = ((logs[i] && logs[i].text) || "").trim();
+    if(!text || isNoiseLog(text)) continue;
+    return text;
+  }
+  return "";
+}
+
+function helperIsFridDone(session){
+  if(helperPrinterJob || helperPrinterDone) return false;
+  if(helperFridDone) return true;
+  if(!helperFridJob) return false;
+  return /Done!/i.test(lastHelperLine(session) || "");
+}
+
+function helperIsPrinterDone(session){
+  if(helperPrinterDone) return true;
+  if(!helperPrinterJob) return false;
+  return ((session && session.log) || []).some(line =>
+    /Printer er ferdig|Printer er installert|Done! Printer/i.test((line && line.text) || "")
+  );
+}
+
+function helperIsPrinterFailed(session){
+  if(helperIsPrinterDone(session)) return false;
+  const logs = (session && session.log) || [];
+  if(logs.some(line =>
+    /Klarte ikke a (hente|installere) printer|Printer-filen mangler|Printer-installasjonen ble lukket|Installasjon avbrutt|Trenger administrator|printer\s*:/i.test((line && line.text) || "")
+  )) return true;
+  if(!helperPrinterJob) return false;
+  const last = lastHelperLine(session);
+  if(!/installasjon ferdig/i.test(last)) return false;
+  return logs.some(line => /laster ned printer|installerer printer/i.test((line && line.text) || ""));
+}
+
+function printerFailDetail(session){
+  const logs = (session && session.log) || [];
+  for(let i = logs.length - 1; i >= 0; i--){
+    const text = ((logs[i] && logs[i].text) || "").trim();
+    if(/Klarte ikke a (hente|installere) printer|Printer-filen mangler|Printer-installasjonen ble lukket|Installasjon avbrutt|Trenger administrator|printer\s*:/i.test(text)) return text;
+  }
+  return lastHelperLine(session) || t("pcprinterfailnote");
+}
+
+function printerDownloadProgress(session){
+  let pct = null;
+  let mb = null;
+  ((session && session.log) || []).forEach(row => {
+    const text = (row && row.text) || "";
+    const p = text.match(/laster ned printer\.\.\.\s*(\d+)\s*%/i);
+    if(p){
+      const n = parseInt(p[1], 10);
+      if(!isNaN(n)) pct = Math.max(pct || 0, n);
+    }
+    const m = text.match(/laster ned printer\.\.\.\s*(\d+)\s*MB/i);
+    if(m){
+      const n = parseInt(m[1], 10);
+      if(!isNaN(n)) mb = Math.max(mb || 0, n);
+    }
+  });
+  if(pct != null) return { pct: Math.min(100, pct), label: Math.min(100, pct) + "%" };
+  if(mb != null) return { pct: null, label: mb + " MB" };
+  return null;
+}
+
+function helperHeadline(session){
+  const offering = helperFridOffer && !onFridNetwork();
+  const status = (session && session.status) || (offering ? "offer" : "waiting");
+  const activity = (session && session.activity) || "";
+  const installing = activity === "installing" || helperInstallBusy;
+  const line = lastHelperLine(session);
+  if(status === "error") return { text: helperPrinterJob ? t("pcprinterfail") : t("pcfail"), spin: false };
+  if(helperIsFridDone(session)) return { text: t("pcfridnettdone"), spin: false };
+  if(helperIsPrinterDone(session)) return { text: t("pcprinterdone"), spin: false };
+  if(helperPrinterJob && helperIsPrinterFailed(session)) return { text: t("pcprinterfail"), spin: false };
+  if(status === "offer") return { text: t("pcfridnett"), spin: false };
+  if(helperPrinterJob){
+    if(/laster ned printer/i.test(line)){
+      const prog = printerDownloadProgress(session);
+      const suffix = prog && prog.label ? " " + prog.label : "";
+      return { text: t("pcprinterdl") + suffix, spin: !(prog && prog.pct != null) };
+    }
+    if(/installerer printer/i.test(line)) return { text: t("pcprinterinst"), spin: true };
+    if(/tillatelse|godkjenn|trenger administrator/i.test(line)) return { text: t("pcprinteruac"), spin: true };
+    const prog = printerDownloadProgress(session);
+    if(prog && prog.label) return { text: t("pcprinterdl") + " " + prog.label, spin: !(prog.pct != null) };
+    return { text: t("pcprinterstart"), spin: true };
+  }
+  if(installing){
+    if(/installasjon ferdig/i.test(line)) return { text: helperPrinterJob ? t("pcprinterdone") : t("pcinstalldone"), spin: false };
+    if(/laster ned/i.test(line)) return { text: line, spin: true };
+    if(/installerer windows|installerer teams|installerer det|starter frid-nett|frid-nett|innlogging|installerer printer|laster ned printer/i.test(line)) return { text: line, spin: true };
+    if(/tillatelse|godkjenn/i.test(line)) return { text: t("pcapprove"), spin: true };
+    if(line) return { text: line, spin: true };
+    return { text: t("pcinstalling"), spin: true };
+  }
+  if(activity === "scanning"){
+    return { text: session && session.result ? t("pcrescan") : t("pcwait"), spin: true };
+  }
+  if(/installasjon ferdig/i.test(line) && (status === "done" || helperFridJob || helperPrinterJob)){
+    return { text: helperPrinterJob ? t("pcprinterdone") : t("pcinstalldone"), spin: false };
+  }
+  if(status === "done") return { text: t("pcdone"), spin: false };
+  if(helperFridJob && !installing) return { text: t("pcfridnett"), spin: false };
+  if(status === "waiting" || status === "scanning") return { text: t("pcwait"), spin: true };
+  return { text: t("pcwait"), spin: true };
+}
+
+function itemMark(row, session){
+  if(row.reboot || (row.id === "winupdate" && helperLogsSayReboot(session))){
+    return { cls: "pc-warn", text: t("pcrebootshort") };
+  }
+  if(row.found && row.ok) return { cls: "pc-ok", text: t("pcok") };
+  if(row.found) return { cls: "pc-warn", text: t("pcchk") };
+  return { cls: "pc-miss", text: t("pcmiss") };
+}
+
+function scanFingerprint(result){
+  if(!result) return "";
+  const items = (result.items || []).map(row => (row.id || "") + ":" + (row.ok ? "1" : "0") + ":" + (row.found ? "1" : "0") + ":" + (row.reboot ? "1" : "0"));
+  return String(result.scanned_at || "") + "|" + items.join(",");
+}
+
+function paintHelperCard(session){
+  const offering = helperFridOffer && !onFridNetwork();
+  const fridDone = helperIsFridDone(session);
+  const printerDone = helperIsPrinterDone(session);
+  if(!session && !offering && !helperFridJob && !fridDone && !helperPrinterJob && !printerDone){
+    if(helperCard && helperCard.isConnected){
+      const wrap = helperCard.closest(".msg");
+      if(wrap) wrap.remove();
+      helperCard = null;
+    }
+    return;
+  }
+  const card = ensureHelperCard();
+  card.replaceChildren();
+  const status = (session && session.status) || (offering ? "offer" : "waiting");
+  const activity = (session && session.activity) || "";
+  const result = session && session.result;
+  const logs = (session && session.log) || [];
+  const headline = helperHeadline(session);
+  card.classList.toggle("pc-working", headline.spin);
+  const title = document.createElement("h3");
+  if(headline.spin){
+    const spin = document.createElement("span");
+    spin.className = "pc-spinner";
+    spin.setAttribute("aria-hidden", "true");
+    title.appendChild(spin);
+  }
+  const titleText = document.createElement("span");
+  titleText.textContent = headline.text;
+  title.appendChild(titleText);
+  card.appendChild(title);
+  if(fridDone){
+    const p = document.createElement("p");
+    p.className = "pc-meta";
+    p.textContent = t("pcfridnettdonenote");
+    card.appendChild(p);
+    scroll();
+    return;
+  }
+  if(printerDone){
+    const p = document.createElement("p");
+    p.className = "pc-meta";
+    p.textContent = t("pcprinterdonenote");
+    card.appendChild(p);
+    scroll();
+    return;
+  }
+  if(helperPrinterJob && helperIsPrinterFailed(session)){
+    const err = document.createElement("p");
+    err.className = "pc-err";
+    err.textContent = printerFailDetail(session);
+    card.appendChild(err);
+    const hint = document.createElement("p");
+    hint.className = "pc-meta";
+    hint.textContent = t("pcprinterfailnote");
+    card.appendChild(hint);
+    scroll();
+    return;
+  }
+  if(status === "offer"){
+    const p = document.createElement("p");
+    p.className = "pc-meta";
+    p.textContent = t("pcfridnettnote");
+    card.appendChild(p);
+    const actions = document.createElement("div");
+    actions.className = "pc-actions";
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "pc-install";
+    go.textContent = t("pcfridnett");
+    go.onclick = () => startFridNett();
+    actions.appendChild(go);
+    card.appendChild(actions);
+    scroll();
+    return;
+  }
+  if(helperFridJob && headline.spin){
+    const p = document.createElement("p");
+    p.className = "pc-meta";
+    p.textContent = t("pcfridnettwait");
+    card.appendChild(p);
+  } else if(helperPrinterJob && (headline.spin || printerDownloadProgress(session))){
+    const p = document.createElement("p");
+    p.className = "pc-meta";
+    const line = lastHelperLine(session);
+    const prog = printerDownloadProgress(session);
+    const downloading = /laster ned printer/i.test(line) || !!(prog && prog.label);
+    if(/installerer printer/i.test(line)){
+      p.textContent = line;
+    } else if(downloading){
+      p.textContent = t("pcprinterwait");
+    } else if(/tillatelse|godkjenn|trenger administrator/i.test(line)){
+      p.textContent = t("pcprinteruacnote");
+    } else {
+      p.textContent = t("pcprinterstartnote");
+    }
+    card.appendChild(p);
+    if(downloading){
+      const bar = document.createElement("div");
+      bar.className = "pc-bar" + (prog && prog.pct != null ? "" : " pc-bar-busy");
+      const fill = document.createElement("span");
+      if(prog && prog.pct != null) fill.style.width = prog.pct + "%";
+      bar.appendChild(fill);
+      card.appendChild(bar);
+      if(prog && prog.label){
+        const lab = document.createElement("p");
+        lab.className = "pc-bar-label";
+        lab.textContent = prog.label;
+        card.appendChild(lab);
+      }
+    }
+  } else if((status === "waiting" || status === "scanning") && !result){
+    const p = document.createElement("p");
+    p.className = "pc-meta";
+    p.textContent = logs.length ? t("pctrayscan") : (isMacPc() ? t("pcopenmac") : t("pcopen"));
+    card.appendChild(p);
+  }
+  if(status === "error"){
+    const err = document.createElement("p");
+    err.className = "pc-err";
+    err.textContent = (session && session.error) || t("pcfail");
+    card.appendChild(err);
+  }
+  if(result && !helperFridJob && !helperPrinterJob && (status === "done" || activity === "installing" || helperInstallBusy || activity === "scanning")){
+    const pills = document.createElement("div");
+    pills.className = "pc-pills";
+    (result.items || []).forEach(row => {
+      if(!row || row.id === "sketchup") return;
+      const mark = itemMark(row, session);
+      const span = document.createElement("span");
+      span.className = "pc-pill " + mark.cls;
+      span.textContent = (row.name || row.id || "") + ": " + mark.text;
+      pills.appendChild(span);
+    });
+    card.appendChild(pills);
+    const missing = missingInstallIds(result, session);
+    const reboot = needsReboot(result, session);
+    if(reboot && !headline.spin){
+      const p = document.createElement("p");
+      p.className = "pc-meta";
+      p.textContent = t("pcreboot");
+      card.appendChild(p);
+    }
+    const idle = !headline.spin && activity !== "installing" && !helperInstallBusy;
+    if(idle && !isMacPc()){
+      const actions = document.createElement("div");
+      actions.className = "pc-actions";
+      if(missing.length){
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "pc-install";
+        btn.textContent = t("pcinstall");
+        btn.onclick = () => requestHelperInstall();
+        actions.appendChild(btn);
+      }
+      const su = document.createElement("button");
+      su.type = "button";
+      su.className = "pc-sketchup";
+      su.textContent = t("pcsketchup");
+      su.onclick = () => {
+        helperSketchupNotice = true;
+        paintHelperCard(helperSession);
+      };
+      actions.appendChild(su);
+      if(!onFridNetwork()){
+        const frid = document.createElement("button");
+        frid.type = "button";
+        frid.className = "pc-sketchup";
+        frid.textContent = t("pcfridnett");
+        frid.onclick = () => startFridNett();
+        actions.appendChild(frid);
+      }
+      const printer = document.createElement("button");
+      printer.type = "button";
+      printer.className = "pc-sketchup";
+      printer.textContent = t("pcprinter");
+      printer.onclick = () => startPrinter();
+      actions.appendChild(printer);
+      card.appendChild(actions);
+    }
+    if(idle && helperSketchupNotice && !isMacPc()){
+      const note = document.createElement("p");
+      note.className = "pc-sketchup-note";
+      note.textContent = t("pcsketchupnote");
+      card.appendChild(note);
+      const confirm = document.createElement("div");
+      confirm.className = "pc-actions";
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = "pc-install";
+      go.textContent = t("pcsketchupgo");
+      go.onclick = () => requestSketchupInstall();
+      confirm.appendChild(go);
+      card.appendChild(confirm);
+    }
+  }
+  scroll();
+}
+
+function formatScanForAgent(result){
+  const mac = isMacPc() || ((result && result.items) || []).some(row => row && row.id === "macupdate");
+  const lines = [
+    mac
+      ? "Jeg har kjørt sjekken på denne Macen. Brukeren ser bare en kort OK-liste, ikke denne teksten."
+      : "Jeg har kjørt sjekken på denne Windows-PCen. Brukeren ser bare en kort OK-liste, ikke denne teksten.",
+    "Ikke gi winget, Terminal, PowerShell eller andre kommandoer. De kan ikke kjøre dem.",
+    mac
+      ? "Si konkret hva som er i orden og hva som mangler. Dette er bare en sjekk — det finnes ingen Installer-knapp på Mac. macOS-oppdateringer tar de i Systeminnstillinger → Generelt → Programvareoppdatering."
+      : "Si konkret hva som er i orden og hva som mangler. Hvis noe mangler: si at de kan klikke «Installer / oppdater med Zork Helper» på kortet over. Det er den eneste måten å installere på.",
+    mac ? null : "Wifi på denne Windows-PCen: hvis de allerede er på wifi-nettverket FRID, ikke send dem til FRID-nett. Ellers: si at de må være på skolen og klikke «FRID-nett» på kortet. Zork Helper kobler til FRID-iot, åpner innloggingsvinduet og kjører QuickConnect etter at de har logget inn og trykket Start QuickConnect. Ikke send dem til onboard.frid-iks.no når knappen er der.",
+    mac ? null : "Skriver på denne Windows-PCen: hvis printer mangler, si at de klikker «Skaff printer» under chatten. Zork Helper laster ned og installerer skoleskriveren. Ikke send dem til AppsAnywhere for det.",
+    mac
+      ? "Første gang: de lastet ned ZorkHelper.command. Si at de høyreklikker den i Nedlastinger og velger Åpne. Ikke be dem lime inn kommandoer i Terminal."
+      : "Ikke be dem laste ned Zork Helper på nytt. Den ligger ved klokken, og knappen snakker med den.",
+    "Ikke svar bare «Ferdig».",
+    "",
+    "Maskin: " + (result.host || "—"),
+    "OS: " + (result.os || "—"),
+  ].filter(Boolean);
+  lines.push("", "Programmer:");
+  (result.items || []).forEach(row => {
+    if(!row || row.id === "sketchup") return;
+    const state = row.reboot ? "MÅ STARTES PÅ NYTT" : (!row.found ? "MÅ INSTALLERES" : (row.ok ? "I ORDEN" : "MÅ FIKSES"));
+    const extra = [row.note, row.version].filter(Boolean).join(" — ");
+    lines.push("- " + (row.name || row.id) + ": " + state + (extra ? " (" + extra + ")" : ""));
+  });
+  if(!mac){
+    lines.push("", "SketchUp er ikke med i sjekken. De kan klikke «SketchUp» på kortet hvis de trenger det i faget. Ikke be dem installere det ellers.");
+  }
+  return lines.join("\n");
+}
+
+async function downloadHelperLauncher(sessionId){
+  const qs = isMacPc() ? "?os=mac" : "";
+  const dl = await fetch("/api/helper/sessions/" + encodeURIComponent(sessionId) + "/launcher" + qs, {
+    headers: { Authorization: "Bearer " + token },
+  });
+  if(!dl.ok) throw new Error("http " + dl.status);
+  const blob = await dl.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = isMacPc() ? "ZorkHelper.command" : "ZorkHelper.cmd";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const HELPER_INSTALLED_KEY = "zorkHelperInstalled";
+let helperLoopbackHost = "127.0.0.1";
+let loopbackPermStatus = null;
+let loopbackDenied = false;
+
+async function queryLoopbackPermission(){
+  if(!navigator.permissions || !navigator.permissions.query) return null;
+  for(const name of ["loopback-network", "local-network-access"]){
+    try{ return await navigator.permissions.query({ name }); }
+    catch(_){}
+  }
+  return null;
+}
+function paintLoopbackNotice(){
+  const el = $("loopbackNotice");
+  if(!el) return;
+  el.hidden = !(loopbackDenied && isWindowsPc());
+}
+function setLoopbackDenied(on){
+  loopbackDenied = !!on;
+  paintLoopbackNotice();
+}
+async function applyLoopbackPermission(status){
+  setLoopbackDenied(!!(status && status.state === "denied"));
+  if(!loopbackDenied && isWindowsPc()){
+    refreshFridNettFromWifi();
+  }
+}
+async function watchLoopbackPermission(){
+  const status = await queryLoopbackPermission();
+  if(!status) return;
+  loopbackPermStatus = status;
+  status.onchange = () => applyLoopbackPermission(status);
+  await applyLoopbackPermission(status);
+}
+async function loopbackIsDenied(){
+  const status = loopbackPermStatus || await queryLoopbackPermission();
+  if(status && status !== loopbackPermStatus){
+    loopbackPermStatus = status;
+    status.onchange = () => applyLoopbackPermission(status);
+  }
+  return !!(status && status.state === "denied");
+}
+async function retryLoopbackPermission(){
+  await watchLoopbackPermission();
+  if(loopbackDenied) return;
+  await pingLocalHelper(null);
+  applyPcCheckVisibility();
+}
+const loopbackRetryBtn = $("loopbackRetry");
+if(loopbackRetryBtn) loopbackRetryBtn.onclick = () => { retryLoopbackPermission(); };
+
+function markHelperInstalled(){
+  helperSeenThisTab = true;
+  try { localStorage.setItem(HELPER_INSTALLED_KEY, "1"); } catch(_){}
+}
+function helperAlreadyOnThisPc(){
+  if(helperSeenThisTab) return true;
+  try { return localStorage.getItem(HELPER_INSTALLED_KEY) === "1"; } catch(_){ return false; }
+}
+function sleepMs(ms){
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+async function waitForLoopbackDecision(ms){
+  const deadline = Date.now() + (ms || 120000);
+  while(Date.now() < deadline){
+    const status = loopbackPermStatus || await queryLoopbackPermission();
+    if(status && status !== loopbackPermStatus){
+      loopbackPermStatus = status;
+      status.onchange = () => applyLoopbackPermission(status);
+    }
+    if(!status || status.state !== "prompt"){
+      if(status) await applyLoopbackPermission(status);
+      return status ? status.state : null;
+    }
+    await sleepMs(250);
+  }
+  return "prompt";
+}
+function wakeHelperApp(){
+  try{
+    const a = document.createElement("a");
+    a.href = "zorkhelper://wake";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }catch(_){}
+}
+function localHelperUrl(session, host){
+  const port = (session && session.local_port) || 18792;
+  return "http://" + (host || helperLoopbackHost) + ":" + port;
+}
+function helperFetchOpts(extra){
+  return Object.assign({ mode: "cors", cache: "no-store", credentials: "omit" }, extra || {});
+}
+
+async function pingOneHelper(session, host, ms){
+  try{
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), ms || 1500);
+    const r = await fetch(localHelperUrl(session, host) + "/v1/ping", helperFetchOpts({ signal: c.signal }));
+    clearTimeout(t);
+    if(r.ok){
+      if(loopbackDenied) setLoopbackDenied(false);
+      helperLoopbackHost = host;
+      helperOnlineLocal = true;
+      helperSeenThisTab = true;
+      try{
+        const data = await r.json();
+        if(data && Object.prototype.hasOwnProperty.call(data, "ssid")){
+          const ssid = String(data.ssid || "").trim();
+          if(ssid){
+            helperWifiSsid = ssid;
+            helperWifiConnected = !!data.connected;
+            helperWifiKnown = true;
+            if(isSchoolFridSsid(ssid)) helperOnSchoolFrid = true;
+          } else if(!helperOnSchoolFrid){
+            helperWifiSsid = "";
+            helperWifiConnected = !!data.connected;
+            helperWifiKnown = true;
+          }
+        }
+      }catch(_){}
+      return true;
+    }
+  }catch(_){}
+  return false;
+}
+
+async function pingLocalHelper(session, ms){
+  const found = await Promise.all(["127.0.0.1", "localhost"].map(host => pingOneHelper(session, host, ms)));
+  if(!found.some(Boolean)){
+    helperOnlineLocal = false;
+    if(!helperOnSchoolFrid) helperWifiKnown = false;
+  }
+  if(!found.some(Boolean) && !loopbackDenied){
+    const status = await queryLoopbackPermission();
+    if(status){
+      if(status !== loopbackPermStatus){
+        loopbackPermStatus = status;
+        status.onchange = () => applyLoopbackPermission(status);
+      }
+      if(status.state === "denied") setLoopbackDenied(true);
+    }
+  }
+  return found.some(Boolean);
+}
+
+function stopWifiWatch(){
+  if(helperWifiTimer){
+    clearInterval(helperWifiTimer);
+    helperWifiTimer = null;
+  }
+  document.removeEventListener("visibilitychange", refreshFridNettFromWifi);
+}
+
+async function refreshFridNettFromWifi(){
+  if(helperPrinterJob){
+    helperWifiProbed = true;
+    applyPcCheckVisibility();
+    return helperOnSchoolFrid;
+  }
+  if(helperOnSchoolFrid){
+    helperWifiProbed = true;
+    applyPcCheckVisibility();
+    return true;
+  }
+  if(loopbackDenied){
+    helperWifiProbed = true;
+    applyPcCheckVisibility();
+    return false;
+  }
+  const found = await pingLocalHelper(null, 1500);
+  if(found) helperWifiProbed = true;
+  applyPcCheckVisibility();
+  if(helperFridOffer && onFridNetwork()) helperFridOffer = false;
+  if(helperCard && helperCard.isConnected) paintHelperCard(helperSession);
+  if(helperOnSchoolFrid) stopWifiWatch();
+  return found;
+}
+
+async function probeHelperWifi(ms){
+  const deadline = Date.now() + ms;
+  while(Date.now() < deadline){
+    if(loopbackDenied) return false;
+    if(await refreshFridNettFromWifi()) return true;
+    await sleepMs(250);
+  }
+  return false;
+}
+
+function startWifiWatch(){
+  probeHelperWifi(4000).then(found => {
+    helperWifiProbed = true;
+    applyPcCheckVisibility();
+    if(helperOnSchoolFrid) return;
+    if(detectOs() !== "Windows" && !found) return;
+    if(helperWifiTimer) return;
+    helperWifiTimer = setInterval(refreshFridNettFromWifi, 8000);
+    document.addEventListener("visibilitychange", refreshFridNettFromWifi);
+  });
+}
+
+async function askLocalHelper(session, kind, items){
+  if(!session || !session.id || !session.handoff) return false;
+  try{
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 6000);
+    const r = await fetch(localHelperUrl(session) + "/v1/job", helperFetchOpts({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        base_url: location.origin,
+        session_id: session.id,
+        session_secret: session.handoff,
+        kind: kind || "scan",
+        items: items || [],
+      }),
+      signal: c.signal,
+    }));
+    clearTimeout(t);
+    return r.ok;
+  }catch(_){ return false; }
+}
+
+async function enqueueHelperJob(session, kind, items){
+  const r = await fetch("/api/helper/sessions/" + encodeURIComponent(session.id) + "/enqueue", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: kind || "scan", items: items || [] }),
+  });
+  if(!r.ok) return null;
+  try { return await r.json(); } catch(_){ return null; }
+}
+
+async function waitForLocalHelper(session, kind, items, ms){
+  const deadline = Date.now() + ms;
+  while(Date.now() < deadline){
+    if(await askLocalHelper(session, kind, items)){
+      return true;
+    }
+    await sleepMs(250);
+  }
+  return false;
+}
+
+async function deliverHelperJob(session, kind, items){
+  if(await askLocalHelper(session, kind, items)){
+    markHelperInstalled();
+    return true;
+  }
+  return false;
+}
+
+async function dispatchHelperJob(session, kind, items, opts){
+  const known = helperAlreadyOnThisPc();
+  const allowDownload = !!(opts && opts.allowDownload) && !helperSeenThisTab;
+  if(await deliverHelperJob(session, kind, items)) return "local";
+  await waitForLoopbackDecision(120000);
+  if(await loopbackIsDenied()){
+    setLoopbackDenied(true);
+    try{
+      const queued = await enqueueHelperJob(session, kind, items);
+      if(queued && queued.via === "tray"){
+        markHelperInstalled();
+        return "server";
+      }
+    }catch(_){}
+    return "blocked";
+  }
+  if(await deliverHelperJob(session, kind, items)) return "local";
+  if(isMacPc()){
+    if(!allowDownload) return "wake";
+    try{
+      await downloadHelperLauncher(session.id);
+      return "download";
+    }catch(_){
+      return "wake";
+    }
+  }
+  wakeHelperApp();
+  if(await waitForLocalHelper(session, kind, items, known ? 15000 : 8000)){
+    markHelperInstalled();
+    return "local";
+  }
+  try{
+    const queued = await enqueueHelperJob(session, kind, items);
+    if(queued && queued.via === "tray"){
+      markHelperInstalled();
+      return "server";
+    }
+  }catch(_){}
+  if(!allowDownload) return "wake";
+  try{
+    await downloadHelperLauncher(session.id);
+    return "download";
+  }catch(_){
+    return "wake";
+  }
+}
+
+async function waitForHelperPing(session, ms){
+  const deadline = Date.now() + ms;
+  while(Date.now() < deadline){
+    if(await pingLocalHelper(session)) return true;
+    await sleepMs(250);
+  }
+  return false;
+}
+
+async function startFridNett(){
+  if(helperInstallBusy) return;
+  if(!isWindowsPc()){
+    flash(t("pcnowin"));
+    return;
+  }
+  helperFridOffer = false;
+  helperFridJob = true;
+  helperFridDone = false;
+  helperPrinterJob = false;
+  helperPrinterDone = false;
+  helperPrinterTold = false;
+
+  const finishIfOnFrid = async () => {
+    await pingLocalHelper(helperSession);
+    applyPcCheckVisibility();
+    if(!onFridNetwork()) return false;
+    helperFridDone = true;
+    helperInstallBusy = false;
+    helperAwaitingInstall = false;
+    setPcCheckBusy(false);
+    paintHelperCard(helperSession);
+    tellAgentFridNettAlreadyOnFrid();
+    return true;
+  };
+
+  if(helperSession && helperSession.id){
+    setPcCheckBusy(true);
+    paintHelperCard(helperSession);
+    if(await finishIfOnFrid()) return;
+    await helperInstallItems(["fridnett"]);
+    tellAgentFridNettStarted();
+    return;
+  }
+  stopHelperPoll();
+  setPcCheckBusy(true);
+  helperSession = null;
+  helperToldAgent = false;
+  helperLastTold = "";
+  helperSketchupNotice = false;
+  try{
+    const session = await api("/api/helper/sessions", {
+      method: "POST",
+      body: JSON.stringify({ kind: "install", items: ["fridnett"] }),
+    });
+    helperSession = session;
+    helperInstallBusy = true;
+    paintHelperCard(session);
+    helperTimer = setInterval(() => pollHelper(), 1000);
+    pollHelper();
+    if(await finishIfOnFrid()) return;
+    const via = await dispatchHelperJob(session, "install", ["fridnett"], { allowDownload: true });
+    if(helperSession){
+      helperSession.via_tray = via === "local" || via === "server";
+      helperSession.needs_open = false;
+      paintHelperCard(helperSession);
+    }
+    if(via === "local" || via === "server"){
+      expectInstallStart();
+    }else if(via === "wake"){
+      helperInstallBusy = false;
+      flash(t("pcopen"));
+    }else if(via === "blocked"){
+      helperInstallBusy = false;
+      setPcCheckBusy(false);
+    }
+    if(via !== "blocked") tellAgentFridNettStarted();
+  }catch(_){
+    flash(t("pcstartfail"));
+    helperSession = null;
+    helperFridJob = false;
+    helperFridDone = false;
+    helperPrinterJob = false;
+    helperPrinterDone = false;
+    helperPrinterTold = false;
+    stopHelperPoll();
+    setPcCheckBusy(false);
+  }
+}
+
+function tellAgentFridNettAlreadyOnFrid(){
+  if(busy || ctxBlocked) return;
+  sendTurn(
+    "Brukeren har trykket FRID-nett. De er allerede på wifi-nettverket FRID. Si at det er i orden — Done — de er på riktig nettverk. Ikke send dem til innlogging, Last ned eller onboard.frid-iks.no.",
+    [],
+    { echo: false }
+  );
+}
+
+function tellAgentFridNettStarted(){
+  if(busy || ctxBlocked) return;
+  sendTurn(
+    "Brukeren har trykket FRID-nett. Si at de må være på skolen og godkjenne i Windows hvis de blir spurt. Zork Helper sjekker wifi: er de på FRID, er de ferdige. Ellers kobler den til FRID-iot med passordet og åpner innlogging først når de er på FRID-iot. De logger inn der med skolekontoen og trykker Start QuickConnect. Helper klikker Next og Ja i QuickConnect. De skal ikke trykke Installer på kortet. Ikke send dem til onboard.frid-iks.no nå.",
+    [],
+    { echo: false }
+  );
+}
+
+function tellAgentPrinterStarted(){
+  if(busy || ctxBlocked) return;
+  sendTurn(
+    "Brukeren har trykket Skaff printer. Si at de må godkjenne i Windows hvis de blir spurt. Zork Helper laster ned og installerer skoleskriveren. De skal ikke trykke noe mer på kortet. Ikke send dem til AppsAnywhere eller et MSI-filnavn.",
+    [],
+    { echo: false }
+  );
+}
+
+function tellAgentPrinterFinished(ok, detail){
+  if(helperPrinterTold || busy || ctxBlocked) return;
+  helperPrinterTold = true;
+  if(ok){
+    sendTurn(
+      "Zork Helper er ferdig med skoleskriveren. Si at det er i orden — de kan skrive ut. Ikke si at du har installert noe selv.",
+      [],
+      { echo: false }
+    );
+  }else{
+    sendTurn(
+      "Zork Helper fikk ikke installert skoleskriveren (" + (detail || "ukjent feil") + "). Si hva de kan gjøre, eller at de kan trykke Skaff printer igjen. Ikke si at du har fikset det.",
+      [],
+      { echo: false }
+    );
+  }
+}
+
+async function startPrinter(){
+  if(helperInstallBusy) return;
+  if(!isWindowsPc()){
+    flash(t("pcnowin"));
+    return;
+  }
+  helperFridOffer = false;
+  helperFridJob = false;
+  helperFridDone = false;
+  helperPrinterJob = true;
+  helperPrinterDone = false;
+  helperPrinterTold = false;
+  stopWifiWatch();
+
+  if(helperSession && helperSession.id){
+    setPcCheckBusy(true);
+    paintHelperCard(helperSession);
+    await helperInstallItems(["printer"]);
+    tellAgentPrinterStarted();
+    return;
+  }
+  stopHelperPoll();
+  setPcCheckBusy(true);
+  helperSession = null;
+  helperToldAgent = false;
+  helperLastTold = "";
+  helperSketchupNotice = false;
+  try{
+    const session = await api("/api/helper/sessions", {
+      method: "POST",
+      body: JSON.stringify({ kind: "install", items: ["printer"] }),
+    });
+    helperSession = session;
+    helperInstallBusy = true;
+    paintHelperCard(session);
+    helperTimer = setInterval(() => pollHelper(), 1000);
+    pollHelper();
+    const via = await dispatchHelperJob(session, "install", ["printer"], { allowDownload: true });
+    if(helperSession){
+      helperSession.via_tray = via === "local" || via === "server";
+      helperSession.needs_open = false;
+      paintHelperCard(helperSession);
+    }
+    if(via === "local" || via === "server"){
+      expectInstallStart();
+    }else if(via === "wake"){
+      helperInstallBusy = false;
+      flash(t("pcopen"));
+    }else if(via === "blocked"){
+      helperInstallBusy = false;
+      setPcCheckBusy(false);
+    }
+    if(via !== "blocked") tellAgentPrinterStarted();
+  }catch(_){
+    flash(t("pcstartfail"));
+    helperSession = null;
+    helperPrinterJob = false;
+    helperPrinterDone = false;
+    helperPrinterTold = false;
+    stopHelperPoll();
+    setPcCheckBusy(false);
+  }
+}
+
+async function startPcCheck(){
+  if(helperBusy) return;
+  if(!isHelperPc()){
+    flash(t("pcnowin"));
+    return;
+  }
+  stopHelperPoll();
+  setPcCheckBusy(true);
+  helperSession = null;
+  helperInstallBusy = false;
+  helperToldAgent = false;
+  helperLastTold = "";
+  helperSketchupNotice = false;
+  helperFridJob = false;
+  helperFridDone = false;
+  helperPrinterJob = false;
+  helperPrinterDone = false;
+  helperPrinterTold = false;
+  try{
+    const session = await api("/api/helper/sessions", { method: "POST", body: JSON.stringify({ kind: "scan" }) });
+    helperSession = session;
+    paintHelperCard(session);
+    helperTimer = setInterval(() => pollHelper(), 1000);
+    pollHelper();
+    const via = await dispatchHelperJob(session, "scan", [], { allowDownload: true });
+    if(via === "download" && isMacPc()){
+      flash(t("pcopenmac"));
+    }
+    if(via === "blocked"){
+      helperSession = null;
+      paintHelperCard(null);
+      stopHelperPoll();
+      setPcCheckBusy(false);
+    }else if(helperSession){
+      helperSession.via_tray = via === "local" || via === "server";
+      helperSession.needs_open = false;
+      paintHelperCard(helperSession);
+    }
+  }catch(_){
+    flash(t("pcstartfail"));
+    helperSession = null;
+    stopHelperPoll();
+    setPcCheckBusy(false);
+  }
+}
+
+async function helperInstallItems(items){
+  if(!helperSession || !helperSession.id || helperInstallBusy) return;
+  if(!items || !items.length) return;
+  helperInstallBusy = true;
+  helperSession.needs_open = false;
+  paintHelperCard(helperSession);
+  try{
+    const via = await dispatchHelperJob(helperSession, "install", items, { allowDownload: false });
+    helperSession.via_tray = via === "local" || via === "server";
+    helperSession.needs_open = false;
+    if(via === "local" || via === "server"){
+      expectInstallStart();
+    }else if(via === "blocked"){
+      helperInstallBusy = false;
+    }else{
+      helperInstallBusy = false;
+      flash(t("pcopen"));
+    }
+    paintHelperCard(helperSession);
+    helperTimer = setInterval(() => pollHelper(), 1000);
+    pollHelper();
+  }catch(_){
+    flash(t("pcstartfail"));
+    helperInstallBusy = false;
+    helperSession.needs_open = false;
+    paintHelperCard(helperSession);
+  }
+}
+
+async function requestHelperInstall(){
+  await helperInstallItems(missingInstallIds(helperSession && helperSession.result, helperSession));
+}
+
+async function requestSketchupInstall(){
+  helperSketchupNotice = false;
+  await helperInstallItems(["sketchup"]);
+}
+
+async function pollHelper(){
+  if(!helperSession || !helperSession.id) return;
+  try{
+    const next = await api("/api/helper/sessions/" + encodeURIComponent(helperSession.id));
+    const handoff = helperSession.handoff;
+    const localPort = helperSession.local_port;
+    const viaTray = helperSession.via_tray;
+    const needsOpen = helperSession.needs_open;
+    helperSession = Object.assign({}, helperSession, next);
+    if(handoff) helperSession.handoff = handoff;
+    if(localPort) helperSession.local_port = localPort;
+    if(viaTray) helperSession.via_tray = true;
+    if(needsOpen && next.activity !== "installing" && next.status !== "scanning") helperSession.needs_open = true;
+    else if(next.activity === "installing" || next.status === "scanning") helperSession.needs_open = false;
+    if(next.status === "done") markHelperInstalled();
+    if(helperFridJob && helperIsFridDone(helperSession)){
+      helperFridDone = true;
+      helperInstallBusy = false;
+      helperAwaitingInstall = false;
+      setPcCheckBusy(false);
+    }
+    if(helperPrinterJob && helperIsPrinterDone(helperSession)){
+      helperPrinterDone = true;
+      helperInstallBusy = false;
+      helperAwaitingInstall = false;
+      setPcCheckBusy(false);
+      tellAgentPrinterFinished(true);
+    }
+    if(helperPrinterJob && !helperPrinterDone && helperIsPrinterFailed(helperSession)){
+      helperInstallBusy = false;
+      helperAwaitingInstall = false;
+      setPcCheckBusy(false);
+      tellAgentPrinterFinished(false, printerFailDetail(helperSession));
+    }
+    if(next.activity === "installing"){
+      helperInstallBusy = true;
+      helperAwaitingInstall = false;
+      if(helperAwaitTimer) clearTimeout(helperAwaitTimer);
+    }else if(!helperAwaitingInstall){
+      const printerWorking = helperPrinterJob && !helperPrinterDone && !helperIsPrinterFailed(helperSession);
+      const fridWorking = helperFridJob && !helperIsFridDone(helperSession);
+      if(!printerWorking && !fridWorking) helperInstallBusy = false;
+    }
+    paintHelperCard(helperSession);
+    if(next.status === "done" || next.status === "error"){
+      if(next.activity !== "installing" && next.activity !== "scanning" && !helperAwaitingInstall && !helperInstallBusy){
+        setPcCheckBusy(false);
+      }
+      const fp = scanFingerprint(next.result);
+      if(next.status === "done" && next.result && !helperFridJob && !helperPrinterJob && next.activity !== "installing" && next.activity !== "scanning" && !helperInstallBusy && !helperAwaitingInstall && fp && fp !== helperLastTold && !busy && !ctxBlocked){
+        helperLastTold = fp;
+        helperToldAgent = true;
+        sendTurn(formatScanForAgent(next.result), [], { echo: false });
+      }
+    }else if((helperFridJob || helperPrinterJob) && next.activity !== "installing" && next.activity !== "scanning" && !helperAwaitingInstall && !helperInstallBusy){
+      if(!(helperPrinterJob && !helperPrinterDone && !helperIsPrinterFailed(helperSession))){
+        setPcCheckBusy(false);
+      }
+    }
+  }catch(_){}
+}
+
+document.querySelectorAll(".chip.example").forEach(c => c.onclick = () => {
   input.value = c.textContent; input.oninput(); input.focus();
 });
+$("pcCheckChip").onclick = startPcCheck;
+$("pcCheckBtn").onclick = startPcCheck;
+$("pcFridNettChip").onclick = startFridNett;
+$("pcFridNettBtn").onclick = startFridNett;
+$("pcPrinterChip").onclick = startPrinter;
+$("pcPrinterBtn").onclick = startPrinter;
 
 $("newBtn").onclick = async () => {
   const leaving = convId;

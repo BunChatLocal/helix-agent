@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-theme="ocean">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Zork Admin</title>
+<title>Zorken Admin</title>
 <script src="/static/vendor/tailwind.js"></script>
 <script defer src="/static/vendor/alpine.min.js"></script>
 <script>
@@ -509,9 +509,15 @@
   }
   .ticket-status-backdrop { position: fixed; inset: 0; z-index: 69; }
 
-  .ticket-thread { display: flex; flex-direction: column; gap: 0.7rem; padding: 0.15rem 0 0.35rem; }
-  .ticket-row { display: flex; flex-direction: column; max-width: min(78%, 36rem); }
-  .ticket-row.me { align-self: flex-end; align-items: flex-end; }
+  .ticket-thread {
+    display: flex; flex-direction: column; gap: 0.7rem;
+    padding: 0.15rem 0 0.35rem; width: 100%; min-width: 0;
+  }
+  .ticket-row {
+    display: flex; flex-direction: column;
+    max-width: min(78%, 36rem); min-width: 0;
+  }
+  .ticket-row.me { align-self: flex-end; align-items: flex-end; margin-left: auto; }
   .ticket-row.them { align-self: flex-start; align-items: flex-start; }
   .ticket-meta { font-size: 11px; color: #64748b; margin: 0 0.45rem 0.22rem; }
   .ticket-bubble {
@@ -519,22 +525,23 @@
     font-size: 0.875rem;
     line-height: 1.45;
     word-break: break-word;
+    max-width: 100%;
   }
   .ticket-bubble.me {
-    background: #0a84ff;
+    background: var(--accent);
     color: #fff;
-    border-radius: 18px 18px 4px 18px;
+    border-radius: 12px 12px 4px 12px;
   }
   .ticket-bubble.them {
-    background: #3a3a3c;
+    background: rgba(255,255,255,0.06);
     color: #f1f5f9;
-    border-radius: 18px 18px 18px 4px;
+    border-radius: 12px 12px 12px 4px;
   }
-  html.light .ticket-bubble.them { background: #e5e5ea; color: #111827; }
+  html.light .ticket-bubble.them { background: #e8eef5; color: #111827; }
   .ticket-shots { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .ticket-shots + .ticket-shots, .ticket-bubble > div + .ticket-shots { margin-top: 0.45rem; }
   .ticket-shots img {
-    max-width: 220px; max-height: 160px; border-radius: 10px;
+    max-width: min(220px, 100%); max-height: 160px; border-radius: 10px;
     object-fit: cover; cursor: zoom-in; display: block;
   }
   .ticket-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -553,6 +560,110 @@
     background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
   }
   .ticket-attach:hover { color: #e2e8f0; background: rgba(255,255,255,0.07); }
+
+  .desk-col { width: min(720px, 100%); margin: 0 auto; padding: 0 4px; min-width: 0; }
+  .desk-chat-feed { display: flex; flex-direction: column; gap: 0; padding: 28px 0 20px; }
+  .desk-chat-feed > div:first-child .desk-date-wrap { margin-top: 0; }
+  .desk-date-wrap { display: flex; justify-content: center; margin: 1.1rem 0 0.85rem; }
+  .desk-date-chip {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    color: #94a3b8; padding: 0.2rem 0.7rem; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.07); background: rgba(255,255,255,0.03);
+  }
+  .desk-msg { display: flex; gap: 10px; align-items: flex-start; width: 100%; }
+  .desk-msg.head { margin-top: 0.95rem; }
+  .desk-msg.cont { margin-top: 0.15rem; }
+  .desk-msg.mine { flex-direction: row-reverse; }
+  .desk-msg-stack { min-width: 0; padding-top: 2px; display: flex; flex-direction: column; align-items: flex-start; }
+  .desk-msg.mine .desk-msg-stack { align-items: flex-end; }
+  .desk-initials {
+    width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    color: var(--accent-light);
+    background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.18);
+    border: 1px solid rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.22);
+  }
+  .desk-initials.ghost { visibility: hidden; }
+  .desk-msg-meta { display: flex; align-items: baseline; gap: 0.45rem; margin-bottom: 0.12rem; flex-wrap: wrap; }
+  .desk-msg.mine .desk-msg-meta { justify-content: flex-end; }
+  .desk-msg-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+  .desk-msg-time { font-size: 11px; color: #64748b; }
+  .desk-msg-role {
+    font-size: 10px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase;
+    color: #94a3b8;
+  }
+  .desk-msg-body { font-size: 14.5px; line-height: 1.55; color: #cbd5e1; white-space: pre-wrap; word-break: break-word; max-width: 36em; }
+  .desk-msg.mine .desk-msg-body { padding-bottom: 0; }
+  .desk-msg.mine .desk-msg-body::after {
+    content: "";
+    display: block;
+    height: 1px;
+    margin-top: 6px;
+    background: linear-gradient(90deg, transparent 0%, #3b82f6 22%, #3b82f6 78%, transparent 100%);
+  }
+  .desk-empty { text-align: center; padding: 14vh 16px 4rem; }
+  .desk-empty-title { font-size: 15px; font-weight: 600; color: #e2e8f0; margin: 0 0 0.4rem; }
+  .desk-empty-copy { font-size: 13.5px; line-height: 1.5; color: #94a3b8; margin: 0 0 1.1rem; }
+  .desk-empty-actions { display: flex; justify-content: center; gap: 0.6rem; flex-wrap: wrap; }
+  .desk-composer-wrap { padding: 0.75rem 1.5rem 1.15rem; }
+  .desk-composer {
+    width: min(720px, 100%); margin: 0 auto; min-width: 0;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.035);
+    border-radius: 14px; padding: 0.7rem 0.8rem 0.65rem;
+  }
+  .desk-composer form { display: flex; gap: 0.65rem; align-items: center; }
+  .desk-composer .input-base { border-radius: 10px; }
+  .desk-composer-links {
+    display: flex; align-items: center; gap: 0.65rem;
+    margin-top: 0.45rem; padding: 0 0.15rem;
+  }
+  .desk-composer-links button {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    font-size: 12px; font-weight: 550; color: #64748b;
+  }
+  .desk-composer-links button:hover { color: var(--accent-light); }
+  .desk-composer-links .sep { color: #334155; font-size: 12px; }
+  .ticket-mail {
+    width: 100%; text-align: left; padding: 0.7rem 0.75rem; border-radius: 10px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .ticket-mail:hover { background: rgba(255,255,255,0.03); }
+  .ticket-mail.on {
+    background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.1);
+    border-color: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.2);
+  }
+  .ticket-mail-top { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+  .ticket-mail-subject { font-size: 13.5px; font-weight: 600; color: #e2e8f0; min-width: 0; }
+  .ticket-mail-time { font-size: 11px; color: #64748b; flex-shrink: 0; }
+  .ticket-mail-preview { font-size: 12px; color: #64748b; margin-top: 0.2rem; line-height: 1.4; }
+  .ticket-mail-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.4rem; }
+  .ticket-mail-name { font-size: 11px; color: #94a3b8; min-width: 0; }
+  .ticket-case-head {
+    flex-shrink: 0; padding: 0.9rem 1.5rem 0.85rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    background: rgba(0,0,0,0.12);
+  }
+  .ticket-case-head h3 { font-size: 1.05rem; font-weight: 600; color: #f1f5f9; margin: 0.2rem 0 0; line-height: 1.35; }
+  .ticket-case-meta { font-size: 12px; color: #64748b; margin-top: 0.35rem; }
+  html.light .desk-date-chip { color: #64748b; border-color: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.16); background: #fff; }
+  html.light .desk-msg-name { color: #0f172a; }
+  html.light .desk-msg-body { color: #334155; }
+  html.light .desk-msg-role { color: #64748b; }
+  html.light .desk-msg.mine .desk-msg-body::after {
+    background: linear-gradient(90deg, transparent 0%, #2563eb 22%, #2563eb 78%, transparent 100%);
+  }
+  html.light .desk-empty-title { color: #0f172a; }
+  html.light .desk-empty-copy { color: #64748b; }
+  html.light .desk-composer { background: #fff; border-color: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.18); }
+  html.light .desk-composer-links button { color: #64748b; }
+  html.light .ticket-mail:hover { background: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.05); }
+  html.light .ticket-mail.on { background: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.08); }
+  html.light .ticket-mail-subject { color: #0f172a; }
+  html.light .ticket-mail-preview, html.light .ticket-mail-time, html.light .ticket-mail-name { color: #64748b; }
+  html.light .ticket-case-head { background: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.04); border-bottom-color: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.14); }
+  html.light .ticket-case-head h3 { color: #0f172a; }
 
   /* Model tier pills */
   .tier-fast     { background: rgba(34,197,94,0.1);  color: #4ade80; border: 1px solid rgba(34,197,94,0.2);  border-radius: 4px; font-size: 11px; padding: 1px 7px; }
@@ -629,6 +740,30 @@
   }
   .mode-btn:hover { background: rgba(255,255,255,0.07); color: #94a3b8; }
 
+  /* Same chip as /chat "Dev", in ocean blue — full-width, larger */
+  .chatbot-btn{
+    display:flex;align-items:center;justify-content:center;
+    width:100%;margin:0;padding:12px 14px;
+    border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;
+    letter-spacing:.04em;line-height:1.3;color:#c4eef5;
+    text-decoration:none;box-sizing:border-box;
+    border:1px solid rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.55);
+    background:
+      linear-gradient(180deg,
+        rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.38) 0%,
+        rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.12) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      0 0 10px rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.22);
+  }
+  .chatbot-btn:hover{
+    color:#fff;
+    background:
+      linear-gradient(180deg,
+        rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.52) 0%,
+        rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.18) 100%);
+  }
+
   /* Split-pane admin surfaces */
   .pane-shell {
     background: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.06);
@@ -701,6 +836,7 @@
   html.light .theme-btn:hover { color: #1e293b; }
   html.light .mode-btn { color: #475569; }
   html.light .mode-btn:hover { color: #1e293b; }
+  html.light .chatbot-btn { color: #0e7490; }
   html.light .theme-picker { background: #fff; }
   html.light .theme-option { color: #475569; }
   html.light .theme-option:hover { color: #1e293b; }
@@ -755,21 +891,31 @@
       <div class="flex justify-center mb-4">
         <div class="relative">
           <div class="absolute inset-0 rounded-full" style="background: radial-gradient(circle, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.3) 0%, transparent 70%); transform: scale(2.5);"></div>
-          <img class="dna-pulse relative z-10" src="/static/logo.png?v=3" width="56" height="68" alt="Zork">
+          <img class="dna-pulse relative z-10" src="/static/logo.png?v=3" width="56" height="68" alt="Zorken">
         </div>
       </div>
-      <h1 class="text-3xl font-bold" style="color: var(--accent-light);">Zork</h1>
-      <p class="text-slate-500 text-sm mt-1 font-medium tracking-wide">FRID Agent</p>
+      <h1 class="text-3xl font-bold" style="color: var(--accent-light);">Zorken</h1>
+      <p class="text-slate-500 text-sm mt-1 font-medium tracking-wide">Operator panel</p>
     </div>
     <div class="grad-sep mb-6"></div>
+    <input
+      type="email"
+      x-model="loginEmail"
+      @keyup.enter="login()"
+      placeholder="Work email"
+      autocomplete="username"
+      class="input-base w-full px-4 py-3 mb-3 text-sm"
+    >
     <input
       type="password"
       x-model="loginPassword"
       @keyup.enter="login()"
-      placeholder="Admin password"
+      placeholder="Password"
+      autocomplete="current-password"
       class="input-base w-full px-4 py-3 mb-4 text-sm"
     >
-    <button @click="login()" class="btn-primary w-full py-3 text-sm">Sign in</button>
+    <button type="button" @click="login()" class="btn-primary w-full py-3 text-sm">Sign in</button>
+    <p class="text-slate-600 text-[11px] mt-4 text-center leading-5">Only accounts an admin has given moderator or admin access. You cannot create an account here.</p>
     <p x-show="loginError" class="text-red-400 text-xs mt-3 text-center" x-text="loginError"></p>
   </div>
 </div>
@@ -784,10 +930,10 @@
       <div class="flex items-center gap-3">
         <div class="relative">
           <div class="absolute inset-0 rounded-full" style="background: radial-gradient(circle, rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.4) 0%, transparent 80%); transform: scale(2.2); z-index:0;"></div>
-          <img class="logo-glow relative z-10" src="/static/logo.png?v=3" width="25" height="30" alt="Zork">
+          <img class="logo-glow relative z-10" src="/static/logo.png?v=3" width="25" height="30" alt="Zorken">
         </div>
         <div>
-          <div class="font-bold text-sm" style="color: var(--logo-title); letter-spacing: -0.02em;">Zork</div>
+          <div class="font-bold text-sm" style="color: var(--logo-title); letter-spacing: -0.02em;">Zorken</div>
           <div class="flex items-center gap-1.5 mt-0.5">
             <span class="dot-green"></span>
             <span class="text-xs font-medium text-emerald-400" x-text="health.status || 'checking'"></span>
@@ -810,17 +956,19 @@
           <span x-show="page.id === 'desk' && deskUnread"
                 class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300"
                 x-text="deskUnread"></span>
-          <span x-show="page.id === 'desk' && deskInboxBadge()"
+          <span x-show="page.id === 'reports' && deskInboxBadge()"
                 class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300"
                 x-text="deskInboxBadge()"></span>
         </button>
       </template>
-      <button x-show="!isModerator" @click="showAdvanced = !showAdvanced"
+      <template x-if="isAdminConsole">
+      <button @click="showAdvanced = !showAdvanced"
         class="nav-item w-full text-left px-3 py-2.5 text-sm font-medium rounded-lg flex items-center gap-2.5 text-slate-600 mt-2">
         <span class="text-base leading-none">▾</span>
-        <span x-text="showAdvanced ? 'Advanced' : 'Advanced'"></span>
+        <span>Advanced</span>
       </button>
-      <template x-if="showAdvanced && !isModerator">
+      </template>
+      <template x-if="showAdvanced && isAdminConsole">
         <div class="space-y-0.5">
           <template x-for="page in advancedPages" :key="page.id">
             <button
@@ -837,46 +985,22 @@
     </nav>
 
     <!-- Bottom meta -->
+    <div class="px-3 pb-2">
+      <a href="/chat" class="chatbot-btn">Chatbot</a>
+    </div>
     <div class="p-3 space-y-1.5" style="border-top: 1px solid rgba(255,255,255,0.04);">
-      <div class="flex justify-between text-xs">
-        <span class="text-slate-600">Sessions</span>
-        <span class="text-slate-400 font-medium" x-text="health.sessions || 0"></span>
-      </div>
       <div class="flex justify-between text-xs">
         <span class="text-slate-600">Uptime</span>
         <span class="text-slate-400 font-medium" x-text="formatUptime(health.uptime || 0)"></span>
       </div>
       <div class="grad-sep mt-1"></div>
 
-      <!-- Theme selector -->
-      <div class="relative" x-data="{ open: false }">
-        <button @click="open = !open" class="theme-btn">
-          <span class="theme-dot" :style="'background:' + currentThemeColor()"></span>
-          <span x-text="currentThemeName()"></span>
-          <span class="ml-auto text-xs opacity-50">▾</span>
-        </button>
-        <div x-show="open" @click.outside="open = false" class="theme-picker">
-          <template x-for="t in themes" :key="t.id">
-            <button
-              @click="setTheme(t.id); open = false"
-              :class="theme === t.id ? 'active' : ''"
-              class="theme-option"
-            >
-              <span class="theme-dot" :style="'background:' + t.color"></span>
-              <span x-text="t.name"></span>
-            </button>
-          </template>
-        </div>
-      </div>
-
-      <!-- Dark/light toggle -->
       <button @click="toggleMode()" class="mode-btn">
         <span x-text="lightMode ? '☀️' : '🌙'"></span>
         <span x-text="lightMode ? 'Light mode' : 'Dark mode'"></span>
       </button>
 
       <div class="text-xs text-slate-700 text-center font-mono pt-0.5">v1.3.1</div>
-      <a x-show="isModerator" href="/chat" class="block text-center text-xs text-slate-500 hover:text-slate-300 pt-1">Back to chat</a>
     </div>
   </div>
 
@@ -888,7 +1012,7 @@
       <div class="flex items-center justify-between mb-7">
         <div>
           <h2 class="section-title">System Status</h2>
-          <p class="text-slate-600 text-sm mt-0.5">Live overview of your Zork instance</p>
+          <p class="text-slate-600 text-sm mt-0.5">Live overview of your Zorken instance</p>
         </div>
         <div class="flex items-center gap-2 text-xs rounded-lg px-3 py-2"
              :class="health.status === 'ok' ? 'text-slate-600 bg-white/[0.03] border border-white/5' : 'text-amber-400 bg-amber-500/10 border border-amber-500/20'">
@@ -915,7 +1039,7 @@
           <button type="button" @click="homeSessionDetail = !homeSessionDetail"
             class="text-xs mt-2 text-slate-500 hover:text-slate-300">more info</button>
           <div x-show="homeSessionDetail" class="text-xs text-slate-500 mt-1.5">
-            <span x-text="sessions.length"></span> total
+            <span x-text="sessionsInWindow().length"></span> in last <span x-text="sessionDays"></span> days
             <span x-show="emptySessionCount()"> · <span x-text="emptySessionCount()"></span> unused</span>
           </div>
         </div>
@@ -949,8 +1073,9 @@
       <div x-show="health.claude_cli && !health.claude_cli.found"
            class="card p-4 mb-5 border border-amber-500/30 bg-amber-500/5">
         <div class="text-sm font-medium text-amber-300">Claude CLI not found</div>
-        <p class="text-xs text-slate-400 mt-1">Install Claude Code so Zork can answer.</p>
+        <p class="text-xs text-slate-400 mt-1">Install Claude Code so Zorken can answer.</p>
       </div>
+      <template x-if="isAdminConsole">
       <div x-show="health.drift && !health.drift.ok"
            class="card p-4 mb-5 border border-amber-500/30 bg-amber-500/5">
         <div class="text-sm font-medium text-amber-300">Live workspace differs from git</div>
@@ -963,6 +1088,7 @@
         <p class="text-xs text-slate-500 mt-2 font-mono"
            x-text="(health.drift.diverged || []).concat(health.drift.missing_in_live || []).slice(0,8).join(', ') || ''"></p>
       </div>
+      </template>
 
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-7">
         <div class="card p-5">
@@ -976,19 +1102,24 @@
           <div class="text-lg font-semibold" :class="!health.auth ? 'text-slate-500' : (health.auth.ready ? 'text-emerald-400' : 'text-amber-400')"
                x-text="!health.auth ? '–' : (health.auth.oauth_token ? 'yearly token' : (health.auth.credentials_file ? 'file login' : 'none'))"></div>
         </div>
+        <template x-if="isAdminConsole">
         <div class="card p-5">
           <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Pupil prompt</div>
           <div class="text-lg font-semibold text-slate-200"
                x-text="health.prompts?.student != null ? (Math.round(health.prompts.student/1000) + 'k chars') : '–'"></div>
         </div>
+        </template>
+        <template x-if="isAdminConsole">
         <div class="card p-5">
           <div class="text-xs text-slate-600 mb-2 font-medium uppercase tracking-wider">Staff prompt</div>
           <div class="text-lg font-semibold text-slate-200"
                x-text="health.prompts?.staff != null ? (Math.round(health.prompts.staff/1000) + 'k chars') : '–'"></div>
         </div>
+        </template>
       </div>
 
       <!-- Model roster -->
+      <template x-if="isAdminConsole">
       <div class="card p-5 mb-5">
         <h3 class="font-semibold text-slate-300 mb-4 flex items-center gap-2">
           <svg class="w-4 h-4" style="color: var(--accent-light);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
@@ -1006,82 +1137,112 @@
           <div x-show="!(config.models?.roster || []).length" class="text-slate-600 text-sm">No models configured.</div>
         </div>
       </div>
+      </template>
     </div>
 
-    <!-- ================================ TEAM CHAT ================================ -->
-    <div x-show="currentPage === 'desk'" class="flex-1 flex flex-col overflow-hidden">
+    <!-- ================================ TEAM CHAT / REPORTS ================================ -->
+    <div x-show="currentPage === 'desk' || currentPage === 'reports'" class="flex-1 flex flex-col overflow-hidden">
       <div class="flex items-center gap-4 px-6 py-4" style="border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.15);">
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
-            <span class="font-semibold text-slate-200">Team chat</span>
-            <span class="text-xs text-slate-600" x-text="deskWsStatus === 'connected' ? 'live' : deskWsStatus"></span>
+            <span class="font-semibold text-slate-200" x-text="currentPage === 'reports' ? 'Reports' : 'Team chat'"></span>
+            <span class="text-xs text-slate-600" x-show="currentPage === 'desk'" x-text="deskWsStatus === 'connected' ? 'live' : deskWsStatus"></span>
           </div>
-          <p class="text-xs text-slate-600 mt-0.5">Everyone with access to this panel. Report an issue or answer one.</p>
+          <p class="text-xs text-slate-600 mt-0.5" x-text="currentPage === 'reports'
+            ? 'Tracked problems and ideas. Open one to reply, or file a new report.'
+            : 'A shared room for everyone with this panel. For something that needs tracking, file a report.'"></p>
         </div>
-        <div class="flex gap-2">
-          <button type="button" @click="deskView = 'chat'"
-            :class="deskView === 'chat' ? 'tab-active' : 'tab-inactive'"
-            class="px-3 py-1.5 rounded-lg text-xs font-medium">Chat</button>
-          <button type="button" @click="deskView = 'inbox'; loadDeskTickets()"
-            :class="deskView === 'inbox' ? 'tab-active' : 'tab-inactive'"
-            class="px-3 py-1.5 rounded-lg text-xs font-medium">
-            Inbox
-            <span x-show="deskInboxBadge()" class="opacity-80" x-text="'(' + deskInboxBadge() + ')'"></span>
-          </button>
-        </div>
-      </div>
-
-      <div x-show="deskView === 'chat'" class="flex-1 flex flex-col overflow-hidden">
-        <div id="desk-messages" class="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          <p x-show="!deskMessages.length" class="text-sm text-slate-600">No messages yet.</p>
-          <template x-for="m in deskMessages" :key="m.id">
-            <div>
-              <div class="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-500">
-                <span class="text-slate-300 font-medium" x-text="m.name || m.email || 'unknown'"></span>
-                <span x-show="m.email && m.name && m.email !== m.name.toLowerCase()" class="text-slate-600" x-text="m.email"></span>
-                <span x-text="m.ts ? new Date(m.ts * 1000).toLocaleString() : ''"></span>
-              </div>
-              <div class="text-sm text-slate-200 mt-0.5 whitespace-pre-wrap" x-text="m.text"></div>
+        <div class="flex gap-2 flex-shrink-0">
+          <template x-if="currentPage === 'desk'">
+            <div class="flex gap-2">
+              <button type="button" @click="openDeskForm('issue')" class="px-3 py-1.5 rounded-lg text-xs font-medium tab-inactive">Report a problem</button>
+              <button type="button" @click="openDeskForm('suggestion')" class="px-3 py-1.5 rounded-lg text-xs font-medium tab-inactive">Suggest an idea</button>
             </div>
           </template>
-        </div>
-        <div class="px-6 py-4 space-y-2.5" style="border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1);">
-          <div class="flex gap-2">
-            <button type="button" @click="openDeskForm('suggestion')"
-              class="px-3 py-1.5 rounded-lg text-xs font-medium tab-inactive">Suggestion</button>
-            <button type="button" @click="openDeskForm('issue')"
-              class="px-3 py-1.5 rounded-lg text-xs font-medium tab-inactive">Report issue</button>
-          </div>
-          <form class="flex gap-3" @submit.prevent="sendDeskChat()">
-            <input
-              x-model="deskInput"
-              placeholder="Write to the team…"
-              class="input-base flex-1 px-4 py-3 text-sm rounded-2xl"
-              maxlength="2000"
-            >
-            <button type="submit" :disabled="!deskInput.trim()" class="btn-primary px-5 rounded-2xl text-sm">Send</button>
-          </form>
+          <template x-if="currentPage === 'reports'">
+            <button type="button" @click="openDeskForm('issue')" class="btn-primary px-3 py-1.5 rounded-lg text-xs font-medium">New report</button>
+          </template>
         </div>
       </div>
 
-      <div x-show="deskView === 'inbox'" class="flex-1 flex flex-col overflow-hidden"
+      <div x-show="currentPage === 'desk'" class="flex-1 flex flex-col overflow-hidden">
+        <div id="desk-messages" class="flex-1 overflow-y-auto px-6">
+          <div class="desk-col desk-chat-feed">
+            <div x-show="!deskMessages.length" class="desk-empty">
+              <p class="desk-empty-title">No messages yet</p>
+              <p class="desk-empty-copy">Write below to talk to the team. If the problem needs a status and a reply later, file a report instead.</p>
+              <div class="desk-empty-actions">
+                <button type="button" @click="openDeskForm('issue')" class="px-3 py-1.5 rounded-lg text-xs font-medium tab-inactive">Report a problem</button>
+                <button type="button" @click="openDeskForm('suggestion')" class="px-3 py-1.5 rounded-lg text-xs font-medium tab-inactive">Suggest an idea</button>
+              </div>
+            </div>
+            <template x-for="item in deskChatItems()" :key="item.id">
+              <div>
+                <div x-show="item.type === 'day'" class="desk-date-wrap">
+                  <span class="desk-date-chip" x-text="item.label"></span>
+                </div>
+                <div x-show="item.type === 'msg'" class="desk-msg"
+                     :class="{ cont: item.cont, head: !item.cont, mine: item.msg && deskIsMine(item.msg), them: item.msg && !deskIsMine(item.msg) }">
+                  <div class="desk-initials" :class="item.cont && 'ghost'" x-text="item.msg ? deskInitials(item.msg) : ''"></div>
+                  <div class="desk-msg-stack">
+                    <div x-show="item.msg && !item.cont" class="desk-msg-meta">
+                      <span class="desk-msg-name" x-text="item.msg ? (deskIsMine(item.msg) ? 'You' : (item.msg.name || item.msg.email || 'unknown')) : ''"></span>
+                      <span class="desk-msg-time" x-text="item.msg ? deskMsgTime(item.msg.ts) : ''"></span>
+                      <span class="desk-msg-role" x-show="item.msg && deskRoleLabel(item.msg)" x-text="item.msg ? deskRoleLabel(item.msg) : ''"></span>
+                    </div>
+                    <div class="desk-msg-body" x-text="item.msg && item.msg.text"></div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div class="desk-composer-wrap">
+          <div class="desk-composer">
+            <form @submit.prevent="sendDeskChat()">
+              <input
+                x-model="deskInput"
+                placeholder="Write to the team…"
+                class="input-base flex-1 px-4 py-2.5 text-sm"
+                maxlength="2000"
+              >
+              <button type="submit" :disabled="!deskInput.trim()" class="btn-primary px-5 py-2.5 rounded-xl text-sm">Send</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div x-show="currentPage === 'reports'" class="flex-1 flex flex-col overflow-hidden"
            @keydown.escape.window="deskFilterOpen = false; deskStatusEditId = ''">
-        <div class="px-6 py-3 flex items-center justify-between gap-3 flex-wrap" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <div class="px-6 py-3 flex items-center gap-3 flex-wrap" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
           <div class="flex gap-2">
-            <button type="button" @click="deskTicketKind = 'issue'; selectFirstVisibleTicket()"
+            <button type="button" @click="deskTicketKind = 'issue'; onDeskTicketQuery()"
               :class="deskKindTabClass('issue')"
               class="px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5">
-              Issues
+              Problems
               <span x-show="deskKindAlertCount('issue')" class="ticket-filter-count" x-text="deskKindAlertCount('issue')"></span>
             </button>
-            <button type="button" @click="deskTicketKind = 'suggestion'; selectFirstVisibleTicket()"
+            <button type="button" @click="deskTicketKind = 'suggestion'; onDeskTicketQuery()"
               :class="deskKindTabClass('suggestion')"
               class="px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5">
-              Suggestions
+              Ideas
               <span x-show="deskKindAlertCount('suggestion')" class="ticket-filter-count" x-text="deskKindAlertCount('suggestion')"></span>
             </button>
           </div>
-          <div class="relative">
+          <input
+            x-model="deskTicketQuery"
+            @input="onDeskTicketQuery()"
+            placeholder="Search reports…"
+            class="input-base px-3 py-1.5 text-xs w-44 flex-shrink-0"
+          >
+          <button type="button" @click="deskNeedsYou = !deskNeedsYou; onDeskTicketQuery()"
+            :class="deskNeedsYou ? (deskNeedsYouCount() ? 'tab-alert' : 'tab-active') : 'tab-inactive'"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5"
+            title="Reports waiting for a reply from you">
+            Waiting for you
+            <span x-show="deskNeedsYouCount()" class="ticket-filter-count" x-text="deskNeedsYouCount()"></span>
+          </button>
+          <div class="relative ml-auto">
             <button type="button" @click="deskFilterOpen = !deskFilterOpen; deskStatusEditId = ''"
               :class="deskFilterTriggerClass()"
               class="px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1.5">
@@ -1105,98 +1266,229 @@
             </div>
           </div>
         </div>
-        <div class="flex-1 flex overflow-hidden">
-        <div class="w-80 flex-shrink-0 overflow-y-auto px-3 py-4 space-y-1" style="border-right: 1px solid rgba(255,255,255,0.06);">
-          <p x-show="!visibleDeskTickets().length" class="text-sm text-slate-600 px-1">Nothing here yet.</p>
+        <div class="flex-1 flex overflow-hidden min-w-0">
+        <div class="w-[22rem] flex-shrink-0 overflow-y-auto px-3 py-3 space-y-1 min-w-0" style="border-right: 1px solid rgba(255,255,255,0.06);">
+          <p x-show="!visibleDeskTickets().length" class="text-sm text-slate-600 px-1"
+             x-text="(deskTicketQuery || deskNeedsYou || deskTicketStatus !== 'all') ? 'No reports match these filters.' : 'No reports yet. Use New report to file one.'"></p>
           <template x-for="t in visibleDeskTickets()" :key="t.id">
             <div @click="selectDeskTicket(t.id)"
-              class="w-full text-left px-3 py-2.5 rounded-lg cursor-pointer"
-              :class="deskTicketId === t.id ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'">
-              <div class="flex items-start justify-between gap-2">
-                <span class="text-sm text-slate-200 truncate" x-text="t.subject"></span>
-                <button type="button" x-show="isDeskAdmin" @click.stop="openDeskStatusMenu($event, t)"
+              class="ticket-mail"
+              :class="deskTicketId === t.id ? 'on' : ''">
+              <div class="ticket-mail-top">
+                <span class="ticket-mail-subject truncate" x-text="t.subject"></span>
+                <span class="ticket-mail-time" x-text="deskRelativeTime(t.updated || t.ts)"></span>
+              </div>
+              <div class="ticket-mail-preview truncate" x-text="deskTicketPreview(t)"></div>
+              <div class="ticket-mail-foot">
+                <span class="ticket-mail-name truncate flex items-center gap-1.5">
+                  <span x-show="deskTicketNeedsYou(t) && deskTicketId !== t.id" class="ticket-unseen-dot flex-shrink-0"></span>
+                  <span class="truncate" x-text="t.name || t.email || 'unknown'"></span>
+                </span>
+                <template x-if="isDeskAdmin">
+                <button type="button" @click.stop="openDeskStatusMenu($event, t)"
                   class="ticket-emblem flex-shrink-0"
                   :class="normalizeStatus(t.status)">
                   <span x-text="ticketStatusLabel(t.status)"></span>
                   <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.3 7.3a1 1 0 011.4 0L10 10.58l3.3-3.3a1 1 0 111.4 1.42l-4 4a1 1 0 01-1.4 0l-4-4a1 1 0 010-1.42z"/></svg>
                 </button>
-                <span x-show="!isDeskAdmin" class="ticket-emblem ticket-emblem-static flex-shrink-0"
+                </template>
+                <template x-if="!isDeskAdmin">
+                <span class="ticket-emblem ticket-emblem-static flex-shrink-0"
                   :class="normalizeStatus(t.status)"
                   x-text="ticketStatusLabel(t.status)"></span>
-              </div>
-              <div class="text-[11px] text-slate-600 mt-0.5 truncate flex items-center gap-1.5">
-                <span x-show="!isDeskAdmin && deskTicketUnseen(t)" class="ticket-unseen-dot flex-shrink-0"></span>
-                <span class="truncate" x-text="t.name || t.email || 'unknown'"></span>
+                </template>
               </div>
             </div>
           </template>
         </div>
-        <div class="flex-1 flex flex-col overflow-hidden" x-show="selectedDeskTicket()">
-          <div class="px-6 py-4 overflow-y-auto flex-1 space-y-4" id="ticket-thread">
-            <div>
-              <div class="text-xs text-slate-600 uppercase tracking-wider font-medium" x-text="ticketKindLabel(deskTicket.kind)"></div>
-              <h3 class="text-lg font-semibold text-slate-100 mt-1" x-text="deskTicket.subject"></h3>
-              <div class="text-xs text-slate-500 mt-1">
+        <div class="flex-1 flex flex-col overflow-hidden min-w-0" x-show="selectedDeskTicket()">
+          <div class="ticket-case-head">
+            <div class="desk-col">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="text-xs text-slate-600 uppercase tracking-wider font-medium" x-text="ticketKindLabel(deskTicket.kind)"></div>
+                  <h3 x-text="deskTicket.subject"></h3>
+                </div>
+                <template x-if="isDeskAdmin">
+                <button type="button" @click.stop="openDeskStatusMenu($event, deskTicket)"
+                  class="ticket-emblem flex-shrink-0 mt-1"
+                  :class="normalizeStatus(deskTicket.status)">
+                  <span x-text="ticketStatusLabel(deskTicket.status)"></span>
+                  <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.3 7.3a1 1 0 011.4 0L10 10.58l3.3-3.3a1 1 0 111.4 1.42l-4 4a1 1 0 01-1.4 0l-4-4a1 1 0 010-1.42z"/></svg>
+                </button>
+                </template>
+                <template x-if="!isDeskAdmin">
+                <span class="ticket-emblem ticket-emblem-static flex-shrink-0 mt-1"
+                  :class="normalizeStatus(deskTicket.status)"
+                  x-text="ticketStatusLabel(deskTicket.status)"></span>
+                </template>
+              </div>
+              <div class="ticket-case-meta">
                 <span x-text="deskTicket.name || deskTicket.email || 'unknown'"></span>
-                <span x-show="deskTicket.email && deskTicket.name" class="text-slate-600" x-text="' · ' + deskTicket.email"></span>
-                <span x-text="' · ' + (deskTicket.ts ? new Date(deskTicket.ts * 1000).toLocaleString() : '')"></span>
+                <span x-show="deskTicket.email && deskTicket.name" x-text="' · ' + deskTicket.email"></span>
+                <span x-text="deskTicket.updated || deskTicket.ts ? ' · Updated ' + deskRelativeTime(deskTicket.updated || deskTicket.ts) : ''"></span>
               </div>
             </div>
-            <div class="ticket-thread">
-              <template x-for="m in deskTicketThread()" :key="m.id">
-                <div class="ticket-row" :class="deskIsMine(m) ? 'me' : 'them'">
-                  <div class="ticket-meta">
-                    <span x-text="deskIsMine(m) ? 'You' : (m.name || m.email || 'unknown')"></span>
-                    <span x-text="m.ts ? (' · ' + new Date(m.ts * 1000).toLocaleString()) : ''"></span>
+          </div>
+          <div class="px-6 py-4 overflow-y-auto overflow-x-hidden flex-1 min-w-0" id="ticket-thread">
+            <div class="desk-col ticket-thread">
+              <template x-for="item in deskTicketThreadItems()" :key="item.id">
+                <div>
+                  <div x-show="item.type === 'day'" class="desk-date-wrap">
+                    <span class="desk-date-chip" x-text="item.label"></span>
                   </div>
-                  <div class="ticket-bubble" :class="deskIsMine(m) ? 'me' : 'them'">
-                    <div x-show="m.text" class="whitespace-pre-wrap" x-text="m.text"></div>
-                    <div class="ticket-shots" x-show="m.images && m.images.length">
-                      <template x-for="name in (m.images || [])" :key="name">
-                        <img x-show="deskImageUrls[name]" :src="deskImageUrls[name]" alt=""
-                             @click="deskImageUrls[name] && window.open(deskImageUrls[name], '_blank')">
-                      </template>
+                  <div x-show="item.type === 'msg'" class="ticket-row" :class="item.msg && deskIsMine(item.msg) ? 'me' : 'them'">
+                    <div class="ticket-meta">
+                      <span x-text="item.msg ? (deskIsMine(item.msg) ? 'You' : (item.msg.name || item.msg.email || 'unknown')) : ''"></span>
+                      <span x-text="item.msg && item.msg.ts ? (' · ' + deskMsgTime(item.msg.ts)) : ''"></span>
+                    </div>
+                    <div class="ticket-bubble" :class="item.msg && deskIsMine(item.msg) ? 'me' : 'them'">
+                      <div x-show="item.msg && item.msg.text" class="whitespace-pre-wrap" x-text="item.msg && item.msg.text"></div>
+                      <div class="ticket-shots" x-show="item.msg && item.msg.images && item.msg.images.length">
+                        <template x-for="name in ((item.msg && item.msg.images) || [])" :key="name">
+                          <img x-show="deskImageUrls[name]" :src="deskImageUrls[name]" alt=""
+                               @click="deskImageUrls[name] && window.open(deskImageUrls[name], '_blank')">
+                        </template>
+                      </div>
                     </div>
                   </div>
                 </div>
               </template>
             </div>
           </div>
-          <form class="px-6 py-4 space-y-2" style="border-top: 1px solid rgba(255,255,255,0.05);"
-                @submit.prevent="sendDeskTicketReply()"
-                @dragover.prevent @drop.prevent="onDeskImageDrop($event, 'reply')">
-            <div class="ticket-thumbs" x-show="deskReplyImages.length">
-              <template x-for="(p, i) in deskReplyImages" :key="p.url">
-                <div class="ticket-thumb" :class="{ busy: p.uploading }">
-                  <img :src="p.url" alt="">
-                  <button type="button" @click="removeDeskImage('reply', i)">×</button>
-                </div>
-              </template>
-            </div>
-            <div class="flex gap-3">
-              <button type="button" class="ticket-attach" title="Add screenshot" @click="pickDeskImage('reply')">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              </button>
-              <input
-                x-model="deskTicketReply"
-                placeholder="Write a reply, or paste a screenshot…"
-                class="input-base flex-1 px-4 py-3 text-sm rounded-2xl"
-                maxlength="2000"
-                @paste="onDeskImagePaste($event, 'reply')"
-              >
-              <button type="submit" :disabled="!canSendDeskReply()" class="btn-primary px-5 rounded-2xl text-sm">Reply</button>
-            </div>
-            <p x-show="deskReplyError" class="text-xs text-red-400" x-text="deskReplyError"></p>
-          </form>
+          <div class="desk-composer-wrap">
+            <form class="desk-composer space-y-2" @submit.prevent="sendDeskTicketReply()"
+                  @dragover.prevent @drop.prevent="onDeskImageDrop($event, 'reply')">
+              <div class="ticket-thumbs" x-show="deskReplyImages.length">
+                <template x-for="(p, i) in deskReplyImages" :key="p.url">
+                  <div class="ticket-thumb" :class="{ busy: p.uploading }">
+                    <img :src="p.url" alt="">
+                    <button type="button" @click="removeDeskImage('reply', i)">×</button>
+                  </div>
+                </template>
+              </div>
+              <div class="flex gap-3">
+                <button type="button" class="ticket-attach" title="Add screenshot" @click="pickDeskImage('reply')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                </button>
+                <input
+                  x-model="deskTicketReply"
+                  placeholder="Write a reply, or paste a screenshot…"
+                  class="input-base flex-1 px-4 py-2.5 text-sm"
+                  maxlength="2000"
+                  @paste="onDeskImagePaste($event, 'reply')"
+                >
+                <button type="submit" :disabled="!canSendDeskReply()" class="btn-primary px-5 py-2.5 rounded-xl text-sm">Reply</button>
+              </div>
+              <p x-show="deskReplyError" class="text-xs text-red-400" x-text="deskReplyError"></p>
+            </form>
+          </div>
         </div>
         <div class="flex-1 flex items-center justify-center text-sm text-slate-600" x-show="!selectedDeskTicket()">
-          Pick a report from the list.
+          Open a report on the left to read it and reply.
         </div>
         </div>
       </div>
     </div>
 
+    <!-- ================================ APPS ================================ -->
+    <div x-show="currentPage === 'apps'" class="flex-1 overflow-y-auto p-7">
+      <div class="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h2 class="section-title mb-1">Apps</h2>
+          <p class="text-slate-600 text-sm">Download tools an admin has put on the shelf. School/work Programs, FRID-nett and printer sit at the top. Zork helper is needed to run the listed apps, if its not downloaded it will be downloaded automatically when you click "run".</p>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button type="button" @click="loadApps()" class="subtle-action transition-colors px-2 py-1 rounded text-xs">↺</button>
+          <button type="button" x-show="isAdminConsole" @click="toggleAppForm()" class="btn-primary px-4 py-2 text-sm"
+            x-text="appFormOpen ? '✕ Cancel' : '+ Add app'"></button>
+        </div>
+      </div>
+
+      <div x-show="appFormOpen && isAdminConsole" class="card mb-6 p-6"
+           style="border-color: rgba(var(--accent-r),var(--accent-g),var(--accent-b),0.25);">
+        <h3 class="font-semibold text-slate-300 mb-1" x-text="appForm.id ? 'Replace ' + (appForm.name || appForm.id) : 'New app'"></h3>
+        <p class="text-xs text-slate-600 mb-5">Zip is best for a folder with a .bat and a Mac .command. Helix stores the file; it does not run it.</p>
+        <div class="grid md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-xs text-slate-600 mb-1.5 font-medium">Name</label>
+            <input x-model="appForm.name" placeholder="e.g. Skoleprogrammer" class="input-base w-full px-3 py-2.5 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600 mb-1.5 font-medium">File</label>
+            <input type="file" @change="appFormFile = $event.target.files[0]"
+              class="input-base w-full px-3 py-2 text-sm text-slate-400 file:mr-3 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-white/10 file:text-slate-200">
+          </div>
+        </div>
+        <div class="mb-4">
+          <label class="block text-xs text-slate-600 mb-1.5 font-medium">What it does</label>
+          <input x-model="appForm.description" placeholder="e.g. Check Office, school apps and Windows updates on a pupil PC"
+            class="input-base w-full px-3 py-2.5 text-sm">
+        </div>
+        <div class="mb-4">
+          <label class="block text-xs text-slate-600 mb-1.5 font-medium">How to run it (optional — a default is filled in from the file type)</label>
+          <textarea x-model="appForm.run_hint" rows="2" class="input-base w-full px-3 py-2.5 text-sm resize-none"
+            placeholder="Windows: unpack and run windows_run.bat as administrator. Mac: unpack, right-click mac_run.command → Open."></textarea>
+        </div>
+        <div class="flex flex-wrap items-center gap-4 mb-5">
+          <span class="text-xs text-slate-600 font-medium">Runs on</span>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" value="windows" x-model="appForm.platforms" class="rounded border-slate-700">
+            <span class="text-sm text-slate-300">Windows</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" value="mac" x-model="appForm.platforms" class="rounded border-slate-700">
+            <span class="text-sm text-slate-300">Mac</span>
+          </label>
+        </div>
+        <div class="flex items-center gap-3">
+          <button type="button" @click="uploadApp()" :disabled="appFormBusy || !appForm.name.trim() || !appFormFile"
+            class="btn-primary px-5 py-2.5 text-sm">Save</button>
+          <span class="text-xs text-slate-600" x-show="appFormFile" x-text="appFormFile && (appFormFile.name + ' · ' + formatBytes(appFormFile.size))"></span>
+        </div>
+      </div>
+
+      <p x-show="appsError" class="text-red-400 text-xs mb-4" x-text="appsError"></p>
+      <p x-show="helperLoopbackDenied" class="text-red-400 text-sm mb-4">You clicked Block. Zorken needs Allow to talk to Zork Helper on this PC. Click the padlock next to the address → Apps on device → Allow, then reload.</p>
+      <p x-show="helperError" class="text-red-400 text-xs mb-4" x-text="helperError"></p>
+      <p x-show="!helperError && (helperBusy || (helperSession && helperSession.activity))" class="text-slate-400 text-xs mb-4" x-text="helperCardTitle()"></p>
+      <div x-show="appsLoading" class="text-slate-600 text-sm">Loading…</div>
+      <div class="grid md:grid-cols-2 gap-4" x-show="!appsLoading">
+        <template x-for="app in shelfApps()" :key="app.id">
+          <div class="card p-5 flex flex-col gap-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="font-semibold text-slate-200" x-text="appDisplayName(app)"></div>
+                <div class="text-xs text-slate-600 mt-0.5 font-mono"
+                     x-text="app.filename ? (app.filename + ' · ' + formatBytes(app.size)) : 'No file on the shelf yet'"></div>
+              </div>
+              <div class="flex gap-1 flex-shrink-0">
+                <span class="chip" x-show="(app.platforms || []).includes('windows')">Windows</span>
+                <span class="chip" x-show="(app.platforms || []).includes('mac')">Mac</span>
+              </div>
+            </div>
+            <p class="text-sm text-slate-400 leading-relaxed" x-show="app.description" x-text="app.description"></p>
+            <p class="text-xs text-slate-500 leading-relaxed" x-show="app.run_hint && !isHelperApp(app)" x-text="app.run_hint"></p>
+            <div class="mt-auto flex items-center gap-2 pt-1">
+              <button type="button" x-show="isHelperApp(app)" @click="runShelfApp(app)"
+                :disabled="helperBusy"
+                class="btn-primary px-4 py-2 text-sm"
+                x-text="helperBusy ? 'Starting…' : 'Run'"></button>
+              <button type="button" x-show="!isHelperApp(app)" @click="downloadApp(app)" :disabled="appsBusyId === app.id || !app.filename"
+                class="btn-primary px-4 py-2 text-sm"
+                x-text="appsBusyId === app.id ? 'Downloading…' : 'Download'"></button>
+              <button type="button" x-show="isAdminConsole" @click="editApp(app)"
+                class="subtle-action px-3 py-2 rounded text-xs">Replace</button>
+              <button type="button" x-show="isAdminConsole && app.filename" @click="deleteApp(app)"
+                class="subtle-action px-3 py-2 rounded text-xs text-red-400/80">Delete</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- ================================ CHAT ================================ -->
+    <template x-if="isAdminConsole">
     <div x-show="currentPage === 'chat'" class="flex-1 flex flex-col overflow-hidden">
       <div class="px-6 py-3 text-xs leading-relaxed text-amber-200/90 bg-amber-500/10 border-b border-amber-500/20">
         Operator sandbox — this is you, on this machine, not a colleague or a pupil.
@@ -1269,12 +1561,32 @@
         >Send</button>
       </div>
     </div>
+    </template>
 
     <!-- ================================ SESSIONS ================================ -->
     <div x-show="currentPage === 'sessions'" class="flex-1 overflow-y-auto p-7">
-      <h2 class="section-title mb-1">Sessions</h2>
-      <p class="text-slate-600 text-sm mb-6">Active conversations across all channels</p>
-      <div x-show="!isModerator" class="flex gap-2 mb-4">
+      <div class="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h2 class="section-title mb-1">Sessions</h2>
+          <p class="text-slate-600 text-sm">Chats in the chosen window. <span class="text-slate-400">With messages</span> means the chat has data; <span class="text-slate-400">unused</span> means it was opened but never used.</p>
+          <p class="text-xs text-slate-500 mt-1.5">
+            <span x-text="sessionsInWindow().length.toLocaleString('nb-NO')"></span>
+            chats in the last <span x-text="sessionDays"></span> days
+            · <span x-text="usedSessionCount().toLocaleString('nb-NO')"></span> with messages
+            · <span x-text="emptySessionCount().toLocaleString('nb-NO')"></span> unused
+          </p>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <template x-for="d in [7, 30, 90]" :key="'sess-'+d">
+            <button @click="sessionDays = d"
+              :class="sessionDays === d ? 'tab-active' : 'tab-inactive'"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium"
+              x-text="d + ' days'"></button>
+          </template>
+        </div>
+      </div>
+      <template x-if="isAdminConsole">
+      <div class="flex gap-2 mb-4">
         <button @click="sessionTab = 'afk'" :class="sessionTab === 'afk' ? 'tab-active' : 'tab-inactive'" class="px-4 py-2 rounded-lg text-sm font-medium">
           AFK
           <span class="opacity-70" x-text="sessionAfkCount() ? '(' + sessionAfkCount() + ')' : ''"></span>
@@ -1288,11 +1600,11 @@
           <span class="opacity-70" x-text="sessionStressCount() ? '(' + sessionStressCount() + ')' : ''"></span>
         </button>
       </div>
+      </template>
       <div class="flex gap-3 mb-4">
         <input x-model="sessionQuery" placeholder="Search email…" class="input-base flex-1 px-3 py-2.5 text-sm">
       </div>
-      <div x-show="sessions.length === 0" class="text-slate-500 text-sm">No active sessions.</div>
-      <div x-show="sessions.length && !filteredSessionPeople().length" class="text-slate-500 text-sm">No matching people.</div>
+      <div x-show="!filteredSessionPeople().length" class="text-slate-500 text-sm" x-text="sessionQuery ? 'No matching people.' : 'No chats in this window.'"></div>
       <div class="space-y-3">
         <template x-for="person in filteredSessionPeople()" :key="person.key">
           <div class="card p-5">
@@ -1301,12 +1613,52 @@
                 <div class="font-semibold text-slate-200 text-sm truncate" x-text="person.label"></div>
                 <div class="text-xs text-slate-600 mt-0.5" x-text="person.channel"></div>
               </div>
-              <button type="button" @click="toggleSessionUser(person.key)"
-                class="shrink-0 text-sm px-3 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:border-white/20 hover:text-slate-100">
-                <span x-text="person.used.length"></span>
-                <span x-text="person.used.length === 1 ? ' active' : ' active'"></span>
-                <span x-show="person.empty.length" class="text-slate-500" x-text="' · ' + person.empty.length + ' unused'"></span>
-              </button>
+              <div class="flex items-center gap-2 shrink-0">
+                <button type="button" x-show="person.used.length || person.empty.length"
+                  @click="toggleSessionUser(person.key)"
+                  class="text-sm px-3 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:border-white/20 hover:text-slate-100"
+                  :title="(person.used.length === 1 ? '1 chat with messages' : person.used.length + ' chats with messages')
+                    + (person.empty.length ? ' · ' + person.empty.length + ' opened but empty' : '')">
+                  <span x-text="person.used.length"></span>
+                  <span> with messages</span>
+                  <span x-show="person.empty.length" class="text-slate-500" x-text="' · ' + person.empty.length + ' unused'"></span>
+                </button>
+                <button type="button"
+                  @click="toggleDeletedChats(person.key)"
+                  class="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-slate-300 hover:border-white/20 hover:text-slate-100"
+                  :class="expandedDeletedUser === person.key ? 'border-white/20 text-slate-100' : ''">
+                  Deleted chats
+                </button>
+              </div>
+            </div>
+            <div x-show="expandedDeletedUser === person.key" class="mt-4 space-y-3">
+              <template x-if="!deletedForPerson(person).length">
+                <p class="text-sm text-slate-600">None in this window.</p>
+              </template>
+              <template x-if="deletedForPerson(person).length">
+                <p class="text-xs text-slate-500">The conversation is gone. This is the note of what they asked.</p>
+              </template>
+              <template x-for="(row, i) in deletedForPerson(person)" :key="(row.session_id || '') + '-' + i">
+                <div class="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                    <span x-show="row.tier" x-text="row.tier"></span>
+                    <span x-show="row.topic" x-text="row.topic"></span>
+                    <span x-show="row.turns" x-text="row.turns + (row.turns === 1 ? ' ask' : ' asks')"></span>
+                    <span x-text="formatNbDate(row.ts)"></span>
+                    <span x-show="row.flagged"
+                          class="text-rose-400 font-medium"
+                          x-text="row.flag_reason === 'refused' ? 'off-topic (refused)' : 'looks off-topic'"></span>
+                  </div>
+                  <div class="text-sm text-slate-200 mt-2 whitespace-pre-wrap"
+                       :class="deletedNoteOpen(person, row, i) ? '' : 'line-clamp-4'"
+                       x-text="deletedNoteBody(row, deletedNoteOpen(person, row, i))"></div>
+                  <button type="button" x-show="deletedNoteNeedsMore(row)"
+                    @click="toggleDeletedNote(person, row, i)"
+                    class="text-xs mt-2 font-medium"
+                    style="color: var(--accent-light);"
+                    x-text="deletedNoteOpen(person, row, i) ? 'Less' : 'More'"></button>
+                </div>
+              </template>
             </div>
             <div x-show="expandedSessionUser === person.key" class="mt-4 space-y-2">
               <template x-for="s in person.used" :key="s.session_id">
@@ -1317,10 +1669,10 @@
                       <div class="text-xs text-slate-600 mt-1">
                         <span x-text="s.model"></span>
                         ·
-                        <span x-text="(s.token_count || 0).toLocaleString() + ' tokens'"></span>
+                        <span x-text="(s.token_count || 0).toLocaleString('nb-NO') + ' tokens'"></span>
                         <span x-show="s.last_active">
                           ·
-                          <span x-text="new Date((s.last_active || 0) * 1000).toLocaleString()"></span>
+                          <span x-text="formatNbDate(s.last_active)"></span>
                         </span>
                       </div>
                     </div>
@@ -1342,7 +1694,7 @@
               <details x-show="person.empty.length" class="rounded-lg border border-white/5 bg-white/[0.01]">
                 <summary class="cursor-pointer select-none text-sm text-slate-400 hover:text-slate-200 px-3 py-2">
                   <span x-text="person.empty.length"></span>
-                  unused (0 tokens)
+                  unused (opened, no messages)
                 </summary>
                 <div class="space-y-2 p-2 pt-0">
                   <template x-for="s in person.empty" :key="s.session_id">
@@ -1355,7 +1707,7 @@
                             · 0 tokens
                             <span x-show="s.last_active">
                               ·
-                              <span x-text="new Date((s.last_active || 0) * 1000).toLocaleString()"></span>
+                              <span x-text="formatNbDate(s.last_active)"></span>
                             </span>
                           </div>
                         </div>
@@ -1387,9 +1739,10 @@
       <h2 class="section-title mb-1">Users</h2>
       <p class="text-slate-600 text-sm mb-6" x-text="isModerator
         ? 'AFK accounts. You can reset a password; roles are set by an admin.'
-        : 'Who may use Zork, and as staff or pupil. An override beats the domain default and applies on their next message.'"></p>
+        : 'Who may use Zorken, and as staff or pupil. An override beats the domain default and applies on their next message.'"></p>
 
-      <div x-show="!isModerator" class="card p-5 mb-5">
+      <template x-if="isAdminConsole">
+      <div class="card p-5 mb-5">
         <h3 class="font-semibold text-slate-300 mb-3">Defaults</h3>
         <div class="grid md:grid-cols-2 gap-3 text-sm">
           <div class="bg-white/[0.02] rounded-lg p-3">
@@ -1402,13 +1755,15 @@
           </div>
         </div>
       </div>
+      </template>
 
-      <div x-show="!isModerator" class="card p-5 mb-5">
+      <template x-if="isAdminConsole">
+      <div class="card p-5 mb-5">
         <h3 class="font-semibold text-slate-300 mb-3">Add or change a person</h3>
         <div class="flex flex-wrap gap-2 items-end">
           <label class="flex-1 min-w-[12rem]">
             <span class="block text-xs text-slate-600 mb-1.5 font-medium">Email</span>
-            <input x-model="permEmail" placeholder="navn@frid.no" class="input-base w-full px-3 py-2.5 text-sm">
+            <input x-model="permEmail" placeholder="navn@test.no" class="input-base w-full px-3 py-2.5 text-sm">
           </label>
           <label>
             <span class="block text-xs text-slate-600 mb-1.5 font-medium">Access</span>
@@ -1430,8 +1785,10 @@
           <span class="text-xs text-slate-600">Shown once — copy it now.</span>
         </div>
       </div>
+      </template>
 
-      <div x-show="!isModerator" class="flex gap-2 mb-4">
+      <template x-if="isAdminConsole">
+      <div class="flex gap-2 mb-4">
         <button @click="permTab = 'afk'" :class="permTab === 'afk' ? 'tab-active' : 'tab-inactive'" class="px-4 py-2 rounded-lg text-sm font-medium">
           AFK
           <span class="opacity-70" x-text="filteredAfk().length ? '(' + filteredAfk().length + ')' : ''"></span>
@@ -1445,6 +1802,7 @@
           <span class="opacity-70" x-text="filteredStress().length ? '(' + filteredStress().length + ')' : ''"></span>
         </button>
       </div>
+      </template>
       <div class="flex gap-3 mb-4">
         <input x-model="permQuery" placeholder="Search email…" class="input-base flex-1 px-3 py-2.5 text-sm">
       </div>
@@ -1462,8 +1820,8 @@
                 <span x-show="p.override"> · override</span>
               </div>
             </div>
+              <template x-if="isAdminConsole">
               <select
-                x-show="!isModerator"
                 class="input-base px-3 py-2 text-sm text-slate-300 cursor-pointer"
                 :value="p.effective || p.default_access || ''"
                 @change="setPermission(p.email, $event.target.value, { where: 'row' })"
@@ -1474,6 +1832,7 @@
                 <option value="admin">Admin</option>
                 <option value="blocked">Blocked</option>
               </select>
+              </template>
               <button
                 @click="resetPassword(p.email)"
                 class="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-slate-400 hover:text-slate-200 hover:bg-white/5"
@@ -1497,6 +1856,7 @@
     </div>
 
     <!-- ================================ MEMORY ================================ -->
+    <template x-if="isAdminConsole">
     <div x-show="currentPage === 'memory'" class="flex-1 overflow-y-auto p-7">
       <h2 class="section-title mb-1">Memory</h2>
       <p class="text-slate-600 text-sm mb-6">Semantic search and long-term knowledge management</p>
@@ -1546,8 +1906,10 @@
         </div>
       </div>
     </div>
+    </template>
 
     <!-- ================================ CONFIG ================================ -->
+    <template x-if="isAdminConsole">
     <div x-show="currentPage === 'config'" class="flex-1 overflow-y-auto p-7">
       <h2 class="section-title mb-1">Configuration</h2>
       <p class="text-slate-600 text-sm mb-6">Manage channels, models, and integrations</p>
@@ -1634,8 +1996,10 @@
         </div>
       </div>
     </div>
+    </template>
 
     <!-- ================================ CRONS ================================ -->
+    <template x-if="isAdminConsole">
     <div x-show="currentPage === 'crons'" class="flex-1 overflow-y-auto p-7">
       <div class="flex items-center justify-between mb-6">
         <div>
@@ -1710,15 +2074,15 @@
                   </span>
                   <span x-show="cron.expected_at">
                     <span class="text-slate-600">due </span>
-                    <span :class="cron.missed ? 'text-amber-400' : 'text-slate-400'" x-text="new Date(cron.expected_at).toLocaleString()"></span>
+                    <span :class="cron.missed ? 'text-amber-400' : 'text-slate-400'" x-text="formatNbDate(cron.expected_at)"></span>
                   </span>
                   <span x-show="cron.next_run">
                     <span class="text-slate-600">next </span>
-                    <span class="text-slate-400" x-text="cron.next_run ? new Date(cron.next_run).toLocaleString() : '—'"></span>
+                    <span class="text-slate-400" x-text="cron.next_run ? formatNbDate(cron.next_run) : '—'"></span>
                   </span>
                   <span x-show="cron.last_run">
                     <span class="text-slate-600">last </span>
-                    <span class="text-slate-400" x-text="cron.last_run ? new Date(cron.last_run).toLocaleString() : '—'"></span>
+                    <span class="text-slate-400" x-text="cron.last_run ? formatNbDate(cron.last_run) : '—'"></span>
                   </span>
                 </div>
                 <div class="text-xs text-slate-500 bg-black/30 rounded-lg px-3 py-2 font-mono truncate" x-text="cron.prompt"></div>
@@ -1748,8 +2112,10 @@
         </template>
       </div>
     </div>
+    </template>
 
     <!-- ================================ LOGS ================================ -->
+    <template x-if="isAdminConsole">
     <div x-show="currentPage === 'logs'" class="flex-1 flex flex-col overflow-hidden p-7">
       <div class="flex items-center justify-between mb-5">
         <div>
@@ -1769,14 +2135,15 @@
           <div class="space-y-0.5">
             <template x-for="(line, i) in auditLogs" :key="i">
               <div class="log-line flex items-start gap-3 py-1 px-2 rounded">
-                <span class="text-slate-700 flex-shrink-0 w-20" x-text="new Date((line.ts || 0) * 1000).toLocaleTimeString()"></span>
+                <span class="text-slate-700 flex-shrink-0 w-20" x-text="formatNbTime(line.ts)"></span>
                 <span class="font-semibold flex-shrink-0 w-36" :class="{
                   'text-red-400': line.event === 'auth_rejection' || line.event === 'injection_detected',
                   'text-yellow-400': line.event === 'error',
                   'text-emerald-400': line.event === 'message_sent',
                   'text-blue-400': line.event === 'message_received',
                 }" :style="line.event === 'tool_invoked' ? 'color: var(--accent-light)' : ''" x-text="line.event || 'unknown'"></span>
-                <span class="text-slate-500" x-text="' — ' + (line.channel || '') + ' ' + (line.sender_id || '') + ' ' + (line.content_preview || line.reason || line.tool_name || '')"></span>
+                <span class="text-slate-500 min-w-0 break-words whitespace-pre-wrap"
+                      x-text="' — ' + (line.channel || '') + ' ' + (line.sender_id || '') + ' ' + (line.summary || line.content_preview || line.reason || line.tool_name || '')"></span>
               </div>
             </template>
           </div>
@@ -1790,6 +2157,7 @@
         </template>
       </div>
     </div>
+    </template>
 
     <!-- =============================== INSIGHTS ============================== -->
     <div x-show="currentPage === 'insights'" class="flex-1 flex flex-col overflow-hidden p-7">
@@ -1813,7 +2181,7 @@
 
       <div class="flex-1 overflow-y-auto space-y-5">
         <!-- Totals -->
-        <div class="grid grid-cols-6 gap-4">
+        <div class="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
           <button type="button" class="card insight-stat p-5" @click="goToSessions()" title="Open Sessions">
             <div class="text-slate-600 text-xs uppercase tracking-wide">Conversations</div>
             <div class="text-2xl font-semibold text-slate-200 mt-1" x-text="insights?.totals?.conversations ?? '–'"></div>
@@ -1849,7 +2217,7 @@
           <div class="flex items-start justify-between gap-3 mb-3">
             <div>
               <h3 class="text-sm font-semibold text-slate-300">Undocumented</h3>
-              <p class="text-xs text-slate-500 mt-0.5">Asked something Zork had no written procedure for. The conversation is kept so you can write it down.</p>
+              <p class="text-xs text-slate-500 mt-0.5">Asked something Zorken had no written procedure for. The conversation is kept so you can write it down.</p>
             </div>
             <button type="button" @click="insightFocus = ''"
               class="text-xs text-slate-500 hover:text-slate-300">Close</button>
@@ -1866,7 +2234,7 @@
                   <span x-show="g.name && g.email" class="text-slate-600" x-text="g.email"></span>
                   <span x-show="g.tier" x-text="g.tier"></span>
                   <span x-show="g.topic" x-text="g.topic"></span>
-                  <span x-text="new Date((g.ts || 0) * 1000).toLocaleString()"></span>
+                  <span x-text="formatNbDate(g.ts)"></span>
                 </div>
                 <div class="mt-3 space-y-2">
                   <template x-if="!(g.messages || []).length">
@@ -1890,7 +2258,7 @@
           <div class="flex items-start justify-between gap-3 mb-3">
             <div>
               <h3 class="text-sm font-semibold text-slate-300">Off-topic refusals</h3>
-              <p class="text-xs text-slate-500 mt-0.5">Who asked, what they asked, and what Zork answered.</p>
+              <p class="text-xs text-slate-500 mt-0.5">Who asked, what they asked, and what Zorken answered.</p>
             </div>
             <button type="button" @click="insightFocus = ''"
               class="text-xs text-slate-500 hover:text-slate-300">Close</button>
@@ -1905,7 +2273,7 @@
                   <span class="text-slate-300" x-text="r.name || r.email || 'unknown'"></span>
                   <span x-show="r.name && r.email" class="text-slate-600" x-text="r.email"></span>
                   <span x-show="r.tier" x-text="r.tier"></span>
-                  <span x-text="new Date((r.ts || 0) * 1000).toLocaleString()"></span>
+                  <span x-text="formatNbDate(r.ts)"></span>
                 </div>
                 <div class="text-sm text-slate-200 mt-2" x-text="r.asked || '—'"></div>
                 <div class="text-sm text-slate-400 mt-2 whitespace-pre-wrap" x-text="r.reply || 'Reply was not stored for this refusal.'"></div>
@@ -1953,7 +2321,7 @@
           <h3 class="text-sm font-semibold text-slate-300 mb-1">Where the knowledge is missing</h3>
           <p class="text-xs text-slate-600 mb-4">
             Domains with no verified procedure or notes. If people have been asking
-            here, Zork is answering from general knowledge — write these next.
+            here, Zorken is answering from general knowledge — write these next.
           </p>
           <p x-show="insightsLoading" class="text-sm text-slate-600">Loading…</p>
           <p x-show="!insightsLoading && insights && !missingCoverage().length" class="text-sm text-slate-600">Every domain has something written down.</p>
@@ -2063,15 +2431,16 @@
                     ·
                     <span x-text="c.topic || 'unclassified'"></span>
                     ·
-                    <span x-text="new Date((c.ts || 0) * 1000).toLocaleString()"></span>
+                    <span x-text="formatNbDate(c.ts)"></span>
                   </div>
                 </div>
+                <template x-if="isAdminConsole">
                 <button type="button"
-                  x-show="!isModerator"
                   @click="promoteInsight(c)"
                   :disabled="!c.topic || insightPromoting"
                   class="btn-primary px-2 py-1 text-[11px] disabled:opacity-40"
                   x-text="c.topic ? 'Draft in ' + c.topic : 'No skill'"></button>
+                </template>
               </div>
             </template>
           </div>
@@ -2087,7 +2456,7 @@
           <div class="space-y-0.5">
             <template x-for="(c, i) in (insights?.recent || [])" :key="i">
               <div class="log-line flex items-start gap-3 py-1.5 px-2 rounded text-sm">
-                <span class="text-slate-700 flex-shrink-0 w-32 text-xs" x-text="new Date((c.ts || 0) * 1000).toLocaleString()"></span>
+                <span class="text-slate-700 flex-shrink-0 w-32 text-xs" x-text="formatNbDate(c.ts)"></span>
                 <span class="text-slate-500 flex-shrink-0 w-56 truncate text-xs" x-text="c.email"></span>
                 <span class="flex-shrink-0 w-16 text-xs" :class="c.tier === 'student' ? 'text-blue-400' : 'text-emerald-400'" x-text="c.tier"></span>
                 <span class="text-slate-400" x-text="c.title"></span>
@@ -2108,12 +2477,15 @@
           <div class="flex items-center justify-between mb-3">
             <div>
               <h2 class="section-title !text-lg">Skills</h2>
-              <p class="text-slate-600 text-xs mt-0.5">Reusable workflows in `skills/&lt;id&gt;/SKILL.md`</p>
+              <p class="text-slate-600 text-xs mt-0.5" x-text="isModerator
+                ? 'Written procedures Zorken uses when helping people. Read-only.'
+                : 'Reusable workflows in skills/<id>/SKILL.md'"></p>
             </div>
             <button @click="loadSkills()" class="subtle-action transition-colors px-2 py-1 rounded text-xs">↺</button>
           </div>
 
-          <div x-show="!isModerator" class="space-y-2.5">
+          <template x-if="isAdminConsole">
+          <div class="space-y-2.5">
             <input x-model="newSkill.name" type="text" placeholder="Skill name"
               class="input-base w-full px-3 py-2 text-sm">
             <textarea x-model="newSkill.description" rows="3" placeholder="What this skill is for..."
@@ -2121,9 +2493,10 @@
             <button @click="createSkill()" class="btn-primary w-full px-3 py-2 text-sm">Create Skill</button>
             <div x-show="skillCreateMessage" class="text-xs text-emerald-400" x-text="skillCreateMessage"></div>
             <div class="text-[11px] text-slate-700 leading-relaxed">
-              You can also ask your agent to create skills for you. Zork saves them in the same workspace directory.
+              You can also ask your agent to create skills for you. Zorken saves them in the same workspace directory.
             </div>
           </div>
+          </template>
         </div>
 
         <div class="flex-1 overflow-y-auto p-2">
@@ -2158,15 +2531,21 @@
         <div x-show="selectedSkillId" class="flex-1 flex flex-col overflow-hidden">
           <div class="flex items-center gap-2 px-4 py-2.5 flex-shrink-0 pane-toolbar">
             <span class="text-xs font-mono text-slate-500 flex-1 truncate" x-text="selectedSkillPath || selectedSkillId"></span>
-            <span x-show="skillUnsaved && !isModerator" class="text-xs text-amber-500 flex-shrink-0">● unsaved</span>
+            <template x-if="isAdminConsole">
+              <span x-show="skillUnsaved" class="text-xs text-amber-500 flex-shrink-0">● unsaved</span>
+            </template>
             <span x-show="skillSaved" class="text-xs text-emerald-400 flex-shrink-0">✓ saved</span>
-            <button x-show="!isModerator" @click="saveSkill()" :disabled="skillSaving || !skillUnsaved"
+            <template x-if="isAdminConsole">
+            <button @click="saveSkill()" :disabled="skillSaving || !skillUnsaved"
               class="btn-primary px-3 py-1.5 text-xs flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
               x-text="skillSaving ? 'Saving…' : 'Save'"></button>
-            <button x-show="!isModerator" @click="copySkillToTemplate()" :disabled="skillTemplateBusy || skillUnsaved"
+            </template>
+            <template x-if="isAdminConsole">
+            <button @click="copySkillToTemplate()" :disabled="skillTemplateBusy || skillUnsaved"
               class="px-3 py-1.5 text-xs flex-shrink-0 rounded-lg border border-white/10 text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Overwrite workspace-template/ so this skill (and its screenshots) survive the next PC"
               x-text="skillTemplateBusy ? 'Copying…' : 'Copy this skill into the repo template'"></button>
+            </template>
           </div>
           <div x-show="skillTemplateMsg"
             class="px-4 py-2 text-xs text-emerald-400 bg-emerald-500/5 border-b border-white/5 flex-shrink-0"
@@ -2175,10 +2554,10 @@
           <div x-show="skillError" class="px-4 py-3 text-xs text-red-400 bg-red-500/5 border-b border-red-500/10 flex-shrink-0"
             x-text="skillError"></div>
 
+          <template x-if="isAdminConsole">
           <textarea
             x-model="skillContent"
-            :readonly="isModerator"
-            @input="if (!isModerator) { skillUnsaved = true; skillSaved = false; refreshSkillPreview(); }"
+            @input="skillUnsaved = true; skillSaved = false; refreshSkillPreview();"
             @keydown.ctrl.s.prevent="saveSkill()"
             @keydown.meta.s.prevent="saveSkill()"
             spellcheck="false"
@@ -2186,6 +2565,12 @@
             placeholder="Skill content…"
             class="flex-1 resize-none outline-none font-mono text-xs leading-relaxed p-4 editor-surface"
             style="border:none; tab-size:2; min-height:40%;"></textarea>
+          </template>
+          <template x-if="!isAdminConsole">
+          <pre class="flex-1 overflow-auto font-mono text-xs leading-relaxed p-4 editor-surface whitespace-pre-wrap"
+            style="border:none; tab-size:2; min-height:40%; margin:0;"
+            x-text="skillContent"></pre>
+          </template>
           <div x-show="skillPreview.length" class="flex-shrink-0 px-4 py-3 border-t border-white/5 overflow-x-auto"
                style="max-height:28%;">
             <div class="text-[11px] uppercase tracking-wide text-slate-600 mb-2">Screenshots in this skill</div>
@@ -2203,6 +2588,7 @@
     </div>
 
     <!-- ================================ FILES ================================ -->
+    <template x-if="isAdminConsole">
     <div x-show="currentPage === 'files'" class="flex-1 flex overflow-hidden">
 
       <!-- ── File tree panel ── -->
@@ -2300,7 +2686,10 @@
         </div>
       </div>
     </div>
+    </template>
 
+    <template x-if="isDeskAdmin">
+    <div>
     <div x-show="deskStatusEditId" class="ticket-status-backdrop" @click="deskStatusEditId = ''"></div>
     <div x-show="deskStatusEditId" class="ticket-status-menu" x-cloak
          :style="'top:' + deskStatusMenuY + 'px; left:' + deskStatusMenuX + 'px'">
@@ -2310,18 +2699,28 @@
           x-text="s.label"></button>
       </template>
     </div>
+    </div>
+    </template>
     <input type="file" class="hidden" x-ref="deskImageFile" accept="image/png,image/jpeg,image/gif,image/webp" multiple @change="onDeskImagePicked($event)">
     <div x-show="deskFormOpen" class="desk-modal-backdrop" @keydown.escape.window="closeDeskForm()" @click.self="closeDeskForm()">
       <div class="desk-modal" @click.stop>
         <div class="flex items-start justify-between gap-3 mb-4">
           <div>
-            <h3 class="text-base font-semibold text-slate-100" x-text="deskFormKind === 'issue' ? 'Report issue' : 'Suggestion'"></h3>
-            <p class="text-xs text-slate-600 mt-0.5">Admins see this in the Team chat inbox.</p>
+            <h3 class="text-base font-semibold text-slate-100" x-text="deskFormKind === 'issue' ? 'Report a problem' : 'Suggest an idea'"></h3>
+            <p class="text-xs text-slate-600 mt-0.5">This lands in Reports, where the team can track it and reply.</p>
           </div>
           <button type="button" @click="closeDeskForm()" class="text-slate-500 hover:text-slate-300 text-sm px-1">Close</button>
         </div>
         <form class="space-y-3" @submit.prevent="submitDeskForm()"
               @dragover.prevent @drop.prevent="onDeskImageDrop($event, 'form')">
+          <div class="flex gap-2">
+            <button type="button" @click="deskFormKind = 'issue'"
+              :class="deskFormKind === 'issue' ? 'tab-active' : 'tab-inactive'"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium">Problem</button>
+            <button type="button" @click="deskFormKind = 'suggestion'"
+              :class="deskFormKind === 'suggestion' ? 'tab-active' : 'tab-inactive'"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium">Idea</button>
+          </div>
           <div>
             <label class="text-xs text-slate-500 font-medium">Subject</label>
             <input x-model="deskFormSubject" maxlength="120" class="input-base w-full px-3 py-2.5 text-sm mt-1" placeholder="Short title">
@@ -2363,6 +2762,7 @@
 function helixApp() {
   return {
     authenticated: false,
+    loginEmail: '',
     loginPassword: '',
     loginError: '',
     token: localStorage.getItem('helix_token') || '',
@@ -2372,6 +2772,8 @@ function helixApp() {
     pages: [
       { id: 'home',     label: 'Home',     icon: '◈' },
       { id: 'desk',     label: 'Team chat', icon: '✉' },
+      { id: 'reports',  label: 'Reports',  icon: '⚑' },
+      { id: 'apps',     label: 'Apps',     icon: '▣' },
       { id: 'insights', label: 'Insights', icon: '◔' },
       { id: 'skills',   label: 'Skills',   icon: '🧠' },
       { id: 'files',    label: 'Files',    icon: '⊞' },
@@ -2385,16 +2787,68 @@ function helixApp() {
       { id: 'config', label: 'Config',        icon: '◉' },
       { id: 'crons',  label: 'Crons',         icon: '◷' },
     ],
+    moderatorPages: ['home', 'desk', 'reports', 'apps', 'insights', 'skills', 'sessions', 'permissions'],
     get isModerator() {
       return this.consoleRole === 'moderator';
+    },
+    get isAdminConsole() {
+      return this.consoleRole === 'operator' || this.consoleRole === 'admin';
     },
     get isDeskAdmin() {
       return this.consoleRole === 'operator' || this.consoleRole === 'admin';
     },
+    canSeePage(id) {
+      if (this.isAdminConsole) return true;
+      return this.moderatorPages.includes(id);
+    },
     get visiblePages() {
-      if (this.consoleRole !== 'moderator') return this.pages;
-      const allow = ['home', 'desk', 'insights', 'skills', 'sessions', 'permissions'];
-      return this.pages.filter(p => allow.includes(p.id));
+      if (this.isAdminConsole) return this.pages;
+      return this.pages.filter(p => this.moderatorPages.includes(p.id));
+    },
+    parseTs(value) {
+      if (value == null || value === '') return null;
+      if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const d = new Date(value > 1e12 ? value : value * 1000);
+        return Number.isNaN(d.getTime()) ? null : d;
+      }
+      const raw = String(value).trim();
+      if (!raw) return null;
+      if (!/[-T:]/.test(raw)) {
+        const n = Number(raw);
+        if (Number.isFinite(n)) {
+          const d = new Date(n > 1e12 ? n : n * 1000);
+          return Number.isNaN(d.getTime()) ? null : d;
+        }
+      }
+      const d = new Date(raw);
+      return Number.isNaN(d.getTime()) ? null : d;
+    },
+    formatNbDate(value) {
+      const d = this.parseTs(value);
+      if (!d) return '';
+      return d.toLocaleString('nb-NO', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      });
+    },
+    formatNbTime(value) {
+      const d = this.parseTs(value);
+      if (!d) return '';
+      return d.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit', hour12: false });
+    },
+    sessionsInWindow() {
+      const days = this.sessionDays || 30;
+      const cutoff = Date.now() / 1000 - days * 86400;
+      return (this.sessions || []).filter(s => {
+        const ts = s.last_active;
+        if (ts == null || ts === '') return false;
+        const sec = typeof ts === 'number' ? (ts > 1e12 ? ts / 1000 : ts) : (() => {
+          const d = this.parseTs(ts);
+          return d ? d.getTime() / 1000 : 0;
+        })();
+        return sec >= cutoff;
+      });
     },
     health: {},
     config: { discord: {}, telegram: {}, models: { roster: [] } },
@@ -2421,6 +2875,8 @@ function helixApp() {
     deskTicketKind: 'issue',
     deskTicketStatus: 'all',
     deskFilterOpen: false,
+    deskTicketQuery: '',
+    deskNeedsYou: false,
     deskStatuses: [
       { id: 'new', label: 'New' },
       { id: 'waiting_response', label: 'Waiting response' },
@@ -2438,8 +2894,12 @@ function helixApp() {
     deskImageUrls: {},
     deskImageTick: 0,
     expandedSessionUser: '',
+    expandedDeletedUser: '',
+    expandedDeletedNote: '',
+    deletedChats: [],
     sessionQuery: '',
     sessionTab: 'afk',
+    sessionDays: 30,
     permissions: { defaults: { staff_domains: [], student_domains: [] }, overrides: [], people: [], stress: [] },
     permQuery: '',
     permEmail: '',
@@ -2516,24 +2976,37 @@ function helixApp() {
     fileSaved: false,
     fileUnsaved: false,
     fileLoadError: '',
-    // Theme
-    theme: localStorage.getItem('helix_theme') || 'classic',
+    // Apps shelf
+    appsList: [],
+    appsLoading: false,
+    appsError: '',
+    appsBusyId: '',
+    appFormOpen: false,
+    appFormBusy: false,
+    appFormFile: null,
+    appForm: { id: '', name: '', description: '', platforms: ['windows', 'mac'], run_hint: '' },
+    helperBusy: false,
+    helperSession: null,
+    helperLoopbackHost: '127.0.0.1',
+    helperError: '',
+    helperLoopbackDenied: false,
+    helperLoopbackStatus: null,
+    helperTimer: null,
+    helperSketchupNotice: false,
+    // Theme: Ocean is the only colour; light/dark is separate.
+    theme: 'ocean',
     lightMode: localStorage.getItem('helix_dark_mode') === 'light',
-    themes: [
-      { id: 'classic', name: 'Classic', color: '#7c3aed' },
-      { id: 'volcano', name: 'Volcano', color: '#f59e0b' },
-      { id: 'ocean',   name: 'Ocean',   color: '#0891b2' },
-      { id: 'forest',  name: 'Forest',  color: '#6b8e4e' },
-    ],
 
     async init() {
-      this.applyTheme(this.theme);
+      this.setTheme('ocean');
       this.applyMode(this.lightMode);
       this.$watch('deskTicketId', () => {
         this.clearDeskImages('reply');
         this.hydrateSelectedTicketImages();
         this.deskStatusEditId = '';
       });
+      this.captureTokenFromUrl();
+      await this.loadLoginOptions();
       if (this.token) {
         const ok = await this.checkAuth();
         if (ok) {
@@ -2559,23 +3032,15 @@ function helixApp() {
     },
 
     setTheme(t) {
-      this.theme = t;
-      localStorage.setItem('helix_theme', t);
-      this.applyTheme(t);
+      this.theme = 'ocean';
+      localStorage.setItem('helix_theme', 'ocean');
+      this.applyTheme('ocean');
     },
 
     toggleMode() {
       this.lightMode = !this.lightMode;
       localStorage.setItem('helix_dark_mode', this.lightMode ? 'light' : 'dark');
       this.applyMode(this.lightMode);
-    },
-
-    currentThemeName() {
-      return (this.themes.find(t => t.id === this.theme) || {}).name || 'Classic';
-    },
-
-    currentThemeColor() {
-      return (this.themes.find(t => t.id === this.theme) || {}).color || '#7c3aed';
     },
 
     onPageChange(pageId) {
@@ -2588,10 +3053,16 @@ function helixApp() {
       }
       if (pageId === 'permissions' || pageId === 'sessions') this.loadPermissions();
       if (pageId === 'desk') {
+        this.deskView = 'chat';
         this.markDeskRead();
         this.scrollDesk();
+      }
+      if (pageId === 'reports') {
+        this.deskView = 'inbox';
         this.loadDeskTickets();
       }
+      if (pageId === 'apps') this.loadApps();
+      if (pageId !== 'apps') this.stopHelperPoll();
     },
 
     async loadInsights() {
@@ -2684,6 +3155,7 @@ function helixApp() {
     },
 
     async promoteInsight(row) {
+      if (!this.isAdminConsole) return;
       if (!row || !row.topic || this.insightPromoting) return;
       this.insightPromoting = true;
       this.insightPromoteMsg = '';
@@ -2715,6 +3187,26 @@ function helixApp() {
       } finally { this.insightPromoting = false; }
     },
 
+    captureTokenFromUrl() {
+      const frag = new URLSearchParams(location.hash.slice(1));
+      if (frag.get('token')) {
+        this.token = frag.get('token');
+        localStorage.setItem('helix_token', this.token);
+        history.replaceState(null, '', location.pathname);
+      }
+      const qs = new URLSearchParams(location.search);
+      const err = qs.get('login_error');
+      if (!err) return;
+      this.loginError = err === '3'
+        ? 'An admin has to grant you moderator or admin access first.'
+        : err === '2'
+          ? "You don't have access to this service."
+          : 'Sign-in failed. Please try again.';
+      history.replaceState(null, '', location.pathname);
+    },
+
+    async loadLoginOptions() {},
+
     async checkAuth() {
       try {
         const r = await this.api('/api/me');
@@ -2726,7 +3218,7 @@ function helixApp() {
         if (this.consoleRole === 'moderator') {
           this.showAdvanced = false;
           this.permTab = 'afk';
-          const allowed = ['home', 'desk', 'insights', 'skills', 'sessions', 'permissions'];
+          const allowed = this.moderatorPages;
           if (!allowed.includes(this.currentPage)) this.currentPage = 'home';
         }
         return true;
@@ -2739,16 +3231,25 @@ function helixApp() {
         const r = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: this.loginPassword }),
+          body: JSON.stringify({ email: this.loginEmail, password: this.loginPassword }),
         });
         if (r.ok) {
           const data = await r.json();
           this.token = data.token;
           localStorage.setItem('helix_token', this.token);
+          const ok = await this.checkAuth();
+          if (!ok) {
+            this.token = '';
+            localStorage.removeItem('helix_token');
+            this.loginError = 'An admin has to grant you moderator or admin access first.';
+            return;
+          }
           this.authenticated = true;
           this.loadAll();
         } else {
-          this.loginError = 'Invalid password';
+          const data = await r.json().catch(() => ({}));
+          const detail = data.detail;
+          this.loginError = (detail && detail.message) || detail || 'Could not sign in';
         }
       } catch (e) {
         this.loginError = 'Connection error';
@@ -2780,7 +3281,7 @@ function helixApp() {
         this.loadHealth();
         this.loadSessions();
         if (this.currentPage === 'crons') this.loadCrons();
-        if (this.currentPage === 'desk' || this.currentPage === 'home') this.loadDeskTickets();
+        if (this.currentPage === 'desk' || this.currentPage === 'reports' || this.currentPage === 'home') this.loadDeskTickets();
       }, 30000);
     },
 
@@ -2795,6 +3296,7 @@ function helixApp() {
           this.showAdvanced = false;
           this.permTab = 'afk';
           this.sessionTab = 'afk';
+          if (!this.moderatorPages.includes(this.currentPage)) this.currentPage = 'home';
         }
       } catch {}
     },
@@ -2827,7 +3329,122 @@ function helixApp() {
     },
 
     deskIsMine(msg) {
-      return this.deskYou && this.deskIdentity(msg) === this.deskYou;
+      if (!msg) return false;
+      const id = this.deskIdentity(msg);
+      if (this.deskYou && id === this.deskYou) return true;
+      if (!this.isDeskAdmin) return false;
+      const role = (msg.role || '');
+      // Password login stores operator with no email; Users-tab admin has one.
+      if ((role === 'operator' || role === 'admin') && !id.includes('@')) return true;
+      return false;
+    },
+
+    deskRoleLabel(msg) {
+      const raw = ((msg && msg.role) || '').toLowerCase();
+      const labels = {
+        admin: 'Admin',
+        moderator: 'Moderator',
+        operator: 'Operator',
+        staff: 'Staff',
+      };
+      return labels[raw] || '';
+    },
+
+    deskInitials(msg) {
+      const name = ((msg && msg.name) || '').trim();
+      const parts = name.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      if (parts[0] && parts[0].length >= 2) return parts[0].slice(0, 2).toUpperCase();
+      const mail = ((msg && msg.email) || '').trim();
+      if (mail) return mail.slice(0, 2).toUpperCase();
+      return '?';
+    },
+
+    deskDayKey(ts) {
+      if (!ts) return 'unknown';
+      const d = new Date(ts * 1000);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    },
+
+    deskDayLabel(ts) {
+      if (!ts) return '';
+      const d = this.parseTs(ts);
+      if (!d) return '';
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const that = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const diff = Math.round((today - that) / 86400000);
+      if (diff === 0) return 'Today';
+      if (diff === 1) return 'Yesterday';
+      const opts = { day: 'numeric', month: 'short' };
+      if (d.getFullYear() !== now.getFullYear()) opts.year = 'numeric';
+      return d.toLocaleDateString('nb-NO', opts);
+    },
+
+    deskMsgTime(ts) {
+      return this.formatNbTime(ts);
+    },
+
+    deskRelativeTime(ts) {
+      if (!ts) return '';
+      const sec = Math.round((Date.now() - ts * 1000) / 1000);
+      if (sec < 45) return 'just now';
+      if (sec < 3600) return Math.max(1, Math.round(sec / 60)) + 'm';
+      if (sec < 86400) return Math.max(1, Math.round(sec / 3600)) + 'h';
+      const days = Math.round(sec / 86400000);
+      if (days === 1) return 'yesterday';
+      if (days < 7) return days + 'd';
+      return this.deskDayLabel(ts);
+    },
+
+    deskChatItems() {
+      const items = [];
+      let prev = null;
+      for (const m of this.deskMessages || []) {
+        const day = this.deskDayKey(m.ts);
+        if (!prev || this.deskDayKey(prev.ts) !== day) {
+          items.push({ type: 'day', id: 'day-' + day, label: this.deskDayLabel(m.ts), cont: false, msg: null });
+          prev = null;
+        }
+        const cont = !!(prev && this.deskIdentity(prev) === this.deskIdentity(m) && ((m.ts || 0) - (prev.ts || 0)) < 300);
+        items.push({ type: 'msg', id: m.id, msg: m, cont, label: '' });
+        prev = m;
+      }
+      return items;
+    },
+
+    deskTicketLast(t) {
+      const replies = (t && t.replies) || [];
+      if (replies.length) return replies[replies.length - 1];
+      return { text: (t && t.description) || '', ts: t && t.ts, images: (t && t.images) || [] };
+    },
+
+    deskTicketPreview(t) {
+      const last = this.deskTicketLast(t);
+      const text = ((last && last.text) || '').replace(/\s+/g, ' ').trim();
+      if (text) return text;
+      if (last && last.images && last.images.length) return 'Screenshot';
+      return '';
+    },
+
+    deskTicketNeedsYou(t) {
+      if (!t) return false;
+      if (this.isDeskAdmin) {
+        const s = this.normalizeStatus(t.status);
+        return s === 'new' || s === 'waiting_response' || s === 'needs_context';
+      }
+      return this.deskTicketUnseen(t);
+    },
+
+    deskNeedsYouCount() {
+      return (this.deskTickets || []).filter(t => t.kind === this.deskTicketKind && this.deskTicketNeedsYou(t)).length;
+    },
+
+    onDeskTicketQuery() {
+      const rows = this.visibleDeskTickets();
+      if (rows.some(t => t.id === this.deskTicketId)) return;
+      this.deskTicketId = rows.length ? rows[0].id : '';
+      if (this.deskTicketId) this.hydrateSelectedTicketImages();
     },
 
     deskUnreadLabel() {
@@ -2850,14 +3467,14 @@ function helixApp() {
 
     deskReportsHint() {
       if (!this.isDeskAdmin) {
-        return this.deskReportsAlertCount() ? 'A reply or a status change' : 'Open the inbox';
+        return this.deskReportsAlertCount() ? 'A reply or a status change' : 'Open reports';
       }
       const issues = this.deskKindNewCount('issue');
       const sugg = this.deskKindNewCount('suggestion');
-      if (!issues && !sugg) return 'Open the inbox';
+      if (!issues && !sugg) return 'Open reports';
       const parts = [];
-      if (issues) parts.push(issues === 1 ? '1 issue' : issues + ' issues');
-      if (sugg) parts.push(sugg === 1 ? '1 suggestion' : sugg + ' suggestions');
+      if (issues) parts.push(issues === 1 ? '1 problem' : issues + ' problems');
+      if (sugg) parts.push(sugg === 1 ? '1 idea' : sugg + ' ideas');
       return parts.join(' · ');
     },
 
@@ -2871,8 +3488,8 @@ function helixApp() {
       const sugg = this.deskKindAlertCount('suggestion');
       if (sugg && !issues) this.deskTicketKind = 'suggestion';
       else if (issues) this.deskTicketKind = 'issue';
-      this.currentPage = 'desk';
-      this.openDeskInbox();
+      this.currentPage = 'reports';
+      this.onPageChange('reports');
     },
 
     async markDeskRead() {
@@ -3040,6 +3657,20 @@ function helixApp() {
       return [first, ...(t.replies || [])];
     },
 
+    deskTicketThreadItems() {
+      const items = [];
+      let prevDay = '';
+      for (const m of this.deskTicketThread()) {
+        const day = this.deskDayKey(m.ts);
+        if (day !== prevDay) {
+          items.push({ type: 'day', id: 'tday-' + day + '-' + (m.id || items.length), label: this.deskDayLabel(m.ts), msg: null });
+          prevDay = day;
+        }
+        items.push({ type: 'msg', id: m.id, msg: m });
+      }
+      return items;
+    },
+
     async hydrateSelectedTicketImages() {
       const t = this.selectedDeskTicket();
       if (!t) return;
@@ -3079,6 +3710,10 @@ function helixApp() {
         const ticket = await r.json();
         this.upsertDeskTicket(ticket);
         this.closeDeskForm();
+        this.deskTicketKind = ticket.kind || this.deskFormKind;
+        this.deskTicketId = ticket.id;
+        this.currentPage = 'reports';
+        this.onPageChange('reports');
       } catch (e) {
         this.deskFormError = e.message || 'Could not send';
       } finally {
@@ -3087,7 +3722,7 @@ function helixApp() {
     },
 
     ticketKindLabel(kind) {
-      return kind === 'issue' ? 'Issue' : 'Suggestion';
+      return kind === 'issue' ? 'Problem' : 'Idea';
     },
 
     normalizeStatus(status) {
@@ -3226,16 +3861,23 @@ function helixApp() {
     visibleDeskTickets() {
       const kind = this.deskTicketKind;
       const status = this.deskTicketStatus;
+      const q = (this.deskTicketQuery || '').trim().toLowerCase();
       return (this.deskTickets || []).filter(t => {
         if (t.kind !== kind) return false;
-        if (status === 'all') return true;
-        return this.normalizeStatus(t.status) === status;
+        if (this.deskNeedsYou && !this.deskTicketNeedsYou(t)) return false;
+        if (status !== 'all' && this.normalizeStatus(t.status) !== status) return false;
+        if (q) {
+          const last = this.deskTicketPreview(t);
+          const hay = [t.subject, t.description, t.name, t.email, last].join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
       });
     },
 
     selectFirstVisibleTicket() {
       const rows = this.visibleDeskTickets();
-      const viewing = this.currentPage === 'desk' && this.deskView === 'inbox';
+      const viewing = this.currentPage === 'reports';
       if (rows.some(t => t.id === this.deskTicketId)) {
         if (viewing) this.markDeskTicketSeen(this.deskTicketId);
         return;
@@ -3272,7 +3914,7 @@ function helixApp() {
       else this.deskTickets.unshift(ticket);
       if (this.deskTicketId === ticket.id) {
         this.hydrateSelectedTicketImages();
-        if (this.currentPage === 'desk' && this.deskView === 'inbox') {
+        if (this.currentPage === 'reports') {
           this.markDeskTicketSeen(ticket.id);
         }
       }
@@ -3452,17 +4094,62 @@ function helixApp() {
       return user || 'unknown';
     },
 
+    normEmail(value) {
+      return String(value || '').replace(/^dev:/i, '').trim().toLowerCase();
+    },
+
+    deletedInWindow() {
+      const days = this.sessionDays || 30;
+      const cutoff = Date.now() / 1000 - days * 86400;
+      return (this.deletedChats || []).filter(d => (d.ts || 0) >= cutoff);
+    },
+
+    deletedForPerson(person) {
+      const email = this.normEmail(person && person.label);
+      if (!email || email === 'operator' || email === 'unknown') return [];
+      return this.deletedInWindow().filter(d => this.normEmail(d.email) === email);
+    },
+
+    deletedNoteKey(person, row, i) {
+      return (person && person.key ? person.key : '') + ':' + ((row && row.session_id) || '') + ':' + i;
+    },
+
+    deletedNoteOpen(person, row, i) {
+      return this.expandedDeletedNote === this.deletedNoteKey(person, row, i);
+    },
+
+    toggleDeletedNote(person, row, i) {
+      const key = this.deletedNoteKey(person, row, i);
+      this.expandedDeletedNote = this.expandedDeletedNote === key ? '' : key;
+    },
+
+    deletedNoteNeedsMore(row) {
+      const asks = (row && row.asks) || [];
+      if (asks.length > 1) return true;
+      const text = asks[0] || (row && (row.summary || row.title)) || '';
+      return text.length > 240;
+    },
+
+    deletedNoteBody(row, open) {
+      const asks = (row && row.asks) || [];
+      if (asks.length) {
+        if (!open) return row.summary || asks.join(' · ');
+        return asks.map((a, n) => asks.length > 1 ? ((n + 1) + '. ' + a) : a).join('\n\n');
+      }
+      return (row && (row.summary || row.title)) || '—';
+    },
+
     usedSessionCount() {
-      return this.sessions.filter(s => (s.token_count || 0) > 0).length;
+      return this.sessionsInWindow().filter(s => (s.token_count || 0) > 0).length;
     },
 
     emptySessionCount() {
-      return this.sessions.filter(s => (s.token_count || 0) <= 0).length;
+      return this.sessionsInWindow().filter(s => (s.token_count || 0) <= 0).length;
     },
 
     get sessionPeople() {
       const groups = new Map();
-      for (const s of this.sessions) {
+      for (const s of this.sessionsInWindow()) {
         const key = this.sessionUserKey(s);
         if (!groups.has(key)) {
           groups.set(key, {
@@ -3473,6 +4160,21 @@ function helixApp() {
           });
         }
         groups.get(key).sessions.push(s);
+      }
+      const seen = new Set(
+        [...groups.values()].map(g => this.normEmail(g.label)).filter(Boolean)
+      );
+      for (const row of this.deletedInWindow()) {
+        const email = this.normEmail(row.email);
+        if (!email || seen.has(email)) continue;
+        seen.add(email);
+        const key = (row.channel || 'web') + ':' + email;
+        groups.set(key, {
+          key,
+          label: row.email || email,
+          channel: row.channel || 'web',
+          sessions: [],
+        });
       }
       return [...groups.values()].map(g => ({
         ...g,
@@ -3523,6 +4225,21 @@ function helixApp() {
       if (!this.expandedSessionUser) this.transcript = {};
     },
 
+    toggleDeletedChats(key) {
+      this.expandedDeletedNote = '';
+      this.expandedDeletedUser = this.expandedDeletedUser === key ? '' : key;
+    },
+
+    async loadDeletedChats() {
+      try {
+        const r = await this.api('/api/sessions/deleted?days=365');
+        if (r.ok) {
+          const data = await r.json();
+          this.deletedChats = data.deleted || [];
+        }
+      } catch { this.deletedChats = []; }
+    },
+
     async loadSessions() {
       try {
         const r = await this.api('/api/sessions');
@@ -3536,6 +4253,7 @@ function helixApp() {
           }
         }
       } catch {}
+      await this.loadDeletedChats();
     },
 
     async loadPermissions() {
@@ -3611,13 +4329,11 @@ function helixApp() {
     },
 
     formatPermSeen(ts) {
-      if (!ts) return '';
-      const d = new Date((ts > 1e12 ? ts : ts * 1000));
-      if (Number.isNaN(d.getTime())) return '';
-      return d.toLocaleString();
+      return this.formatNbDate(ts);
     },
 
     async setPermission(email, access, opts = {}) {
+      if (!this.isAdminConsole) return;
       const where = opts.where || 'row';
       this.permMsg = '';
       this.permIssuedEmail = '';
@@ -3681,6 +4397,7 @@ function helixApp() {
     },
 
     async savePermission() {
+      if (!this.isAdminConsole) return;
       const email = (this.permEmail || '').trim();
       if (!email) {
         this.permOk = false;
@@ -3886,8 +4603,8 @@ function helixApp() {
         return 'Running now — wait here for the report';
       }
       if (cron.missed) {
-        const due = cron.expected_at ? new Date(cron.expected_at).toLocaleString() : 'its last schedule';
-        const last = cron.last_run ? new Date(cron.last_run).toLocaleString() : 'never';
+        const due = cron.expected_at ? this.formatNbDate(cron.expected_at) : 'its last schedule';
+        const last = cron.last_run ? this.formatNbDate(cron.last_run) : 'never';
         return 'Missed the ' + due + ' run — last ran ' + last;
       }
       if (cron.last_status === 'ok') return 'Last run succeeded';
@@ -3978,6 +4695,7 @@ function helixApp() {
     },
 
     async createSkill() {
+      if (!this.isAdminConsole) return;
       if (!this.newSkill.name.trim()) return;
       this.skillCreateMessage = '';
       const r = await this.api('/api/skills', {
@@ -3998,6 +4716,7 @@ function helixApp() {
     },
 
     async saveSkill() {
+      if (!this.isAdminConsole) return;
       if (!this.selectedSkillId || this.skillSaving) return;
       this.skillSaving = true;
       this.skillSaved = false;
@@ -4026,6 +4745,7 @@ function helixApp() {
     },
 
     async copySkillToTemplate() {
+      if (!this.isAdminConsole) return;
       if (!this.selectedSkillId || this.skillTemplateBusy || this.skillUnsaved) return;
       this.skillTemplateBusy = true;
       this.skillTemplateMsg = '';
@@ -4128,6 +4848,28 @@ function helixApp() {
       }
     },
 
+    detectOs() {
+      const u = navigator.userAgent || '';
+      if (/iPad|iPhone|iPod/.test(u) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+        return 'iOS';
+      try {
+        const p = (navigator.userAgentData && navigator.userAgentData.platform) || '';
+        const s = p.toLowerCase();
+        if (s.includes('win')) return 'Windows';
+        if (s.includes('mac')) return 'macOS';
+        if (s.includes('android')) return 'Android';
+        if (s.includes('cros') || s.includes('chrome')) return 'ChromeOS';
+        if (s.includes('linux')) return 'Linux';
+        if (/iphone|ipad|ios/.test(s)) return 'iOS';
+      } catch (e) {}
+      if (/Android/.test(u)) return 'Android';
+      if (/Win/.test(u)) return 'Windows';
+      if (/Mac/.test(u)) return 'macOS';
+      if (/CrOS/.test(u)) return 'ChromeOS';
+      if (/Linux/.test(u)) return 'Linux';
+      return '';
+    },
+
     async sendChat() {
       if (!this.chatInput.trim() || this.thinking) return;
       const content = this.chatInput.trim();
@@ -4140,7 +4882,7 @@ function helixApp() {
         if (el) el.scrollTop = el.scrollHeight;
       });
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ message: content }));
+        this.ws.send(JSON.stringify({ message: content, os: this.detectOs() }));
       } else {
         this.chatMessages[this.chatMessages.length - 1].content = '[WebSocket not connected]';
         this.thinking = false;
@@ -4200,6 +4942,558 @@ function helixApp() {
       if (h > 0) return `${h}h ${m}m`;
       if (m > 0) return `${m}m ${s}s`;
       return `${s}s`;
+    },
+
+    formatBytes(n) {
+      const size = Number(n) || 0;
+      if (size < 1024) return size + ' B';
+      if (size < 1024 * 1024) return Math.round(size / 1024) + ' KB';
+      return (size / (1024 * 1024)).toFixed(1) + ' MB';
+    },
+
+    resetAppForm() {
+      this.appForm = { id: '', name: '', description: '', platforms: ['windows', 'mac'], run_hint: '' };
+      this.appFormFile = null;
+      this.appsError = '';
+    },
+
+    toggleAppForm() {
+      this.appFormOpen = !this.appFormOpen;
+      if (!this.appFormOpen) this.resetAppForm();
+    },
+
+    async loadApps() {
+      this.appsLoading = true;
+      this.appsError = '';
+      try {
+        const r = await this.api('/api/apps');
+        if (!r.ok) throw new Error();
+        const data = await r.json();
+        this.appsList = data.apps || [];
+      } catch {
+        this.appsList = [];
+        this.appsError = 'Could not load apps.';
+      }
+      this.appsLoading = false;
+    },
+
+    appDisplayName(app) {
+      const id = (app && app.id) || '';
+      if (id === 'skoleprogrammer') return 'School/work Programs';
+      if (id === 'frid-nett') return 'FRID-nett';
+      if (id === 'printer') return 'Get printer';
+      return (app && app.name) || id;
+    },
+
+    featuredAppFallbacks() {
+      return [
+        {
+          id: 'skoleprogrammer',
+          name: 'School/work Programs',
+          filename: '',
+          size: 0,
+          description: 'Office, Teams, printer, AppsAnywhere, Ordnett and the other school programs.',
+          platforms: ['windows'],
+          run_hint: '',
+        },
+        {
+          id: 'frid-nett',
+          name: 'FRID-nett',
+          filename: '',
+          size: 0,
+          description: 'Installs FRID wifi on Windows. At school it joins FRID-iot and runs ClearPass QuickConnect.',
+          platforms: ['windows'],
+          run_hint: '',
+        },
+        {
+          id: 'printer',
+          name: 'Get printer',
+          filename: '',
+          size: 0,
+          description: 'Viken Print / YSoft SafeQ FlexiSpooler for the school printers.',
+          platforms: ['windows'],
+          run_hint: '',
+        },
+      ];
+    },
+
+    shelfApps() {
+      const list = this.appsList || [];
+      const featuredIds = this.featuredAppFallbacks().map(row => row.id);
+      const featured = this.featuredAppFallbacks().map(fallback => {
+        const found = list.find(row => row.id === fallback.id);
+        return found ? Object.assign({}, found) : fallback;
+      });
+      const rest = list.filter(row => !featuredIds.includes(row.id));
+      return featured.concat(rest);
+    },
+
+    async downloadApp(app) {
+      if (!app || !app.id || !app.filename) return;
+      this.appsBusyId = app.id;
+      this.appsError = '';
+      try {
+        const r = await fetch('/api/apps/' + encodeURIComponent(app.id) + '/download', {
+          headers: { 'Authorization': 'Bearer ' + this.token },
+        });
+        if (!r.ok) throw new Error();
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = app.filename || (app.id + '.bin');
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch {
+        this.appsError = 'Could not download ' + (app.name || 'that app') + '.';
+      }
+      this.appsBusyId = '';
+    },
+
+    editApp(app) {
+      this.appFormOpen = true;
+      this.appForm = {
+        id: app.id || '',
+        name: this.appDisplayName(app),
+        description: app.description || '',
+        platforms: (app.platforms && app.platforms.length) ? [...app.platforms] : ['windows'],
+        run_hint: app.run_hint || '',
+      };
+      this.appFormFile = null;
+      this.appsError = '';
+    },
+
+    async uploadApp() {
+      if (!this.appForm.name.trim() || !this.appFormFile) return;
+      this.appFormBusy = true;
+      this.appsError = '';
+      try {
+        const fd = new FormData();
+        fd.append('file', this.appFormFile, this.appFormFile.name);
+        fd.append('name', this.appForm.name.trim());
+        fd.append('description', this.appForm.description || '');
+        fd.append('platforms', (this.appForm.platforms || []).join(','));
+        fd.append('run_hint', this.appForm.run_hint || '');
+        if (this.appForm.id) fd.append('app_id', this.appForm.id);
+        const r = await fetch('/api/apps', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + this.token },
+          body: fd,
+        });
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.detail || 'Upload failed');
+        }
+        this.appFormOpen = false;
+        this.resetAppForm();
+        await this.loadApps();
+      } catch (e) {
+        this.appsError = e.message || 'Could not save the app.';
+      }
+      this.appFormBusy = false;
+    },
+
+    async deleteApp(app) {
+      if (!app || !app.id) return;
+      if (!confirm('Remove "' + app.name + '" from the shelf? The file is deleted from Zorken.')) return;
+      this.appsError = '';
+      try {
+        const r = await this.api('/api/apps/' + encodeURIComponent(app.id), { method: 'DELETE' });
+        if (!r.ok) throw new Error();
+        await this.loadApps();
+      } catch {
+        this.appsError = 'Could not delete ' + (app.name || 'that app') + '.';
+      }
+    },
+
+    stopHelperPoll() {
+      if (this.helperTimer) {
+        clearInterval(this.helperTimer);
+        this.helperTimer = null;
+      }
+    },
+
+    async downloadHelperLauncher(sessionId) {
+      const mac = this.detectOs() === 'macOS';
+      const qs = mac ? '?os=mac' : '';
+      const dl = await fetch('/api/helper/sessions/' + encodeURIComponent(sessionId) + '/launcher' + qs, {
+        headers: { 'Authorization': 'Bearer ' + this.token },
+      });
+      if (!dl.ok) throw new Error();
+      const blob = await dl.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = mac ? 'ZorkHelper.command' : 'ZorkHelper.cmd';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+
+    helperIsInstalled() {
+      try { return localStorage.getItem('zorkHelperInstalled') === '1'; } catch { return false; }
+    },
+    markHelperInstalled() {
+      try { localStorage.setItem('zorkHelperInstalled', '1'); } catch {}
+    },
+    wakeHelperApp() {
+      try {
+        const a = document.createElement('a');
+        a.href = 'zorkhelper://wake';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch {}
+    },
+    helperFetchOpts(extra) {
+      return Object.assign({ mode: 'cors', cache: 'no-store', credentials: 'omit' }, extra || {});
+    },
+    async pingOneHelper(host) {
+      try {
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 1500);
+        const r = await fetch('http://' + host + ':18792/v1/ping', this.helperFetchOpts({ signal: c.signal }));
+        clearTimeout(t);
+        if (r.ok) {
+          this.helperLoopbackHost = host;
+          this.helperLoopbackDenied = false;
+          return true;
+        }
+      } catch {}
+      return false;
+    },
+    async pingLocalHelper() {
+      const found = await Promise.all(['127.0.0.1', 'localhost'].map(host => this.pingOneHelper(host)));
+      return found.some(Boolean);
+    },
+    localHelperUrl() {
+      return 'http://' + (this.helperLoopbackHost || '127.0.0.1') + ':18792';
+    },
+    async askLocalHelper(session, kind, items) {
+      if (!session || !session.handoff) return false;
+      try {
+        const c = new AbortController();
+        const t = setTimeout(() => c.abort(), 6000);
+        const r = await fetch(this.localHelperUrl() + '/v1/job', this.helperFetchOpts({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            base_url: location.origin,
+            session_id: session.id,
+            session_secret: session.handoff,
+            kind: kind || 'scan',
+            items: items || [],
+          }),
+          signal: c.signal,
+        }));
+        clearTimeout(t);
+        return r.ok;
+      } catch { return false; }
+    },
+    async enqueueHelperJob(session, kind, items) {
+      const r = await this.api('/api/helper/sessions/' + encodeURIComponent(session.id) + '/enqueue', {
+        method: 'POST',
+        body: JSON.stringify({ kind: kind || 'scan', items: items || [] }),
+      });
+      if (!r.ok) return null;
+      try { return await r.json(); } catch { return null; }
+    },
+    async queryLoopbackPermission() {
+      if (!navigator.permissions || !navigator.permissions.query) return null;
+      for (const name of ['loopback-network', 'local-network-access']) {
+        try { return await navigator.permissions.query({ name }); }
+        catch {}
+      }
+      return null;
+    },
+    setLoopbackDenied(on) {
+      this.helperLoopbackDenied = !!on;
+      if (on) this.helperError = '';
+    },
+    async watchLoopbackPermission() {
+      const status = await this.queryLoopbackPermission();
+      if (!status) return;
+      this.helperLoopbackStatus = status;
+      status.onchange = () => this.setLoopbackDenied(status.state === 'denied');
+      this.setLoopbackDenied(status.state === 'denied');
+    },
+    async loopbackIsDenied() {
+      const status = this.helperLoopbackStatus || await this.queryLoopbackPermission();
+      if (status && status !== this.helperLoopbackStatus) {
+        this.helperLoopbackStatus = status;
+        status.onchange = () => this.setLoopbackDenied(status.state === 'denied');
+      }
+      return !!(status && status.state === 'denied');
+    },
+    async waitForLoopbackDecision(ms) {
+      const deadline = Date.now() + (ms || 120000);
+      while (Date.now() < deadline) {
+        const status = this.helperLoopbackStatus || await this.queryLoopbackPermission();
+        if (status && status !== this.helperLoopbackStatus) {
+          this.helperLoopbackStatus = status;
+          status.onchange = () => this.setLoopbackDenied(status.state === 'denied');
+        }
+        if (!status || status.state !== 'prompt') {
+          if (status) this.setLoopbackDenied(status.state === 'denied');
+          return status ? status.state : null;
+        }
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      return 'prompt';
+    },
+    async dispatchHelperJob(session, kind, items, opts) {
+      const known = this.helperIsInstalled();
+      const allowDownload = !!(opts && opts.allowDownload);
+      await this.watchLoopbackPermission();
+      if (await this.pingLocalHelper() && await this.askLocalHelper(session, kind, items)) {
+        this.markHelperInstalled();
+        return 'local';
+      }
+      await this.waitForLoopbackDecision(120000);
+      if (await this.loopbackIsDenied()) {
+        this.setLoopbackDenied(true);
+        try {
+          const queued = await this.enqueueHelperJob(session, kind, items);
+          if (queued && queued.via === 'tray') {
+            this.markHelperInstalled();
+            return 'server';
+          }
+        } catch {}
+        return 'blocked';
+      }
+      if (await this.pingLocalHelper() && await this.askLocalHelper(session, kind, items)) {
+        this.markHelperInstalled();
+        return 'local';
+      }
+      if (this.detectOs() === 'macOS') {
+        if (!allowDownload) return 'wake';
+        try {
+          await this.downloadHelperLauncher(session.id);
+          return 'download';
+        } catch {
+          return 'wake';
+        }
+      }
+      this.wakeHelperApp();
+      const deadline = Date.now() + (known ? 15000 : 8000);
+      while (Date.now() < deadline) {
+        if (await this.pingLocalHelper() && await this.askLocalHelper(session, kind, items)) {
+          this.markHelperInstalled();
+          return 'local';
+        }
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      try {
+        const queued = await this.enqueueHelperJob(session, kind, items);
+        if (queued && queued.via === 'tray') {
+          this.markHelperInstalled();
+          return 'server';
+        }
+      } catch {}
+      if (!allowDownload) return 'wake';
+      try {
+        await this.downloadHelperLauncher(session.id);
+        return 'download';
+      } catch {
+        return 'wake';
+      }
+    },
+
+    async startPcCheck() {
+      this.helperError = '';
+      this.helperBusy = true;
+      this.helperSketchupNotice = false;
+      this.stopHelperPoll();
+      try {
+        const created = await this.api('/api/helper/sessions', { method: 'POST', body: JSON.stringify({ kind: 'scan' }) });
+        if (!created.ok) throw new Error();
+        const session = await created.json();
+        this.helperSession = session;
+        this.helperTimer = setInterval(() => this.pollHelper(), 1000);
+        this.pollHelper();
+        const via = await this.dispatchHelperJob(session, 'scan', [], { allowDownload: true });
+        session.via_tray = via === 'local' || via === 'server';
+        if (this.helperSession) this.helperSession.via_tray = session.via_tray;
+        if (via === 'download' && this.detectOs() === 'macOS') {
+          this.helperError = 'Open Downloads. Right-click ZorkHelper.command → Open.';
+        }
+        if (via === 'blocked') {
+          this.helperSession = null;
+          this.stopHelperPoll();
+        }
+      } catch {
+        this.helperError = 'Could not start the check. Try again.';
+        this.helperSession = null;
+        this.stopHelperPoll();
+      }
+      this.helperBusy = false;
+    },
+
+    isHelperApp(app) {
+      const id = (app && app.id) || '';
+      return id === 'skoleprogrammer' || id === 'frid-nett' || id === 'printer';
+    },
+
+    helperItemsFor(app) {
+      const id = (app && app.id) || '';
+      if (id === 'frid-nett') return ['fridnett'];
+      if (id === 'skoleprogrammer') return ['skoleprogrammer'];
+      if (id === 'printer') return ['printer'];
+      return [];
+    },
+
+    async runShelfApp(app) {
+      const items = this.helperItemsFor(app);
+      if (!items.length) return;
+      await this.startHelperInstall(items, this.appDisplayName(app));
+    },
+
+    async startFridNett() {
+      await this.startHelperInstall(['fridnett'], 'FRID-nett');
+    },
+
+    async startHelperInstall(items, label) {
+      this.helperError = '';
+      this.helperSketchupNotice = false;
+      if (!items || !items.length) return;
+      const fail = 'Could not start ' + (label || 'the app') + '. Try again.';
+      if (this.helperSession && this.helperSession.id) {
+        try {
+          const via = await this.dispatchHelperJob(this.helperSession, 'install', items, { allowDownload: true });
+          this.helperSession.via_tray = via === 'local' || via === 'server';
+          if (via === 'wake') {
+            this.helperError = 'If Windows asks to open Zork Helper, click Open.';
+          }
+          if (via === 'blocked') {
+            this.stopHelperPoll();
+            return;
+          }
+          this.stopHelperPoll();
+          this.helperTimer = setInterval(() => this.pollHelper(), 1000);
+          this.pollHelper();
+        } catch {
+          this.helperError = fail;
+        }
+        return;
+      }
+      this.helperBusy = true;
+      this.stopHelperPoll();
+      try {
+        const created = await this.api('/api/helper/sessions', { method: 'POST', body: JSON.stringify({ kind: 'install', items }) });
+        if (!created.ok) throw new Error();
+        const session = await created.json();
+        this.helperSession = session;
+        this.helperTimer = setInterval(() => this.pollHelper(), 1000);
+        this.pollHelper();
+        const via = await this.dispatchHelperJob(session, 'install', items, { allowDownload: true });
+        session.via_tray = via === 'local' || via === 'server';
+        if (this.helperSession) this.helperSession.via_tray = session.via_tray;
+        if (via === 'wake') {
+          this.helperError = 'If Windows asks to open Zork Helper, click Open.';
+        }
+        if (via === 'blocked') {
+          this.helperSession = null;
+          this.stopHelperPoll();
+        }
+      } catch {
+        this.helperError = fail;
+        this.helperSession = null;
+        this.stopHelperPoll();
+      }
+      this.helperBusy = false;
+    },
+
+    async requestHelperInstall() {
+      if (!this.helperSession || !this.helperSession.id) return;
+      const items = (this.helperSession.result && this.helperSession.result.items || [])
+        .filter(row => row && !row.ok && row.id && !row.reboot && row.id !== 'sketchup')
+        .map(row => row.id);
+      if (!items.length) return;
+      await this.helperInstallItems(items);
+    },
+
+    async requestSketchupInstall() {
+      this.helperSketchupNotice = false;
+      await this.helperInstallItems(['sketchup']);
+    },
+
+    async helperInstallItems(items) {
+      if (!this.helperSession || !this.helperSession.id || !items || !items.length) return;
+      this.helperError = '';
+      try {
+        const via = await this.dispatchHelperJob(this.helperSession, 'install', items, { allowDownload: false });
+        this.helperSession.via_tray = true;
+        if (via === 'wake') {
+          this.helperError = 'If Windows asks to open Zork Helper, click Open. Do not download it again.';
+        }
+        this.helperTimer = setInterval(() => this.pollHelper(), 1000);
+        this.pollHelper();
+      } catch {
+        this.helperError = 'Could not start the install. Try again.';
+      }
+    },
+
+    async pollHelper() {
+      if (!this.helperSession || !this.helperSession.id) return;
+      try {
+        const r = await this.api('/api/helper/sessions/' + encodeURIComponent(this.helperSession.id));
+        if (!r.ok) return;
+        const next = await r.json();
+        const handoff = this.helperSession.handoff;
+        this.helperSession = Object.assign({}, this.helperSession, next);
+        if (handoff) this.helperSession.handoff = handoff;
+        if (this.helperSession.status === 'done') this.markHelperInstalled();
+        if (this.helperSession.status === 'error') this.stopHelperPoll();
+      } catch {}
+    },
+
+    helperNoiseLog(text) {
+      return /^(Ferdig|Sjekken er ferdig\.?|Hjelperen er i gang\.?)$/i.test((text || '').trim());
+    },
+
+    helperLastLog() {
+      const logs = (this.helperSession && this.helperSession.log) || [];
+      for (let i = logs.length - 1; i >= 0; i--) {
+        const text = ((logs[i] && logs[i].text) || '').trim();
+        if (!text || this.helperNoiseLog(text)) continue;
+        return text;
+      }
+      return '';
+    },
+
+    helperNeedsReboot() {
+      const session = this.helperSession;
+      if (!session) return false;
+      const items = (session.result && session.result.items) || [];
+      if (items.some(row => row && row.reboot)) return true;
+      return /start pc-en p[aå] nytt|restart this pc/i.test(this.helperLastLog() || '');
+    },
+
+    helperCardTitle() {
+      const session = this.helperSession;
+      if (!session) return '';
+      const activity = session.activity || '';
+      const last = this.helperLastLog();
+      if (session.status === 'error') return 'Failed';
+      if (/Done! Printer|Printer er ferdig|Printer er installert/i.test(last)) return 'Printer installed';
+      if (/Klarte ikke a (hente|installere) printer|Printer-filen mangler|Printer-installasjonen ble lukket/i.test(last)) return last;
+      if (/laster ned printer/i.test(last)) return last;
+      if (/installerer printer/i.test(last)) return 'Installing the printer…';
+      if (activity === 'installing') {
+        if (/installasjon ferdig/i.test(last)) return 'Installation finished';
+        if (/laster ned/i.test(last)) return 'Downloading updates…';
+        if (/tillatelse|godkjenn/i.test(last)) return 'Approve in Windows if asked';
+        if (/installerer/i.test(last)) return 'Installing…';
+        return 'Installing…';
+      }
+      if (activity === 'scanning') return session.result ? 'Checking this PC again…' : 'Checking this PC…';
+      if (/installasjon ferdig/i.test(last) && session.status === 'done') return 'Installation finished';
+      if (session.status === 'done') return 'Result';
+      return 'Checking this PC…';
     },
 
     // ── File browser methods ──────────────────────────────────────────────────
