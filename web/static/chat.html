@@ -698,7 +698,8 @@ const I18N = {
     pccheck:"Sjekk denne PC-en",
     pcfridnett:"FRID-nett",
     pcfridnettnote:"Du må være på skolen, med wifi på. Trykk FRID-nett. Godkjenn i Windows hvis du blir spurt. Zork Helper kobler til FRID-iot, åpner innlogging og installerer skolenettet.",
-    pcfridnettwait:"Et lite vindu åpner seg. Logg inn der med skolekontoen. Klikk Start QuickConnect når du ser den. Zork Helper tar resten.",
+    pcfridnettwait:"Et lite vindu åpner seg. Logg inn der med skolekontoen. Zork Helper klikker Start QuickConnect etterpå.",
+    pcfridnettswitch:"Zork Helper bytter wifi til FRID-iot. Vent til innloggingsvinduet kommer.",
     pcfridnettgo:"Installer skolenettet",
     pcfridnettdone:"Done!",
     pcfridnettdonenote:"Du er koblet til riktig nettverk (FRID).",
@@ -835,7 +836,8 @@ const I18N = {
     pccheck:"Check this PC",
     pcfridnett:"FRID-nett",
     pcfridnettnote:"You need to be at school, with wifi on. Press FRID-nett. Approve in Windows if you are asked. Zork Helper joins FRID-iot, opens sign-in and installs the school network.",
-    pcfridnettwait:"A small window opens. Sign in there with your school account. Click Start QuickConnect when you see it. Zork Helper does the rest.",
+    pcfridnettwait:"A small window opens. Sign in there with your school account. Zork Helper clicks Start QuickConnect after that.",
+    pcfridnettswitch:"Zork Helper is switching wifi to FRID-iot. Wait for the sign-in window.",
     pcfridnettgo:"Install the school network",
     pcfridnettdone:"Done!",
     pcfridnettdonenote:"You are connected to the right network (FRID).",
@@ -2058,6 +2060,8 @@ let helperSketchupNotice = false;
 let helperFridOffer = false;
 let helperFridJob = false;
 let helperFridDone = false;
+let helperLocalProgress = "";
+let helperPollBusy = false;
 let helperPrinterJob = false;
 let helperPrinterDone = false;
 let helperPrinterTold = false;
@@ -2161,6 +2165,7 @@ function isNoiseLog(text){
 }
 
 function lastHelperLine(session){
+  if(helperFridJob && helperLocalProgress) return helperLocalProgress;
   const logs = (session && session.log) || [];
   for(let i = logs.length - 1; i >= 0; i--){
     const text = ((logs[i] && logs[i].text) || "").trim();
@@ -2250,6 +2255,15 @@ function helperHeadline(session){
     if(prog && prog.label) return { text: t("pcprinterdl") + " " + prog.label, spin: !(prog.pct != null) };
     return { text: t("pcprinterstart"), spin: true };
   }
+  if(helperFridJob){
+    if(/laster ned frid-nett|sjekker wifi|ser etter frid-iot|kobler fra|kobler til frid-iot|wifi-sok|netsh svarte|windows:/i.test(line)){
+      return { text: line, spin: true };
+    }
+    if(/pa frid-iot|aapner innlogging|quickconnect/i.test(line)) return { text: line, spin: true };
+    if(/tillatelse|godkjenn|trenger administrator/i.test(line)) return { text: t("pcapprove"), spin: true };
+    if(installing && line) return { text: line, spin: true };
+    return { text: t("pcfridnettswitch"), spin: true };
+  }
   if(installing){
     if(/installasjon ferdig/i.test(line)) return { text: helperPrinterJob ? t("pcprinterdone") : t("pcinstalldone"), spin: false };
     if(/laster ned/i.test(line)) return { text: line, spin: true };
@@ -2265,7 +2279,6 @@ function helperHeadline(session){
     return { text: helperPrinterJob ? t("pcprinterdone") : t("pcinstalldone"), spin: false };
   }
   if(status === "done") return { text: t("pcdone"), spin: false };
-  if(helperFridJob && !installing) return { text: t("pcfridnett"), spin: false };
   if(status === "waiting" || status === "scanning") return { text: t("pcwait"), spin: true };
   return { text: t("pcwait"), spin: true };
 }
@@ -2364,7 +2377,14 @@ function paintHelperCard(session){
   if(helperFridJob && headline.spin){
     const p = document.createElement("p");
     p.className = "pc-meta";
-    p.textContent = t("pcfridnettwait");
+    const line = lastHelperLine(session);
+    if(/pa frid-iot|aapner innlogging|quickconnect|innlogging/i.test(line)){
+      p.textContent = t("pcfridnettwait");
+    } else if(/laster ned frid-nett|sjekker wifi|ser etter|kobler fra|kobler til frid-iot|wifi-sok|netsh|windows:/i.test(line)){
+      p.textContent = line;
+    } else {
+      p.textContent = t("pcfridnettswitch");
+    }
     card.appendChild(p);
   } else if(helperPrinterJob && (headline.spin || printerDownloadProgress(session))){
     const p = document.createElement("p");
@@ -2494,7 +2514,7 @@ function formatScanForAgent(result){
     mac
       ? "Si konkret hva som er i orden og hva som mangler. Dette er bare en sjekk — det finnes ingen Installer-knapp på Mac. macOS-oppdateringer tar de i Systeminnstillinger → Generelt → Programvareoppdatering."
       : "Si konkret hva som er i orden og hva som mangler. Hvis noe mangler: si at de kan klikke «Installer / oppdater med Zork Helper» på kortet over. Det er den eneste måten å installere på.",
-    mac ? null : "Wifi på denne Windows-PCen: hvis de allerede er på wifi-nettverket FRID, ikke send dem til FRID-nett. Ellers: si at de må være på skolen og klikke «FRID-nett» på kortet. Zork Helper kobler til FRID-iot, åpner innloggingsvinduet og kjører QuickConnect etter at de har logget inn og trykket Start QuickConnect. Ikke send dem til onboard.frid-iks.no når knappen er der.",
+    mac ? null : "Wifi på denne Windows-PCen: hvis de allerede er på wifi-nettverket FRID, ikke send dem til FRID-nett. Ellers: si at de må være på skolen og klikke «FRID-nett» på kortet. Zork Helper kobler til FRID-iot, åpner innlogging, og klikker Start QuickConnect når innlogging er ferdig. Ikke send dem til onboard.frid-iks.no når knappen er der.",
     mac ? null : "Skriver på denne Windows-PCen: hvis printer mangler, si at de klikker «Skaff printer» under chatten. Zork Helper laster ned og installerer skoleskriveren. Ikke send dem til AppsAnywhere for det.",
     mac
       ? "Første gang: de lastet ned ZorkHelper.command. Si at de høyreklikker den i Nedlastinger og velger Åpne. Ikke be dem lime inn kommandoer i Terminal."
@@ -2657,6 +2677,9 @@ async function pingOneHelper(session, host, ms){
             helperWifiKnown = true;
           }
         }
+        if(data && data.progress){
+          helperLocalProgress = String(data.progress || "").trim();
+        }
       }catch(_){}
       return true;
     }
@@ -2692,7 +2715,7 @@ function stopWifiWatch(){
 }
 
 async function refreshFridNettFromWifi(){
-  if(helperPrinterJob){
+  if(helperPrinterJob || helperFridJob){
     helperWifiProbed = true;
     applyPcCheckVisibility();
     return helperOnSchoolFrid;
@@ -2854,9 +2877,11 @@ async function startFridNett(){
   helperFridOffer = false;
   helperFridJob = true;
   helperFridDone = false;
+  helperLocalProgress = "";
   helperPrinterJob = false;
   helperPrinterDone = false;
   helperPrinterTold = false;
+  stopWifiWatch();
 
   const finishIfOnFrid = async () => {
     await pingLocalHelper(helperSession);
@@ -2937,7 +2962,7 @@ function tellAgentFridNettAlreadyOnFrid(){
 function tellAgentFridNettStarted(){
   if(busy || ctxBlocked) return;
   sendTurn(
-    "Brukeren har trykket FRID-nett. Si at de må være på skolen og godkjenne i Windows hvis de blir spurt. Zork Helper sjekker wifi: er de på FRID, er de ferdige. Ellers kobler den til FRID-iot med passordet og åpner innlogging først når de er på FRID-iot. De logger inn der med skolekontoen og trykker Start QuickConnect. Helper klikker Next og Ja i QuickConnect. De skal ikke trykke Installer på kortet. Ikke send dem til onboard.frid-iks.no nå.",
+    "Brukeren har trykket FRID-nett. Si at de må være på skolen og godkjenne i Windows hvis de blir spurt. Zork Helper sjekker wifi: er de på FRID, er de ferdige. Ellers kobler den til FRID-iot med passordet og åpner innlogging først når de er på FRID-iot. De logger inn med skolekontoen. Helper klikker Start QuickConnect etter innlogging, deretter Next og Ja i QuickConnect. Etterpå prøver helper å koble til FRID. Hvis FRID ber om brukernavn/passord da, be dem gå til IT Helpdesk i 1. etasje. De skal ikke trykke Installer på kortet. Ikke send dem til onboard.frid-iks.no nå.",
     [],
     { echo: false }
   );
@@ -3120,8 +3145,27 @@ async function requestSketchupInstall(){
 
 async function pollHelper(){
   if(!helperSession || !helperSession.id) return;
+  if(helperPollBusy) return;
+  helperPollBusy = true;
   try{
-    const next = await api("/api/helper/sessions/" + encodeURIComponent(helperSession.id));
+    if(helperFridJob){
+      await pingLocalHelper(helperSession, 1200);
+      paintHelperCard(helperSession);
+      if(helperIsFridDone(helperSession)){
+        helperFridDone = true;
+        helperInstallBusy = false;
+        helperAwaitingInstall = false;
+        setPcCheckBusy(false);
+      }
+    }
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), helperFridJob ? 2500 : 20000);
+    let next;
+    try{
+      next = await api("/api/helper/sessions/" + encodeURIComponent(helperSession.id), { signal: c.signal });
+    }finally{
+      clearTimeout(t);
+    }
     const handoff = helperSession.handoff;
     const localPort = helperSession.local_port;
     const viaTray = helperSession.via_tray;
@@ -3177,7 +3221,11 @@ async function pollHelper(){
         setPcCheckBusy(false);
       }
     }
-  }catch(_){}
+  }catch(_){
+    if(helperFridJob) paintHelperCard(helperSession);
+  }finally{
+    helperPollBusy = false;
+  }
 }
 
 document.querySelectorAll(".chip.example").forEach(c => c.onclick = () => {

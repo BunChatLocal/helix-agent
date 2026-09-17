@@ -2025,6 +2025,20 @@ class TestPcHelper:
         assert "Refresh-WifiStatus" in tray
         assert "WifiCheckedAt" in tray
         assert "Test-SchoolFridSsid" in tray
+        assert "Test-FridIotSsid" in tray
+        assert "Test-CaptiveOffline" in tray
+        assert "install-script.ps1" in tray
+        assert "Save-HttpToFile" in tray
+        assert "progress  = Get-LocalProgress" in tray
+        assert "install-busy.flag" in tray
+        assert "Drain-OpenUrl" in tray
+        assert "open-url.txt" in tray
+        assert "--new-window" in tray
+        assert "msedge.exe" in tray
+        assert "ZorkHelperEdge" in tray
+        assert "ProcessStartInfo" in tray
+        assert "gjesteportal" in tray
+        assert "--remote-debugging-port" in tray
         assert "Get-NetConnectionProfile" in tray
         assert "netsh wlan show interfaces" not in tray
         ping_block = tray.split("GET\\s+/v1/ping")[1].split("POST\\s+/v1/job")[0]
@@ -2051,7 +2065,7 @@ class TestPcHelper:
         assert "zork-elevate-" in install_job
         assert "JobFile" in install_job
         assert "DoneFile" in install_job
-        assert "FRID-nett" in install_job
+        assert "FRID-iot" in install_job
         assert "fridnett" in tray
         assert "Test-FridNettOnly" in tray
         assert "Sjekker wifi" in tray
@@ -2117,18 +2131,55 @@ class TestPcHelper:
         assert "msiexec.exe" in inst
         assert "Connect-FridIot" in inst
         assert "Test-SsidInRange" in inst
-        assert "wlan show networks" in inst
+        assert "Invoke-Netsh" in inst
+        assert "System32\\netsh.exe" in inst
+        assert "WaitForExit" in inst
+        assert "'wlan', 'show', 'networks'" in inst
+        assert "'wlan', 'disconnect'" in inst
+        assert "hex>465249442d696f74" in inst
+        assert "enableRandomization>false" in inst
+        assert "Prover a koble til FRID-iot likevel" in inst
+        assert "Kobler til FRID-iot pa nytt med riktig passord" in inst
+        assert "Hvis FRID ber om brukernavn og passord" in inst
+        assert "IT Helpdesk i 1. etasje" in inst
+        assert "& netsh" not in inst
         assert "Done! Du er koblet til riktig nettverk" in inst
-        assert "Test-ConnectedSsid 'FRID'" in inst
+        assert "Get-SsidMatch $wifi.Ssid 'FRID'" in inst
         assert "Open-FridOnboardLogin" in inst
         assert "Wait-FridQuickConnectProcess" in inst
+        assert "CreateProcessWithTokenW" in inst
+        assert "GetShellWindow" in inst
+        assert "Restart-HelperTray" in inst
+        assert "install-busy.flag" in inst
+        assert "fridOnly" in inst
+        assert "ZorkUnelevate" in inst
+        assert "--remote-debugging-port" in inst
+        assert "mdps_status.php" in inst
+        assert "ZorkEdgeCdp" in inst
+        assert "ClickStartQuickConnect" in inst
+        assert "remote-allow-origins" in inst
+        assert "Start-EdgeOnboard" in inst
+        assert "msedge.exe" in inst
+        assert "--new-window" in inst
+        assert "--user-data-dir" in inst
+        assert "ZorkHelperEdge" in inst
+        assert "ProcessStartInfo" in inst
+        assert "gjesteportal.frid-iks.no" in inst
+        assert "frid_provisioning.php" in inst
+        assert "open-url.txt" in inst
+        assert "--app=" not in inst
+        assert "--window-size=700,700" not in inst
+        assert "Set-CaptiveOffline" in inst
+        assert "SkipHelixHttp" in inst
+        assert "progress.txt" in inst
+        assert "captive.flag" in inst
+        assert "HttpWebRequest" in inst
+        assert "Timeout = 2500" in inst
         assert "gjesteportal.frid-iks.no/onboard/frid_provisioning.php" in inst
-        assert "--app=" in inst
-        assert "--window-size=700,700" in inst
         assert 't.Contains("viken")' not in inst
         assert "microsoftonline" in inst
         assert "microsoft edge" in inst
-        assert "netsh wlan" in inst
+        assert "netsh.exe" in inst
         assert "FRID-iot" in inst
         assert "keyMaterial>friddeploy" in inst
         assert "ClickButtons" in inst
@@ -2450,20 +2501,27 @@ class TestConsoleHelper:
         assert "tellAgentPrinterFinished" in page
         assert "laster ned printer" in page
         headline = page.split("function helperHeadline")[1].split("function paintHelperCard")[0]
-        printer_head = headline.split("if(helperPrinterJob){")[1].split("if(installing){")[0]
+        printer_head = headline.split("if(helperPrinterJob){")[1].split("if(helperFridJob){")[0]
         assert 't("pcprinteruac")' in printer_head
         assert 't("pcprinterstart")' in printer_head
         assert "if(installing && line)" not in printer_head
         assert "return { text: line" not in printer_head
+        frid_head = headline.split("if(helperFridJob){")[1].split("if(installing){")[0]
+        assert 't("pcfridnettswitch")' in frid_head
+        assert "sjekker wifi" in frid_head
         paint = page.split("function paintHelperCard")[1].split("function formatScanForAgent")[0]
         assert "pcprinteruacnote" in paint
         assert "pcprinterstartnote" in paint
+        assert "pcfridnettswitch" in paint
         assert "pc-bar-busy" in paint
         deliver = page.split("async function deliverHelperJob")[1].split("async function dispatchHelperJob")[0]
         assert "askLocalHelper" in deliver
         assert "pingLocalHelper" not in deliver
         startp = page.split("async function startPrinter")[1].split("async function startPcCheck")[0]
         assert "stopWifiWatch" in startp
+        startf = page.split("async function startFridNett")[1].split("function tellAgentFridNettAlreadyOnFrid")[0]
+        assert "stopWifiWatch" in startf
+        assert "helperPrinterJob || helperFridJob" in page
         assert '["printer"]' in page
         assert "openFridCertificateLogin" not in page
         assert "Last ned sertifikat" not in page
@@ -2482,11 +2540,16 @@ class TestConsoleHelper:
         assert "helperWifiProbed" in page
         assert "isWindowsPc" in page
         assert "pcfridnettdone" in page
+        assert "pcfridnettswitch" in page
+        assert "helperLocalProgress" in page
+        assert "data.progress" in page
+        assert "helperFridJob ? 2500" in page
         assert "waitForHelperPing" in page
         assert "helperWifiProbed && !onFridNetwork()" in page
         assert "isSchoolFridSsid" in page
         assert "helperOnSchoolFrid" in page
         assert "helperAlreadyOnThisPc" in page
+        assert "Hvis FRID ber om brukernavn/passord da, be dem gå til IT Helpdesk i 1. etasje." in page
         assert "waitForLoopbackDecision" in page
         assert "helperSeenThisTab" in page
         assert "probeHelperWifi" in page

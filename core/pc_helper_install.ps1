@@ -31,6 +31,39 @@ $Allowed = @{
     printer      = $true
 }
 
+$script:SkipHelixHttp = $false
+$script:EdgeDebugPort = 0
+$script:ProgressFile = Join-Path $env:LOCALAPPDATA 'ZorkHelper\progress.txt'
+$script:CaptiveFlag = Join-Path $env:LOCALAPPDATA 'ZorkHelper\captive.flag'
+
+function Set-CaptiveOffline {
+    param([bool]$On)
+    $script:SkipHelixHttp = $On
+    try {
+        $dir = Split-Path -Parent $script:CaptiveFlag
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        }
+        if ($On) {
+            Set-Content -LiteralPath $script:CaptiveFlag -Value '1' -Encoding ASCII
+        } else {
+            Remove-Item -LiteralPath $script:CaptiveFlag -Force -ErrorAction SilentlyContinue
+        }
+    } catch { }
+}
+
+function Write-LocalProgress {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return }
+    try {
+        $dir = Split-Path -Parent $script:ProgressFile
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        }
+        [IO.File]::WriteAllText($script:ProgressFile, $Text)
+    } catch { }
+}
+
 function Update-HelperTray {
     $homeDir = Join-Path $env:LOCALAPPDATA 'ZorkHelper'
     $dest = Join-Path $homeDir 'zork-helper-tray.ps1'
@@ -49,17 +82,27 @@ function Update-HelperTray {
 
 function Send-Helper {
     param([string]$Path, [hashtable]$Body)
+    if ($script:SkipHelixHttp) { return }
     $uri = ($BaseUrl.TrimEnd('/') + $Path)
     $json = $Body | ConvertTo-Json -Compress -Depth 6
-    $wc = New-Object System.Net.WebClient
-    $wc.Encoding = [Text.Encoding]::UTF8
-    $wc.Headers.Add('Content-Type', 'application/json; charset=utf-8')
-    $wc.Headers.Add('X-Helper-Secret', $Secret)
-    [void]$wc.UploadString($uri, 'POST', $json)
+    $req = [Net.HttpWebRequest]::Create($uri)
+    $req.Method = 'POST'
+    $req.Timeout = 2500
+    $req.ReadWriteTimeout = 2500
+    $req.KeepAlive = $false
+    $req.ContentType = 'application/json; charset=utf-8'
+    $req.Headers.Add('X-Helper-Secret', $Secret)
+    $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+    $req.ContentLength = $bytes.Length
+    $stream = $req.GetRequestStream()
+    try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Close() }
+    $resp = $req.GetResponse()
+    try { $resp.Close() } catch { }
 }
 
 function Note {
     param([string]$Text, [string]$Activity = $null)
+    Write-LocalProgress $Text
     $body = @{ text = $Text }
     if ($PSBoundParameters.ContainsKey('Activity')) { $body.activity = $Activity }
     try { Send-Helper -Path "/api/helper/$SessionId/progress" -Body $body } catch { }
@@ -94,6 +137,112 @@ function Test-Admin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     $p = New-Object Security.Principal.WindowsPrincipal($id)
     return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Ensure-Unelevate {
+    if ('ZorkUnelevate' -as [type]) { return }
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class ZorkUnelevate {
+    [DllImport("user32.dll")] public static extern IntPtr GetShellWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [DllImport("kernel32.dll", SetLastError=true)] public static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("advapi32.dll", SetLastError=true)] public static extern bool OpenProcessToken(IntPtr proc, uint access, out IntPtr token);
+    [DllImport("advapi32.dll", SetLastError=true)] public static extern bool DuplicateTokenEx(IntPtr existing, uint access, IntPtr sa, int impersonation, int type, out IntPtr dup);
+    [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+    public static extern bool CreateProcessWithTokenW(IntPtr token, uint logon, string app, StringBuilder cmd, uint flags, IntPtr env, string dir, ref STARTUPINFO si, out PROCESS_INFORMATION pi);
+    [DllImport("kernel32.dll")] public static extern bool CloseHandle(IntPtr h);
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+    public struct STARTUPINFO {
+        public int cb;
+        public string lpReserved, lpDesktop, lpTitle;
+        public int dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags;
+        public short wShowWindow, cbReserved2;
+        public IntPtr lpReserved2, hStdInput, hStdOutput, hStdError;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PROCESS_INFORMATION {
+        public IntPtr hProcess, hThread;
+        public uint dwProcessId, dwThreadId;
+    }
+    public static string Launch(string file, string arguments) {
+        IntPtr shell = GetShellWindow();
+        if (shell == IntPtr.Zero) return "no-shell";
+        uint pid;
+        GetWindowThreadProcessId(shell, out pid);
+        IntPtr proc = OpenProcess(0x1400, false, pid);
+        if (proc == IntPtr.Zero) return "open-process";
+        IntPtr token;
+        if (!OpenProcessToken(proc, 0x0002, out token)) { CloseHandle(proc); return "open-token"; }
+        IntPtr primary;
+        if (!DuplicateTokenEx(token, 0xf01ff, IntPtr.Zero, 2, 1, out primary)) {
+            CloseHandle(token); CloseHandle(proc); return "dup-token";
+        }
+        STARTUPINFO si = new STARTUPINFO();
+        si.cb = Marshal.SizeOf(typeof(STARTUPINFO));
+        si.lpDesktop = "winsta0\\default";
+        si.dwFlags = 0x0001;
+        si.wShowWindow = 1;
+        string line = "\"" + file + "\"";
+        if (!string.IsNullOrEmpty(arguments)) line += " " + arguments;
+        StringBuilder cmd = new StringBuilder(line);
+        PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
+        bool ok = CreateProcessWithTokenW(primary, 0, null, cmd, 0, IntPtr.Zero, null, ref si, out pi);
+        int err = Marshal.GetLastWin32Error();
+        CloseHandle(token); CloseHandle(primary); CloseHandle(proc);
+        if (pi.hThread != IntPtr.Zero) CloseHandle(pi.hThread);
+        if (pi.hProcess != IntPtr.Zero) CloseHandle(pi.hProcess);
+        return ok ? "ok" : ("create-" + err);
+    }
+}
+'@
+}
+
+function Set-InstallBusyFlag {
+    param([bool]$On)
+    $f = Join-Path $env:LOCALAPPDATA 'ZorkHelper\install-busy.flag'
+    try {
+        $dir = Split-Path -Parent $f
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        }
+        if ($On) { Set-Content -LiteralPath $f -Value '1' -Encoding ASCII }
+        else { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
+    } catch { }
+}
+
+function Restart-HelperTray {
+    $homeDir = Join-Path $env:LOCALAPPDATA 'ZorkHelper'
+    $tray = Join-Path $homeDir 'zork-helper-tray.ps1'
+    if (-not (Test-Path -LiteralPath $tray)) { return }
+    Set-InstallBusyFlag $true
+    $pidFile = Join-Path $homeDir 'tray.pid'
+    try {
+        if (Test-Path -LiteralPath $pidFile) {
+            $old = 0
+            [void][int]::TryParse(([IO.File]::ReadAllText($pidFile)).Trim(), [ref]$old)
+            if ($old -gt 0) { Stop-Process -Id $old -Force -ErrorAction SilentlyContinue }
+        }
+    } catch { }
+    Start-Sleep -Milliseconds 500
+    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $arg = '-NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $tray + '"'
+    $started = $false
+    if (Test-Admin) {
+        try {
+            Ensure-Unelevate
+            $started = ([ZorkUnelevate]::Launch($ps, $arg) -eq 'ok')
+        } catch { $started = $false }
+    }
+    if (-not $started) {
+        try {
+            Start-Process -FilePath $ps -WindowStyle Hidden -ArgumentList @(
+                '-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', $tray
+            ) | Out-Null
+        } catch { }
+    }
 }
 
 function Find-Winget {
@@ -177,20 +326,88 @@ function Install-WindowsUpdates {
     Note 'Windows Update er ferdig.'
 }
 
-function Get-WifiSsid {
-    $ssid = ''
-    $state = ''
+function Invoke-Netsh {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$NetshArgs,
+        [int]$TimeoutMs = 8000
+    )
+    $netsh = Join-Path $env:SystemRoot 'System32\netsh.exe'
+    $tag = [guid]::NewGuid().ToString('N')
+    $outFile = Join-Path $env:TEMP ('zork-netsh-' + $tag + '.out')
+    $errFile = Join-Path $env:TEMP ('zork-netsh-' + $tag + '.err')
     try {
-        $raw = & netsh wlan show interfaces 2>$null
-        foreach ($line in @($raw)) {
-            if ($line -match '^\s*SSID\s*:\s*(.+)\s*$' -and $line -notmatch 'BSSID') {
-                $ssid = $Matches[1].Trim()
-            }
-            if ($line -match '^\s*(State|Tilstand)\s*:\s*(.+)\s*$') {
-                $state = $Matches[2].Trim().ToLower()
+        $p = Start-Process -FilePath $netsh -ArgumentList $NetshArgs -PassThru -WindowStyle Hidden -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+        if ($null -eq $p) {
+            return @{ Ok = $false; TimedOut = $false; Text = ''; Code = -1 }
+        }
+        if (-not $p.WaitForExit($TimeoutMs)) {
+            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch { }
+            return @{ Ok = $false; TimedOut = $true; Text = ''; Code = -1 }
+        }
+        $text = ''
+        try { $text = [IO.File]::ReadAllText($outFile) } catch { }
+        try { $text += [IO.File]::ReadAllText($errFile) } catch { }
+        return @{ Ok = ($p.ExitCode -eq 0); TimedOut = $false; Text = $text; Code = $p.ExitCode }
+    } catch {
+        return @{ Ok = $false; TimedOut = $false; Text = [string]$_.Exception.Message; Code = -1 }
+    } finally {
+        Remove-Item -LiteralPath $outFile, $errFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Clip-NetshNote {
+    param([string]$Text, [int]$Max = 160)
+    $t = ([string]$Text -replace '\s+', ' ').Trim()
+    if ($t.Length -le $Max) { return $t }
+    return $t.Substring(0, $Max)
+}
+
+function Get-WlanInterface {
+    try {
+        $n = Get-NetAdapter -ErrorAction Stop |
+            Where-Object {
+                $_.Status -eq 'Up' -and (
+                    $_.Name -match 'Wi-?Fi|Wireless|WLAN' -or
+                    $_.InterfaceDescription -match 'Wi-?Fi|Wireless|802\.11|WLAN'
+                )
+            } |
+            Select-Object -First 1 -ExpandProperty Name
+        if ($n) { return [string]$n }
+    } catch { }
+    return ''
+}
+
+function Add-WlanInterfaceArg {
+    param([string[]]$Parts, [string]$Iface)
+    if ([string]::IsNullOrWhiteSpace($Iface)) { return $Parts }
+    return @($Parts + ('interface="' + $Iface + '"'))
+}
+
+function Get-WifiSsid {
+    try {
+        $profiles = @(Get-NetConnectionProfile -ErrorAction Stop)
+        foreach ($p in $profiles) {
+            $alias = ''
+            try { $alias = [string]$p.InterfaceAlias } catch { $alias = '' }
+            if ($alias -notmatch 'Wi-?Fi|Wireless|WLAN') { continue }
+            $n = [string]$p.Name
+            if (-not [string]::IsNullOrWhiteSpace($n) -and $n -ne '*') {
+                return @{ Ssid = $n.Trim(); Connected = $true }
             }
         }
     } catch { }
+    $ssid = ''
+    $state = ''
+    $r = Invoke-Netsh -NetshArgs @('wlan', 'show', 'interfaces') -TimeoutMs 6000
+    foreach ($line in @($r.Text -split "`r?`n")) {
+        if ($line -match '^\s*BSSID\s') { continue }
+        if ($line -match '^\s*SSID(?:\s+\d+)?\s*:\s*(.+)\s*$') {
+            $ssid = $Matches[1].Trim()
+        }
+        if ($line -match '^\s*(State|Tilstand)\s*:\s*(.+)\s*$') {
+            $state = $Matches[2].Trim().ToLower()
+        }
+    }
     $up = ($state -eq 'connected' -or $state -eq 'tilkoblet')
     return @{ Ssid = $ssid; Connected = $up }
 }
@@ -209,18 +426,26 @@ function Test-ConnectedSsid {
 function Test-SsidInRange {
     param([string]$Name)
     $try = 0
+    $unknown = $false
     while ($try -lt 2) {
         $try++
-        try {
-            $raw = & netsh wlan show networks 2>$null
-            foreach ($line in @($raw)) {
+        $r = Invoke-Netsh -NetshArgs @('wlan', 'show', 'networks') -TimeoutMs 8000
+        if ($r.TimedOut) {
+            $unknown = $true
+        } else {
+            $listed = $false
+            foreach ($line in @($r.Text -split "`r?`n")) {
                 if ($line -match '^\s*SSID\s+\d+\s*:\s*(.+)\s*$') {
+                    $listed = $true
                     if (Get-SsidMatch $Matches[1] $Name) { return $true }
                 }
             }
-        } catch { }
+            if ($listed) { return $false }
+            $unknown = $true
+        }
         if ($try -lt 2) { Start-Sleep -Seconds 2 }
     }
+    if ($unknown) { return $null }
     return $false
 }
 
@@ -243,8 +468,10 @@ function Add-FridIotProfile {
   <name>$iot</name>
   <SSIDConfig>
     <SSID>
+      <hex>465249442d696f74</hex>
       <name>$iot</name>
     </SSID>
+    <nonBroadcast>false</nonBroadcast>
   </SSIDConfig>
   <connectionType>ESS</connectionType>
   <connectionMode>auto</connectionMode>
@@ -262,16 +489,25 @@ function Add-FridIotProfile {
       </sharedKey>
     </security>
   </MSM>
+  <MacRandomization xmlns="http://www.microsoft.com/networking/WLAN/profile/v3">
+    <enableRandomization>false</enableRandomization>
+  </MacRandomization>
 </WLANProfile>
 "@
     [System.IO.File]::WriteAllText($xmlPath, $xml, [System.Text.Encoding]::ASCII)
     try {
-        $added = & netsh wlan add profile filename="$xmlPath" user=all
-        if ("$added" -match '(?i)error|failed|feil') {
-            $added = & netsh wlan add profile filename="$xmlPath" user=current
-            if ("$added" -match '(?i)error|failed|feil') {
-                throw 'netsh avviste wifi-profilen'
-            }
+        $quoted = 'filename="' + $xmlPath + '"'
+        $added = Invoke-Netsh -NetshArgs @('wlan', 'add', 'profile', $quoted, 'user=all') -TimeoutMs 12000
+        $ok = (-not $added.TimedOut) -and $added.Ok -and ($added.Text -notmatch '(?i)error|failed|feil')
+        if (-not $ok) {
+            $added = Invoke-Netsh -NetshArgs @('wlan', 'add', 'profile', $quoted, 'user=current') -TimeoutMs 12000
+            $ok = (-not $added.TimedOut) -and $added.Ok -and ($added.Text -notmatch '(?i)error|failed|feil')
+        }
+        if (-not $ok) {
+            $why = Clip-NetshNote $added.Text
+            if ($added.TimedOut) { $why = 'netsh svarte ikke' }
+            if ([string]::IsNullOrWhiteSpace($why)) { $why = 'ukjent feil' }
+            throw ('netsh avviste wifi-profilen: ' + $why)
         }
     } finally {
         Remove-Item -LiteralPath $xmlPath -Force -ErrorAction SilentlyContinue
@@ -281,54 +517,79 @@ function Add-FridIotProfile {
 function Connect-FridIot {
     $iot = 'FRID-iot'
     Note 'Sjekker wifi...'
-    if (Test-ConnectedSsid 'FRID') {
+    $wifi = Get-WifiSsid
+    if ($wifi.Connected -and (Get-SsidMatch $wifi.Ssid 'FRID')) {
         Note 'Done! Du er koblet til riktig nettverk (FRID).'
         return 'frid'
     }
 
-    if (Test-ConnectedSsid $iot) {
-        Note 'Kobler fra FRID-iot og glemmer nettverket...'
-        try { [void](& netsh wlan disconnect) } catch { }
-        Start-Sleep -Seconds 2
-        try { [void](& netsh wlan delete profile name="$iot") } catch { }
-        Add-FridIotProfile
-        Note 'Kobler til FRID-iot...'
-        [void](& netsh wlan connect name="$iot" ssid="$iot")
-        if (Wait-ConnectedSsid $iot 40) { return 'iot' }
-        throw 'Klarte ikke a koble til FRID-iot. Prov igjen pa skolen, med wifi pa.'
+    $from = $wifi.Ssid
+    if ([string]::IsNullOrWhiteSpace($from)) { $from = 'dette nettverket' }
+    Note ('Pa ' + $from + ' na. Ser etter FRID-iot...')
+
+    $seen = Test-SsidInRange $iot
+    if ($seen -eq $false) {
+        Note 'Ser ikke FRID-iot i lista. Prover a koble til likevel.'
+    } elseif ($null -eq $seen) {
+        Note 'Wifi-sok svarte ikke. Prover a koble til FRID-iot likevel.'
     }
 
-    Note 'Ser etter FRID-iot...'
-    if (-not (Test-SsidInRange $iot)) {
-        throw 'Fant ikke FRID-iot. Du ma vaere pa skolen, med wifi pa.'
+    $iface = Get-WlanInterface
+    $attempt = 0
+    while ($attempt -lt 3) {
+        $attempt++
+        Note ('Kobler fra ' + $from + ' og over til FRID-iot (' + $attempt + '/3)...')
+        $disc = Add-WlanInterfaceArg -Parts @('wlan', 'disconnect') -Iface $iface
+        $dr = Invoke-Netsh -NetshArgs $disc -TimeoutMs 8000
+        if ($dr.TimedOut) { Note 'netsh svarte ikke ved frakobling. Prover videre.' }
+        Start-Sleep -Seconds 1
+        [void](Invoke-Netsh -NetshArgs @('wlan', 'delete', 'profile', ('name=' + $iot)) -TimeoutMs 8000)
+        Add-FridIotProfile
+        $connArgs = Add-WlanInterfaceArg -Parts @('wlan', 'connect', ('name=' + $iot), ('ssid=' + $iot)) -Iface $iface
+        $r = Invoke-Netsh -NetshArgs $connArgs -TimeoutMs 15000
+        if ($r.TimedOut) {
+            Note 'netsh svarte ikke. Prover igjen...'
+            continue
+        }
+        if (-not [string]::IsNullOrWhiteSpace($r.Text)) {
+            $clip = Clip-NetshNote $r.Text
+            if ($clip -and $clip -match '(?i)error|failed|feil|not found|ikke|denied') {
+                Note ('Windows: ' + $clip)
+            }
+        }
+        if (Wait-ConnectedSsid $iot 20) { return 'iot' }
+        $wifi = Get-WifiSsid
+        if ($wifi.Connected -and -not [string]::IsNullOrWhiteSpace($wifi.Ssid)) { $from = $wifi.Ssid }
     }
-    try { [void](& netsh wlan delete profile name="$iot") } catch { }
-    Add-FridIotProfile
-    Note 'Kobler til FRID-iot...'
-    [void](& netsh wlan connect name="$iot" ssid="$iot")
-    if (Wait-ConnectedSsid $iot 40) { return 'iot' }
     throw 'Klarte ikke a koble til FRID-iot. Prov igjen pa skolen, med wifi pa.'
 }
 
 function Connect-FridAndForgetIot {
     $iot = 'FRID-iot'
-    $name = 'FRID'
-    try {
-        foreach ($line in @(& netsh wlan show profiles 2>$null)) {
-            if ($line -notmatch ':\s*(FRID\S*)\s*$') { continue }
-            $cand = $Matches[1].Trim()
-            if ($cand -and $cand -ne $iot) { $name = $cand; break }
-        }
-    } catch { }
-    try { [void](& netsh wlan connect name="$name" ssid="FRID") } catch { }
-    Start-Sleep -Seconds 4
-    $wifi = Get-WifiSsid
-    if ($wifi.Connected -and (Get-SsidMatch $wifi.Ssid 'FRID')) {
-        try { [void](& netsh wlan delete profile name="$iot") } catch { }
-        Note 'Koblet til FRID. FRID-iot er fjernet.'
-        return
+    $candidates = New-Object System.Collections.ArrayList
+    [void]$candidates.Add('FRID')
+    $listed = Invoke-Netsh -NetshArgs @('wlan', 'show', 'profiles') -TimeoutMs 8000
+    foreach ($line in @($listed.Text -split "`r?`n")) {
+        if ($line -notmatch ':\s*(.+?)\s*$') { continue }
+        $cand = $Matches[1].Trim()
+        if (-not $cand) { continue }
+        if ($cand -ieq $iot) { continue }
+        if ($cand -notmatch '(?i)^FRID') { continue }
+        if (-not $candidates.Contains($cand)) { [void]$candidates.Add($cand) }
     }
-    Note 'Sertifikatet er installert. Koble til FRID i wifi-listen hvis du ikke er der ennå. Fjern FRID-iot etterpå.'
+    $iface = Get-WlanInterface
+    foreach ($name in @($candidates.ToArray())) {
+        [void](Invoke-Netsh -NetshArgs (Add-WlanInterfaceArg -Parts @('wlan', 'disconnect') -Iface $iface) -TimeoutMs 8000)
+        Start-Sleep -Seconds 1
+        $connArgs = Add-WlanInterfaceArg -Parts @('wlan', 'connect', ('name=' + $name), 'ssid=FRID') -Iface $iface
+        [void](Invoke-Netsh -NetshArgs $connArgs -TimeoutMs 15000)
+        if (Wait-ConnectedSsid 'FRID' 20) {
+            [void](Invoke-Netsh -NetshArgs @('wlan', 'delete', 'profile', ('name=' + $iot)) -TimeoutMs 8000)
+            Note 'Koblet til FRID. FRID-iot er fjernet.'
+            return
+        }
+    }
+    Note 'Sertifikatet er installert. Koble til FRID i wifi-listen hvis du ikke er der enna. Hvis FRID ber om brukernavn og passord, ga til IT Helpdesk i 1. etasje.'
 }
 
 function Ensure-FridUi {
@@ -426,39 +687,328 @@ function Get-FridQuickConnectProcesses {
         Where-Object { [string]$_.ProcessName -match '(?i)ArubaQuickConnect|QuickConnect' }
 }
 
-function Open-FridOnboardLogin {
-    $url = 'https://gjesteportal.frid-iks.no/onboard/frid_provisioning.php'
-    $edge = $null
+function Get-EdgeExe {
     foreach ($c in @(
         (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
         (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe')
     )) {
-        if ($c -and (Test-Path -LiteralPath $c)) { $edge = $c; break }
+        if ($c -and (Test-Path -LiteralPath $c)) { return [string]$c }
     }
-    if ($edge) {
-        Start-Process -FilePath $edge -ArgumentList @(
-            ('--app=' + $url),
-            '--window-size=700,700',
-            '--new-window'
-        ) | Out-Null
-        return
+    try {
+        $cmd = Get-Command msedge.exe -ErrorAction SilentlyContinue
+        if ($cmd -and $cmd.Source) { return [string]$cmd.Source }
+    } catch { }
+    return ''
+}
+
+function Get-EdgeProfileDir {
+    return (Join-Path $env:TEMP 'ZorkHelperEdge')
+}
+
+function Get-EdgeDebugPort {
+    if ($script:EdgeDebugPort -gt 0) { return [int]$script:EdgeDebugPort }
+    $script:EdgeDebugPort = 18793
+    return [int]$script:EdgeDebugPort
+}
+
+function Stop-ZorkHelperEdge {
+    $mark = 'ZorkHelperEdge'
+    try {
+        Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($_.CommandLine -and $_.CommandLine.IndexOf($mark, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+            }
+        }
+    } catch { }
+}
+
+function Ensure-EdgeCdp {
+    if ('ZorkEdgeCdp' -as [type]) { return }
+    Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Net;
+using System.Net.WebSockets;
+using System.Text;
+using System.Threading;
+public static class ZorkEdgeCdp {
+    public static string HttpGet(string url) {
+        try {
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+            req.Timeout = 1500;
+            req.ReadWriteTimeout = 1500;
+            using (WebResponse resp = req.GetResponse())
+            using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                return sr.ReadToEnd();
+        } catch {
+            return "";
+        }
     }
-    Start-Process $url | Out-Null
+    public static string Extract(string json, string key) {
+        string needle = "\"" + key + "\":\"";
+        int i = json.IndexOf(needle, StringComparison.Ordinal);
+        if (i < 0) {
+            needle = "\"" + key + "\": \"";
+            i = json.IndexOf(needle, StringComparison.Ordinal);
+        }
+        if (i < 0) return "";
+        i += needle.Length;
+        int j = json.IndexOf('"', i);
+        if (j < 0) return "";
+        return json.Substring(i, j - i).Replace("\\/", "/");
+    }
+    public static bool IsLoginUrl(string url) {
+        if (string.IsNullOrEmpty(url)) return false;
+        string u = url.ToLowerInvariant();
+        if (u.IndexOf("microsoftonline") >= 0) return true;
+        if (u.IndexOf("login.microsoft.com") >= 0) return true;
+        if (u.IndexOf("login.windows.net") >= 0) return true;
+        if (u.IndexOf("frid_provisioning.php") >= 0) return true;
+        return false;
+    }
+    public static bool IsReadyUrl(string url) {
+        if (string.IsNullOrEmpty(url)) return false;
+        string u = url.ToLowerInvariant();
+        return u.IndexOf("gjesteportal.frid-iks.no") >= 0 && u.IndexOf("mdps_status.php") >= 0;
+    }
+    public static bool IsPortalUrl(string url) {
+        if (string.IsNullOrEmpty(url)) return false;
+        return url.IndexOf("gjesteportal.frid-iks.no", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+    public static string PageJson(int port) {
+        return HttpGet("http://127.0.0.1:" + port + "/json");
+    }
+    public static bool HasReadyPage(int port) {
+        string json = PageJson(port);
+        if (string.IsNullOrEmpty(json)) return false;
+        string[] parts = json.Replace("},{", "}\n{").Split('\n');
+        for (int i = 0; i < parts.Length; i++) {
+            if (IsReadyUrl(Extract(parts[i], "url"))) return true;
+        }
+        return false;
+    }
+    static string JsonString(string s) {
+        if (s == null) s = "";
+        StringBuilder sb = new StringBuilder();
+        sb.Append('"');
+        for (int i = 0; i < s.Length; i++) {
+            char c = s[i];
+            if (c == '"' || c == '\\') { sb.Append('\\'); sb.Append(c); }
+            else if (c == '\n') sb.Append("\\n");
+            else if (c == '\r') sb.Append("\\r");
+            else sb.Append(c);
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+    public static string Eval(string wsUrl, string expression) {
+        try {
+            using (ClientWebSocket ws = new ClientWebSocket()) {
+                ws.ConnectAsync(new Uri(wsUrl), CancellationToken.None).GetAwaiter().GetResult();
+                string payload = "{\"id\":1,\"method\":\"Runtime.evaluate\",\"params\":{\"expression\":" + JsonString(expression) + ",\"returnByValue\":true}}";
+                byte[] send = Encoding.UTF8.GetBytes(payload);
+                ws.SendAsync(new ArraySegment<byte>(send), WebSocketMessageType.Text, true, CancellationToken.None).GetAwaiter().GetResult();
+                byte[] buf = new byte[65536];
+                DateTime until = DateTime.UtcNow.AddSeconds(5);
+                StringBuilder sb = new StringBuilder();
+                while (DateTime.UtcNow < until) {
+                    WebSocketReceiveResult r = ws.ReceiveAsync(new ArraySegment<byte>(buf), CancellationToken.None).GetAwaiter().GetResult();
+                    sb.Append(Encoding.UTF8.GetString(buf, 0, r.Count));
+                    if (r.EndOfMessage) {
+                        string msg = sb.ToString();
+                        sb.Length = 0;
+                        if (msg.IndexOf("\"id\":1") >= 0 || msg.IndexOf("\"id\": 1") >= 0) return msg;
+                    }
+                }
+                return "timeout";
+            }
+        } catch (Exception ex) {
+            return "ws:" + ex.GetType().Name;
+        }
+    }
+    public static string ClickStartQuickConnect(int port) {
+        string json = PageJson(port);
+        if (string.IsNullOrEmpty(json)) return "no-json";
+        string js = "(function(){function txt(el){var a=el.getAttribute&&el.getAttribute('aria-label');return ((el.innerText||el.textContent||el.value||a||el.title||'')+'').replace(/\\s+/g,' ').trim();}var all=document.querySelectorAll('a,button,input,[role=\"button\"],span,div');for(var i=0;i<all.length;i++){if(/start\\s*quick\\s*connect/i.test(txt(all[i]))){all[i].click();return 'clicked';}}return 'missing';})()";
+        string[] parts = json.Replace("},{", "}\n{").Split('\n');
+        string last = "no-page";
+        for (int i = 0; i < parts.Length; i++) {
+            string url = Extract(parts[i], "url");
+            if (IsLoginUrl(url)) { last = "login"; continue; }
+            if (!IsPortalUrl(url)) continue;
+            string ws = Extract(parts[i], "webSocketDebuggerUrl");
+            if (string.IsNullOrEmpty(ws)) continue;
+            string r = Eval(ws, js);
+            if (r.IndexOf("clicked") >= 0) return "clicked";
+            last = r;
+        }
+        return last;
+    }
+}
+'@
+}
+
+function Invoke-UiaNamedClick {
+    param([string[]]$Names)
+    try {
+        Add-Type -AssemblyName UIAutomationClient -ErrorAction Stop
+        Add-Type -AssemblyName UIAutomationTypes -ErrorAction Stop
+    } catch { return $false }
+    try {
+        $root = [System.Windows.Automation.AutomationElement]::RootElement
+        $classCond = New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ClassNameProperty, 'Chrome_WidgetWin_1')
+        $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $classCond)
+        foreach ($w in $wins) {
+            foreach ($n in $Names) {
+                $nameCond = New-Object System.Windows.Automation.PropertyCondition(
+                    [System.Windows.Automation.AutomationElement]::NameProperty, $n)
+                $el = $w.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $nameCond)
+                if ($el) {
+                    $pat = $el.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+                    if ($pat) { $pat.Invoke(); return $true }
+                }
+            }
+        }
+    } catch { }
+    return $false
+}
+
+function Find-NewQuickConnectExe {
+    param([datetime]$After)
+    $dirs = @(
+        (Join-Path $env:USERPROFILE 'Downloads'),
+        (Join-Path $env:USERPROFILE 'Nedlastinger')
+    )
+    foreach ($d in $dirs) {
+        if (-not (Test-Path -LiteralPath $d)) { continue }
+        $hit = Get-ChildItem -LiteralPath $d -File -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.Name -match '(?i)ArubaQuickConnect|QuickConnect' -and
+                $_.Extension -eq '.exe' -and
+                $_.LastWriteTime -ge $After.AddSeconds(-5)
+            } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+        if ($hit) { return [string]$hit.FullName }
+    }
+    return ''
+}
+
+function Get-EdgeOnboardArgLine {
+    param([string]$Url)
+    $profile = Get-EdgeProfileDir
+    $port = Get-EdgeDebugPort
+    return ('--user-data-dir="' + $profile + '" --remote-debugging-port=' + $port + ' --remote-allow-origins=* --no-first-run --no-default-browser-check --new-window ' + $Url)
+}
+
+function Start-EdgeOnboard {
+    $url = 'https://gjesteportal.frid-iks.no/onboard/frid_provisioning.php'
+    $edge = Get-EdgeExe
+    if (-not $edge) { return 'no-edge' }
+    Stop-ZorkHelperEdge
+    Start-Sleep -Milliseconds 400
+    $argLine = Get-EdgeOnboardArgLine $url
+    if (-not (Test-Admin)) {
+        try {
+            $psi = New-Object System.Diagnostics.ProcessStartInfo
+            $psi.FileName = $edge
+            $psi.Arguments = $argLine
+            $psi.UseShellExecute = $false
+            $psi.WorkingDirectory = (Split-Path -Parent $edge)
+            [void][Diagnostics.Process]::Start($psi)
+            return 'ok'
+        } catch { return 'start' }
+    }
+    try {
+        Ensure-Unelevate
+        $how = [ZorkUnelevate]::Launch($edge, $argLine)
+        if ($how -eq 'ok') { return $how }
+        return $how
+    } catch {
+        return 'throw'
+    }
+}
+
+function Open-FridOnboardLogin {
+    $url = 'https://gjesteportal.frid-iks.no/onboard/frid_provisioning.php'
+    $how = ''
+    foreach ($i in 1..3) {
+        $how = Start-EdgeOnboard
+        if ($how -eq 'ok') { break }
+        Start-Sleep -Seconds 1
+    }
+    if ($how -ne 'ok') {
+        $flag = Join-Path $env:LOCALAPPDATA 'ZorkHelper\open-url.txt'
+        try {
+            $dir = Split-Path -Parent $flag
+            if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+                New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            }
+            [IO.File]::WriteAllText($flag, $url)
+        } catch { }
+    }
+    Note 'Aapner innlogging i Edge. Logg inn der. Zork Helper klikker Start QuickConnect etterpaa.'
 }
 
 function Wait-FridQuickConnectProcess {
     param($IgnoreIds, [int]$Seconds = 480)
     $ignore = @()
     if ($null -ne $IgnoreIds) { $ignore = @($IgnoreIds) }
+    try { Ensure-EdgeCdp } catch { }
+    $port = Get-EdgeDebugPort
+    $clickedQc = $false
+    $startedDl = $false
+    $clickAt = Get-Date
     $deadline = (Get-Date).AddSeconds($Seconds)
     while ((Get-Date) -lt $deadline) {
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 1
         $p = Get-FridQuickConnectProcesses |
             Where-Object { $ignore -notcontains $_.Id } |
             Select-Object -First 1
         if ($p) { return $p }
+        $ready = $false
+        try { $ready = [ZorkEdgeCdp]::HasReadyPage($port) } catch { $ready = $false }
+        if ($ready -and -not $clickedQc) {
+            Note 'Innlogging ferdig. Klikker Start QuickConnect...'
+            try { [void][ZorkEdgeCdp]::ClickStartQuickConnect($port) } catch { }
+            [void](Invoke-UiaNamedClick @('Start QuickConnect'))
+            $clickedQc = $true
+            $clickAt = Get-Date
+        }
+        if ($clickedQc) {
+            [void](Invoke-UiaNamedClick @('Apne fil', 'Åpne fil', 'Open file'))
+            if (-not $startedDl -and ((Get-Date) - $clickAt).TotalSeconds -ge 3) {
+                $dl = Find-NewQuickConnectExe -After $clickAt
+                if ($dl) {
+                    try {
+                        Start-Process -FilePath $dl | Out-Null
+                        $startedDl = $true
+                        Note 'Starter QuickConnect...'
+                    } catch { }
+                }
+            }
+        }
     }
     return $null
+}
+
+function Get-FridNettCacheExe {
+    return (Join-Path $env:LOCALAPPDATA 'ZorkHelper\ArubaQuickConnect.exe')
+}
+
+function Save-FridNettCache {
+    param([string]$From)
+    $dest = Get-FridNettCacheExe
+    try {
+        $dir = Split-Path -Parent $dest
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        }
+        Copy-Item -LiteralPath $From -Destination $dest -Force
+        try { Unblock-File -LiteralPath $dest -ErrorAction SilentlyContinue } catch { }
+    } catch { }
+    return $dest
 }
 
 function Install-FridNett {
@@ -469,42 +1019,65 @@ function Install-FridNett {
         return
     }
 
-    Note 'Laster ned FRID-nett...'
-    $exe = Join-Path $env:TEMP ('zork-fridnett-' + $SessionId + '.exe')
-    $wc = New-Object System.Net.WebClient
-    $wc.Headers.Add('X-Helper-Secret', $Secret)
-    try {
-        $wc.DownloadFile(($BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId + '/tool/fridnett'), $exe)
-    } catch {
-        throw 'Klarte ikke a hente FRID-nett. Prov igjen pa skolen.'
+    $onIot = $probe.Connected -and (Get-SsidMatch $probe.Ssid 'FRID-iot')
+    $exe = Get-FridNettCacheExe
+    if (-not $onIot) {
+        Note 'Laster ned FRID-nett...'
+        $tmp = Join-Path $env:TEMP ('zork-fridnett-' + $SessionId + '.exe')
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers.Add('X-Helper-Secret', $Secret)
+        try {
+            $wc.DownloadFile(($BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId + '/tool/fridnett'), $tmp)
+        } catch {
+            if (Test-Path -LiteralPath $exe) {
+                Note 'Bruker FRID-nett som ligger pa PCen.'
+            } else {
+                throw 'Klarte ikke a hente FRID-nett. Prov igjen pa skolen.'
+            }
+        }
+        if (Test-Path -LiteralPath $tmp) {
+            if ((Get-Item -LiteralPath $tmp).Length -lt 1000) {
+                throw 'FRID-nett-filen mangler pa serveren.'
+            }
+            $bytes = Get-Content -LiteralPath $tmp -Encoding Byte -TotalCount 2
+            if ($bytes.Length -lt 2 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) {
+                throw 'FRID-nett-filen ser ikke ut som et Windows-program.'
+            }
+            try { Unblock-File -LiteralPath $tmp -ErrorAction SilentlyContinue } catch { }
+            $exe = Save-FridNettCache $tmp
+        }
     }
-    if (-not (Test-Path -LiteralPath $exe) -or ((Get-Item -LiteralPath $exe).Length -lt 1000)) {
-        throw 'FRID-nett-filen mangler pa serveren.'
-    }
-    $bytes = Get-Content -LiteralPath $exe -Encoding Byte -TotalCount 2
-    if ($bytes.Length -lt 2 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) {
-        throw 'FRID-nett-filen ser ikke ut som et Windows-program.'
-    }
-    try { Unblock-File -LiteralPath $exe -ErrorAction SilentlyContinue } catch { }
 
+    Set-CaptiveOffline $true
+    if ($onIot) {
+        Note 'Kobler til FRID-iot pa nytt med riktig passord...'
+    } else {
+        Note 'Bytter wifi til FRID-iot...'
+    }
     $join = Connect-FridIot
     if ($join -eq 'frid') {
+        Set-CaptiveOffline $false
         $script:FridAlreadyOk = $true
+        Note 'Done! Du er koblet til riktig nettverk (FRID).'
         return
     }
-    Start-Sleep -Seconds 2
 
     $ignore = @()
     try { $ignore = @(Get-FridQuickConnectProcesses | ForEach-Object { $_.Id }) } catch { $ignore = @() }
 
-    Note 'Pa FRID-iot. Aapner innlogging. Logg inn i vinduet. Klikk Start QuickConnect.'
+    Note 'Pa FRID-iot. Aapner innlogging. Logg inn i vinduet. Zork Helper klikker Start QuickConnect etterpaa.'
+    Start-Sleep -Seconds 2
     Open-FridOnboardLogin
 
     $p = Wait-FridQuickConnectProcess -IgnoreIds $ignore -Seconds 480
     if ($null -eq $p) {
-        Note 'Fant ikke QuickConnect. Starter programmet selv. Godkjenn i Windows hvis du blir spurt.'
-        $p = Start-Process -FilePath $exe -PassThru
-        if ($null -eq $p) { throw 'Klarte ikke a starte FRID-nett.' }
+        if ($exe -and (Test-Path -LiteralPath $exe)) {
+            Note 'Fant ikke QuickConnect. Starter programmet selv. Godkjenn i Windows hvis du blir spurt.'
+            $p = Start-Process -FilePath $exe -PassThru
+            if ($null -eq $p) { throw 'Klarte ikke a starte FRID-nett.' }
+        } else {
+            throw 'Fant ikke QuickConnect. Logg inn i vinduet. Zork Helper klikker Start QuickConnect etter innlogging.'
+        }
     } else {
         Note 'Fant QuickConnect. Fortsetter...'
     }
@@ -515,6 +1088,10 @@ function Install-FridNett {
     $code = 0
     try { $code = [int]$p.ExitCode } catch { $code = 0 }
     Connect-FridAndForgetIot
+    $back = Get-WifiSsid
+    if ($back.Connected -and (Get-SsidMatch $back.Ssid 'FRID')) {
+        Set-CaptiveOffline $false
+    }
     if ($code -and $code -ne 0) {
         Note ('FRID-nett ble lukket (kode ' + $code + ').')
         return
@@ -710,16 +1287,26 @@ function Start-Skoleprogrammer {
 
 try {
 Stop-ZorkScanJobs
-Update-HelperTray
+$wanted = Get-Wanted
+$wifiNow = Get-WifiSsid
+$onIot = $wifiNow.Connected -and (Get-SsidMatch $wifiNow.Ssid 'FRID-iot')
+$fridOnly = (@($wanted).Count -eq 1 -and $wanted[0] -eq 'fridnett')
+if ($onIot) {
+    Set-CaptiveOffline $true
+} else {
+    Update-HelperTray
+}
+if ((@($wanted) -contains 'fridnett') -and (-not $onIot)) {
+    Restart-HelperTray
+}
 $script:FridAlreadyOk = $false
 $script:PrinterOk = $false
-$wanted = Get-Wanted
 if ($wanted.Count -eq 0) {
     Note 'Ingenting a installere.' -Activity ''
     exit 0
 }
 
-if (-not (Test-Admin)) {
+if ((-not (Test-Admin)) -and (-not $fridOnly)) {
     Note 'Trenger administrator for a installere. Godkjenn i Windows og prov igjen.' -Activity ''
     exit 1
 }
@@ -756,5 +1343,6 @@ if ($script:FridAlreadyOk) {
 }
 exit 0
 } finally {
+    Set-InstallBusyFlag $false
     Write-InstallDone
 }
