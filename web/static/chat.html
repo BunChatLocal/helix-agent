@@ -621,7 +621,7 @@
       <div class="offline" id="offline" data-t="offline">Frakoblet — prøver å koble til igjen…</div>
       <div class="loopback-notice" id="loopbackNotice" hidden>
         <strong data-t="pcloopbacktitle">Tillat Zork Helper i nettleseren</strong>
-        <p data-t="pcloopbackbody">Du trykket Blokker. Zorken trenger Tillat for å snakke med Zork Helper på denne PC-en. Klikk på låsen til venstre for adressen → Apper på enheten → Tillat. Last siden på nytt etterpå.</p>
+        <p data-t="pcloopbackbody">Nettleseren blokkerer Zork Helper på denne PC-en. Zorken trenger Tillat for å snakke med helperen. Klikk på låsen til venstre for adressen → Apper på enheten → Tillat. Last siden på nytt etterpå.</p>
         <button type="button" class="btn primary" id="loopbackRetry" data-t="pcloopbackretry">Prøv igjen</button>
       </div>
 
@@ -739,7 +739,7 @@ const I18N = {
     pcopenmac:"Åpne Nedlastinger. Høyreklikk ZorkHelper.command → Åpne. Godkjenn hvis macOS spør.",
     pcstartfail:"Klarte ikke starte sjekken. Prøv igjen.",
     pcloopbacktitle:"Tillat Zork Helper i nettleseren",
-    pcloopbackbody:"Du trykket Blokker. Zorken trenger Tillat for å snakke med Zork Helper på denne PC-en. Klikk på låsen til venstre for adressen → Apper på enheten → Tillat. Last siden på nytt etterpå.",
+    pcloopbackbody:"Nettleseren blokkerer Zork Helper på denne PC-en. Zorken trenger Tillat for å snakke med helperen. Klikk på låsen til venstre for adressen → Apper på enheten → Tillat. Last siden på nytt etterpå.",
     pcloopbackretry:"Prøv igjen",
     pcadmin:"administrator",
     pcnotadmin:"ikke administrator",
@@ -877,7 +877,7 @@ const I18N = {
     pcopenmac:"Open Downloads. Right-click ZorkHelper.command → Open. Approve if macOS asks.",
     pcstartfail:"Could not start the check. Try again.",
     pcloopbacktitle:"Allow Zork Helper in the browser",
-    pcloopbackbody:"You clicked Block. Zorken needs Allow to talk to Zork Helper on this PC. Click the padlock to the left of the address → Apps on device → Allow. Then reload the page.",
+    pcloopbackbody:"Your browser is blocking Zork Helper on this PC. Zorken needs Allow to talk to the helper. Click the padlock to the left of the address → Apps on device → Allow. Then reload the page.",
     pcloopbackretry:"Try again",
     pcadmin:"administrator",
     pcnotadmin:"not administrator",
@@ -1235,6 +1235,7 @@ function signOut(){
   helperPrinterDone = false;
   helperPrinterJob = false;
   helperPrinterTold = false;
+  helperLocalRoute = false;
   helperSession = null;
   helperCard = null;
   if(loopbackPermStatus){
@@ -2065,6 +2066,7 @@ let helperPollBusy = false;
 let helperPrinterJob = false;
 let helperPrinterDone = false;
 let helperPrinterTold = false;
+let helperLocalRoute = false;
 
 function stopHelperPoll(){
   if(helperTimer){
@@ -2793,6 +2795,17 @@ async function enqueueHelperJob(session, kind, items){
   try { return await r.json(); } catch(_){ return null; }
 }
 
+async function tryServerHelperJob(session, kind, items){
+  try{
+    const queued = await enqueueHelperJob(session, kind, items);
+    if(queued && queued.via === "tray"){
+      markHelperInstalled();
+      return true;
+    }
+  }catch(_){}
+  return false;
+}
+
 async function waitForLocalHelper(session, kind, items, ms){
   const deadline = Date.now() + ms;
   while(Date.now() < deadline){
@@ -2816,19 +2829,15 @@ async function dispatchHelperJob(session, kind, items, opts){
   const known = helperAlreadyOnThisPc();
   const allowDownload = !!(opts && opts.allowDownload) && !helperSeenThisTab;
   if(await deliverHelperJob(session, kind, items)) return "local";
-  await waitForLoopbackDecision(120000);
+  if(await tryServerHelperJob(session, kind, items)) return "server";
+  await waitForLoopbackDecision(15000);
   if(await loopbackIsDenied()){
     setLoopbackDenied(true);
-    try{
-      const queued = await enqueueHelperJob(session, kind, items);
-      if(queued && queued.via === "tray"){
-        markHelperInstalled();
-        return "server";
-      }
-    }catch(_){}
+    if(await tryServerHelperJob(session, kind, items)) return "server";
     return "blocked";
   }
   if(await deliverHelperJob(session, kind, items)) return "local";
+  if(await tryServerHelperJob(session, kind, items)) return "server";
   if(isMacPc()){
     if(!allowDownload) return "wake";
     try{
@@ -2843,13 +2852,7 @@ async function dispatchHelperJob(session, kind, items, opts){
     markHelperInstalled();
     return "local";
   }
-  try{
-    const queued = await enqueueHelperJob(session, kind, items);
-    if(queued && queued.via === "tray"){
-      markHelperInstalled();
-      return "server";
-    }
-  }catch(_){}
+  if(await tryServerHelperJob(session, kind, items)) return "server";
   if(!allowDownload) return "wake";
   try{
     await downloadHelperLauncher(session.id);
@@ -2878,6 +2881,7 @@ async function startFridNett(){
   helperFridJob = true;
   helperFridDone = false;
   helperLocalProgress = "";
+  helperLocalRoute = false;
   helperPrinterJob = false;
   helperPrinterDone = false;
   helperPrinterTold = false;
@@ -2917,11 +2921,13 @@ async function startFridNett(){
     });
     helperSession = session;
     helperInstallBusy = true;
+    helperLocalRoute = false;
     paintHelperCard(session);
     helperTimer = setInterval(() => pollHelper(), 1000);
     pollHelper();
     if(await finishIfOnFrid()) return;
     const via = await dispatchHelperJob(session, "install", ["fridnett"], { allowDownload: true });
+    helperLocalRoute = (via === "local");
     if(helperSession){
       helperSession.via_tray = via === "local" || via === "server";
       helperSession.needs_open = false;
@@ -3007,6 +3013,7 @@ async function startPrinter(){
   helperPrinterJob = true;
   helperPrinterDone = false;
   helperPrinterTold = false;
+  helperLocalRoute = false;
   stopWifiWatch();
 
   if(helperSession && helperSession.id){
@@ -3029,10 +3036,12 @@ async function startPrinter(){
     });
     helperSession = session;
     helperInstallBusy = true;
+    helperLocalRoute = false;
     paintHelperCard(session);
     helperTimer = setInterval(() => pollHelper(), 1000);
     pollHelper();
     const via = await dispatchHelperJob(session, "install", ["printer"], { allowDownload: true });
+    helperLocalRoute = (via === "local");
     if(helperSession){
       helperSession.via_tray = via === "local" || via === "server";
       helperSession.needs_open = false;
@@ -3077,13 +3086,16 @@ async function startPcCheck(){
   helperPrinterJob = false;
   helperPrinterDone = false;
   helperPrinterTold = false;
+  helperLocalRoute = false;
   try{
     const session = await api("/api/helper/sessions", { method: "POST", body: JSON.stringify({ kind: "scan" }) });
     helperSession = session;
+    helperLocalRoute = false;
     paintHelperCard(session);
     helperTimer = setInterval(() => pollHelper(), 1000);
     pollHelper();
     const via = await dispatchHelperJob(session, "scan", [], { allowDownload: true });
+    helperLocalRoute = (via === "local");
     if(via === "download" && isMacPc()){
       flash(t("pcopenmac"));
     }
@@ -3109,10 +3121,12 @@ async function helperInstallItems(items){
   if(!helperSession || !helperSession.id || helperInstallBusy) return;
   if(!items || !items.length) return;
   helperInstallBusy = true;
+  helperLocalRoute = false;
   helperSession.needs_open = false;
   paintHelperCard(helperSession);
   try{
     const via = await dispatchHelperJob(helperSession, "install", items, { allowDownload: false });
+    helperLocalRoute = (via === "local");
     helperSession.via_tray = via === "local" || via === "server";
     helperSession.needs_open = false;
     if(via === "local" || via === "server"){
@@ -3148,7 +3162,7 @@ async function pollHelper(){
   if(helperPollBusy) return;
   helperPollBusy = true;
   try{
-    if(helperFridJob){
+    if(helperFridJob && helperLocalRoute && !loopbackDenied){
       await pingLocalHelper(helperSession, 1200);
       paintHelperCard(helperSession);
       if(helperIsFridDone(helperSession)){
