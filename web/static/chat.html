@@ -2970,10 +2970,19 @@ async function ensureHelperReadyForRun(){
       return false;
     }
     flash(t("pchelperupdating"));
-    const done = await waitForHelperSessionTerminal(session.id, 180000);
-    if(!done || done.status === "error"){
-      flash(t("pcstartfail"));
-      return false;
+    const done = await waitForHelperSessionTerminal(session.id, 20000);
+    if(!done){
+      // Do not block the requested action forever: some helpers refresh slowly
+      // but can still run the requested install right away.
+      return true;
+    }
+    if(done.status === "error"){
+      const onlineNow = await pingLocalHelper(session, 1200);
+      if(!onlineNow){
+        flash(t("pcstartfail"));
+        return false;
+      }
+      return true;
     }
     await pingLocalHelper(session, 1500);
     if(!helperLooksUpdated()){
@@ -3010,9 +3019,12 @@ async function startFridNett(){
   helperPrinterDone = false;
   helperPrinterTold = false;
   stopWifiWatch();
+  stopHelperPoll();
+  helperSession = null;
+  paintHelperCard(null);
 
   const finishIfOnFrid = async () => {
-    await pingLocalHelper(helperSession);
+    await pingLocalHelper(null);
     applyPcCheckVisibility();
     if(!onFridNetwork()) return false;
     helperFridDone = true;
@@ -3024,17 +3036,8 @@ async function startFridNett(){
     return true;
   };
 
-  if(helperSession && helperSession.id){
-    setPcCheckBusy(true);
-    paintHelperCard(helperSession);
-    if(await finishIfOnFrid()) return;
-    await helperInstallItems(["fridnett"], { skipPreflight: true });
-    tellAgentFridNettStarted();
-    return;
-  }
-  stopHelperPoll();
+  if(await finishIfOnFrid()) return;
   setPcCheckBusy(true);
-  helperSession = null;
   helperToldAgent = false;
   helperLastTold = "";
   helperSketchupNotice = false;
@@ -3140,14 +3143,6 @@ async function startPrinter(){
   helperPrinterTold = false;
   helperLocalRoute = false;
   stopWifiWatch();
-
-  if(helperSession && helperSession.id){
-    setPcCheckBusy(true);
-    paintHelperCard(helperSession);
-    await helperInstallItems(["printer"], { skipPreflight: true });
-    tellAgentPrinterStarted();
-    return;
-  }
   stopHelperPoll();
   setPcCheckBusy(true);
   helperSession = null;

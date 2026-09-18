@@ -2553,9 +2553,11 @@ class TestConsoleHelper:
         startp = page.split("async function startPrinter")[1].split("async function startPcCheck")[0]
         assert "stopWifiWatch" in startp
         assert "ensureHelperReadyForRun" in startp
+        assert "if(helperSession && helperSession.id)" not in startp
         startf = page.split("async function startFridNett")[1].split("function tellAgentFridNettAlreadyOnFrid")[0]
         assert "stopWifiWatch" in startf
         assert "ensureHelperReadyForRun" in startf
+        assert "if(helperSession && helperSession.id)" not in startf
         assert "helperPrinterJob || helperFridJob" in page
         assert '["printer"]' in page
         assert "openFridCertificateLogin" not in page
@@ -2590,6 +2592,7 @@ class TestConsoleHelper:
         assert "HELPER_MIN_API_REV" in page
         assert "helperLooksUpdated" in page
         assert "rememberHelperHealth" in page
+        assert "waitForHelperSessionTerminal(session.id, 20000)" in page
         assert "probeHelperWifi" in page
         assert "FRID[-_ ]?iot" in page
         assert "const show = !isPupil" not in page
