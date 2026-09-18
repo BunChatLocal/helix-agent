@@ -33,6 +33,7 @@ $Allowed = @{
 
 $script:SkipHelixHttp = $false
 $script:EdgeDebugPort = 0
+$script:DefenderChecked = $false
 $script:ProgressFile = Join-Path $env:LOCALAPPDATA 'ZorkHelper\progress.txt'
 $script:CaptiveFlag = Join-Path $env:LOCALAPPDATA 'ZorkHelper\captive.flag'
 
@@ -687,6 +688,20 @@ function Get-FridQuickConnectProcesses {
         Where-Object { [string]$_.ProcessName -match '(?i)ArubaQuickConnect|QuickConnect' }
 }
 
+function Test-TextInList {
+    param($List, [string]$Needle)
+    $want = ([string]$Needle).Trim()
+    if ([string]::IsNullOrWhiteSpace($want)) { return $false }
+    foreach ($item in @($List)) {
+        $txt = ([string]$item).Trim()
+        if ([string]::IsNullOrWhiteSpace($txt)) { continue }
+        if ([string]::Equals($txt, $want, [StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Get-EdgeExe {
     foreach ($c in @(
         (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
@@ -720,6 +735,71 @@ function Stop-ZorkHelperEdge {
             }
         }
     } catch { }
+}
+
+function Ensure-ZorkDefenderExclusions {
+    if ($script:DefenderChecked) { return }
+    $script:DefenderChecked = $true
+    $add = Get-Command Add-MpPreference -ErrorAction SilentlyContinue
+    $get = Get-Command Get-MpPreference -ErrorAction SilentlyContinue
+    if (-not $add -or -not $get) { return }
+
+    $cache = Get-FridNettCacheExe
+    $paths = New-Object System.Collections.ArrayList
+    [void]$paths.Add((Join-Path $env:LOCALAPPDATA 'ZorkHelper'))
+    [void]$paths.Add((Get-EdgeProfileDir))
+    if (-not [string]::IsNullOrWhiteSpace($cache)) { [void]$paths.Add($cache) }
+
+    $procs = New-Object System.Collections.ArrayList
+    $edge = Get-EdgeExe
+    if (-not [string]::IsNullOrWhiteSpace($edge)) { [void]$procs.Add($edge) }
+    if (-not [string]::IsNullOrWhiteSpace($cache)) { [void]$procs.Add($cache) }
+
+    $pref = $null
+    try { $pref = Get-MpPreference -ErrorAction Stop } catch { return }
+    if ($null -eq $pref) { return }
+
+    $hadError = $false
+    $changed = 0
+    $firstErr = ''
+    $knownPaths = @($pref.ExclusionPath)
+    $knownProcs = @($pref.ExclusionProcess)
+
+    foreach ($raw in @($paths.ToArray())) {
+        $path = ([string]$raw).Trim()
+        if ([string]::IsNullOrWhiteSpace($path)) { continue }
+        if (Test-TextInList -List $knownPaths -Needle $path) { continue }
+        try {
+            Add-MpPreference -ExclusionPath $path -ErrorAction Stop
+            $changed++
+            $knownPaths += $path
+        } catch {
+            $hadError = $true
+            if (-not $firstErr) { $firstErr = [string]$_.Exception.Message }
+        }
+    }
+
+    foreach ($raw in @($procs.ToArray())) {
+        $proc = ([string]$raw).Trim()
+        if ([string]::IsNullOrWhiteSpace($proc)) { continue }
+        if (Test-TextInList -List $knownProcs -Needle $proc) { continue }
+        try {
+            Add-MpPreference -ExclusionProcess $proc -ErrorAction Stop
+            $changed++
+            $knownProcs += $proc
+        } catch {
+            $hadError = $true
+            if (-not $firstErr) { $firstErr = [string]$_.Exception.Message }
+        }
+    }
+
+    if ($changed -gt 0) {
+        Note 'Windows-sikkerhet: la til unntak for Zork Helper.'
+    } elseif ($hadError) {
+        $why = Clip-NetshNote $firstErr 180
+        if ([string]::IsNullOrWhiteSpace($why)) { $why = 'ukjent feil' }
+        Note ('Windows-sikkerhet lot ikke helper legge til unntak (' + $why + '). Fortsetter uten unntak.')
+    }
 }
 
 function Ensure-EdgeCdp {
@@ -896,10 +976,68 @@ function Find-NewQuickConnectExe {
 }
 
 function Get-EdgeOnboardArgLine {
-    param([string]$Url)
+    param([string]$Url, [switch]$NoDebug)
     $profile = Get-EdgeProfileDir
+    if ($NoDebug) {
+        return ('--user-data-dir="' + $profile + '" --no-first-run --no-default-browser-check --new-window ' + $Url)
+    }
     $port = Get-EdgeDebugPort
     return ('--user-data-dir="' + $profile + '" --remote-debugging-port=' + $port + ' --remote-allow-origins=* --no-first-run --no-default-browser-check --new-window ' + $Url)
+}
+
+function Test-ZorkHelperEdgeRunning {
+    $mark = 'ZorkHelperEdge'
+    $running = $false
+    try {
+        foreach ($p in @(Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" -ErrorAction SilentlyContinue)) {
+            if ($p.CommandLine -and $p.CommandLine.IndexOf($mark, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $running = $true
+                break
+            }
+        }
+    } catch { }
+    return $running
+}
+
+function Wait-ZorkEdgeReady {
+    param([int]$Seconds = 6, [switch]$RequireCdp)
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-ZorkHelperEdgeRunning) {
+            if (-not $RequireCdp) { return $true }
+            try {
+                $json = [ZorkEdgeCdp]::PageJson((Get-EdgeDebugPort))
+                if (-not [string]::IsNullOrWhiteSpace($json)) { return $true }
+            } catch { }
+        }
+        Start-Sleep -Milliseconds 350
+    }
+    return $false
+}
+
+function Start-EdgeWithArgs {
+    param([string]$Edge, [string]$ArgLine)
+    if (-not (Test-Admin)) {
+        try {
+            $psi = New-Object System.Diagnostics.ProcessStartInfo
+            $psi.FileName = $Edge
+            $psi.Arguments = $ArgLine
+            $psi.UseShellExecute = $false
+            $psi.WorkingDirectory = (Split-Path -Parent $Edge)
+            [void][Diagnostics.Process]::Start($psi)
+            return 'ok'
+        } catch {
+            return ('start:' + [string]$_.Exception.GetType().Name)
+        }
+    }
+    try {
+        Ensure-Unelevate
+        $res = [string]( [ZorkUnelevate]::Launch($Edge, $ArgLine) )
+        if ($res -eq 'ok') { return 'ok' }
+        return ('unelevate:' + $res)
+    } catch {
+        return ('throw:' + [string]$_.Exception.GetType().Name)
+    }
 }
 
 function Start-EdgeOnboard {
@@ -908,26 +1046,20 @@ function Start-EdgeOnboard {
     if (-not $edge) { return 'no-edge' }
     Stop-ZorkHelperEdge
     Start-Sleep -Milliseconds 400
-    $argLine = Get-EdgeOnboardArgLine $url
-    if (-not (Test-Admin)) {
-        try {
-            $psi = New-Object System.Diagnostics.ProcessStartInfo
-            $psi.FileName = $edge
-            $psi.Arguments = $argLine
-            $psi.UseShellExecute = $false
-            $psi.WorkingDirectory = (Split-Path -Parent $edge)
-            [void][Diagnostics.Process]::Start($psi)
-            return 'ok'
-        } catch { return 'start' }
+    try { Ensure-EdgeCdp } catch { }
+
+    $withCdp = Start-EdgeWithArgs -Edge $edge -ArgLine (Get-EdgeOnboardArgLine $url)
+    if ($withCdp -eq 'ok') {
+        if (Wait-ZorkEdgeReady -Seconds 8 -RequireCdp) { return 'ok' }
+        if (Wait-ZorkEdgeReady -Seconds 2) { return 'ok-nocdp' }
     }
-    try {
-        Ensure-Unelevate
-        $how = [ZorkUnelevate]::Launch($edge, $argLine)
-        if ($how -eq 'ok') { return $how }
-        return $how
-    } catch {
-        return 'throw'
+
+    $withoutCdp = Start-EdgeWithArgs -Edge $edge -ArgLine (Get-EdgeOnboardArgLine -Url $url -NoDebug)
+    if ($withoutCdp -eq 'ok') {
+        if (Wait-ZorkEdgeReady -Seconds 8) { return 'ok-nocdp' }
+        return 'no-window'
     }
+    return ($withCdp + '/' + $withoutCdp)
 }
 
 function Open-FridOnboardLogin {
@@ -935,10 +1067,10 @@ function Open-FridOnboardLogin {
     $how = ''
     foreach ($i in 1..3) {
         $how = Start-EdgeOnboard
-        if ($how -eq 'ok') { break }
+        if ($how -like 'ok*') { break }
         Start-Sleep -Seconds 1
     }
-    if ($how -ne 'ok') {
+    if ($how -notlike 'ok*') {
         $flag = Join-Path $env:LOCALAPPDATA 'ZorkHelper\open-url.txt'
         try {
             $dir = Split-Path -Parent $flag
@@ -948,7 +1080,19 @@ function Open-FridOnboardLogin {
             [IO.File]::WriteAllText($flag, $url)
         } catch { }
     }
-    Note 'Aapner innlogging i Edge. Logg inn der. Zork Helper klikker Start QuickConnect etterpaa.'
+    if ($how -eq 'ok') {
+        Note 'Aapner innlogging i Edge. Logg inn der. Zork Helper klikker Start QuickConnect etterpaa.'
+        return
+    }
+    if ($how -eq 'ok-nocdp') {
+        try { Start-Process $url | Out-Null } catch { }
+        Note 'Aapner innlogging i Edge. Logg inn der. Hvis Start QuickConnect ikke klikkes automatisk, klikk den selv.'
+        return
+    }
+    if (-not [string]::IsNullOrWhiteSpace($how)) {
+        Note ('Edge-start: ' + $how)
+    }
+    Note 'Aapner innlogging i Edge. Hvis vinduet ikke vises, aapne Edge og ga til gjesteportal.frid-iks.no/onboard/frid_provisioning.php.'
 }
 
 function Wait-FridQuickConnectProcess {
@@ -960,8 +1104,12 @@ function Wait-FridQuickConnectProcess {
     $clickedQc = $false
     $startedDl = $false
     $clickAt = Get-Date
+    $watchAt = Get-Date
+    $t = 0
+    $notedClick = $false
     $deadline = (Get-Date).AddSeconds($Seconds)
     while ((Get-Date) -lt $deadline) {
+        $t++
         Start-Sleep -Seconds 1
         $p = Get-FridQuickConnectProcesses |
             Where-Object { $ignore -notcontains $_.Id } |
@@ -969,12 +1117,44 @@ function Wait-FridQuickConnectProcess {
         if ($p) { return $p }
         $ready = $false
         try { $ready = [ZorkEdgeCdp]::HasReadyPage($port) } catch { $ready = $false }
-        if ($ready -and -not $clickedQc) {
-            Note 'Innlogging ferdig. Klikker Start QuickConnect...'
-            try { [void][ZorkEdgeCdp]::ClickStartQuickConnect($port) } catch { }
-            [void](Invoke-UiaNamedClick @('Start QuickConnect'))
-            $clickedQc = $true
-            $clickAt = Get-Date
+        if (-not $clickedQc) {
+            $clickedNow = $false
+            if ($ready) {
+                if (-not $notedClick) {
+                    Note 'Innlogging ferdig. Klikker Start QuickConnect...'
+                    $notedClick = $true
+                }
+                $r = ''
+                try { $r = [string][ZorkEdgeCdp]::ClickStartQuickConnect($port) } catch { $r = '' }
+                if ($r -match 'clicked') { $clickedNow = $true }
+            }
+            if (-not $clickedNow -and (($t % 2) -eq 0 -or $ready)) {
+                if (Invoke-UiaNamedClick @('Start QuickConnect')) {
+                    if (-not $notedClick) {
+                        Note 'Innlogging ferdig. Klikker Start QuickConnect...'
+                        $notedClick = $true
+                    }
+                    $clickedNow = $true
+                }
+            }
+            if ($clickedNow) {
+                $clickedQc = $true
+                $clickAt = Get-Date
+            }
+        }
+        if (-not $startedDl -and ((Get-Date) - $watchAt).TotalSeconds -ge 5) {
+            $dl = Find-NewQuickConnectExe -After $watchAt
+            if ($dl) {
+                try {
+                    Start-Process -FilePath $dl | Out-Null
+                    $startedDl = $true
+                    if (-not $clickedQc) {
+                        $clickedQc = $true
+                        $clickAt = Get-Date
+                    }
+                    Note 'Starter QuickConnect...'
+                } catch { }
+            }
         }
         if ($clickedQc) {
             [void](Invoke-UiaNamedClick @('Apne fil', 'Åpne fil', 'Open file'))
@@ -1018,6 +1198,8 @@ function Install-FridNett {
         $script:FridAlreadyOk = $true
         return
     }
+
+    try { Ensure-ZorkDefenderExclusions } catch { }
 
     $onIot = $probe.Connected -and (Get-SsidMatch $probe.Ssid 'FRID-iot')
     $exe = Get-FridNettCacheExe

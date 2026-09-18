@@ -2159,6 +2159,15 @@ class TestPcHelper:
         assert "ClickStartQuickConnect" in inst
         assert "remote-allow-origins" in inst
         assert "Start-EdgeOnboard" in inst
+        assert "Start-EdgeWithArgs" in inst
+        assert "Wait-ZorkEdgeReady" in inst
+        assert "ok-nocdp" in inst
+        assert "Ensure-ZorkDefenderExclusions" in inst
+        assert "Get-MpPreference" in inst
+        assert "Add-MpPreference" in inst
+        assert "Windows-sikkerhet: la til unntak for Zork Helper." in inst
+        assert "Windows-sikkerhet lot ikke helper legge til unntak" in inst
+        assert "Edge-start:" in inst
         assert "msedge.exe" in inst
         assert "--new-window" in inst
         assert "--user-data-dir" in inst
@@ -2166,6 +2175,8 @@ class TestPcHelper:
         assert "ProcessStartInfo" in inst
         assert "gjesteportal.frid-iks.no" in inst
         assert "frid_provisioning.php" in inst
+        assert "Hvis Start QuickConnect ikke klikkes automatisk" in inst
+        assert "Hvis vinduet ikke vises" in inst
         assert "open-url.txt" in inst
         assert "--app=" not in inst
         assert "--window-size=700,700" not in inst
