@@ -2505,10 +2505,10 @@ class TestConsoleHelper:
         assert 'me.console_role === "admin"' in page
         assert "pcopenmac" in page
         assert "?os=mac" in page
-        assert 'id="pcHelperUpdateChip"' in page
-        assert 'id="pcHelperUpdateBtn"' in page
-        assert "startHelperUpdateCheck" in page
-        assert "pchelperupdate" in page
+        assert 'id="pcHelperUpdateChip"' not in page
+        assert 'id="pcHelperUpdateBtn"' not in page
+        assert "ensureHelperReadyForRun" in page
+        assert "waitForHelperSessionTerminal" in page
         assert 'id="pcFridNettBtn"' in page
         assert "startFridNett" in page
         assert "pcfridnett" in page
@@ -2552,8 +2552,10 @@ class TestConsoleHelper:
         assert "pingLocalHelper" not in deliver
         startp = page.split("async function startPrinter")[1].split("async function startPcCheck")[0]
         assert "stopWifiWatch" in startp
+        assert "ensureHelperReadyForRun" in startp
         startf = page.split("async function startFridNett")[1].split("function tellAgentFridNettAlreadyOnFrid")[0]
         assert "stopWifiWatch" in startf
+        assert "ensureHelperReadyForRun" in startf
         assert "helperPrinterJob || helperFridJob" in page
         assert '["printer"]' in page
         assert "openFridCertificateLogin" not in page
@@ -2631,7 +2633,9 @@ class TestConsoleHelper:
         assert "8000" in dispatch
         install = page.split("async function helperInstallItems")[1].split("async function pollHelper")[0]
         assert "downloadHelperLauncher" not in install
-        assert "allowDownload: false" in install
+        assert "allowDownload" in install
+        assert "skipPreflight" in install
+        assert "ensureHelperReadyForRun" in install
         assert "dispatchHelperJob" in install
         assert "helperToldAgent = false" not in install
         assert '["sketchup"]' in install
