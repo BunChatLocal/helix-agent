@@ -130,15 +130,27 @@ function Clear-SessionFromCfg {
 }
 
 function Send-Json {
-    param([string]$Url, [string]$Secret, [string]$Body = '{}', [string]$Method = 'POST')
-    $wc = New-Object System.Net.WebClient
-    $wc.Encoding = [Text.Encoding]::UTF8
-    $wc.Headers.Add('Content-Type', 'application/json; charset=utf-8')
-    $wc.Headers.Add('X-Helper-Secret', $Secret)
-    if ($Method -eq 'GET') {
-        return $wc.DownloadString($Url)
+    param([string]$Url, [string]$Secret, [string]$Body = '{}', [string]$Method = 'POST', [int]$TimeoutMs = 2500)
+    $req = [Net.HttpWebRequest]::Create($Url)
+    $req.Method = $Method
+    $req.Timeout = $TimeoutMs
+    $req.ReadWriteTimeout = $TimeoutMs
+    $req.KeepAlive = $false
+    $req.ContentType = 'application/json; charset=utf-8'
+    if ($Secret) { $req.Headers.Add('X-Helper-Secret', $Secret) }
+    if ($Method -ne 'GET') {
+        $payload = [Text.Encoding]::UTF8.GetBytes($(if ($null -eq $Body) { '{}' } else { $Body }))
+        $req.ContentLength = $payload.Length
+        $stream = $req.GetRequestStream()
+        try { $stream.Write($payload, 0, $payload.Length) } finally { $stream.Close() }
     }
-    return $wc.UploadString($Url, $Method, $Body)
+    $resp = $req.GetResponse()
+    try {
+        $reader = New-Object IO.StreamReader($resp.GetResponseStream())
+        try { return $reader.ReadToEnd() } finally { $reader.Close() }
+    } finally {
+        $resp.Close()
+    }
 }
 
 function Hide-ZorkConsole {
@@ -197,7 +209,7 @@ function Show-Tip {
 }
 
 function Start-HiddenPs {
-    param([string]$File, [string[]]$Extra)
+    param([string]$File, [Alias('Args')][string[]]$Extra)
     $list = New-Object System.Collections.ArrayList
     [void]$list.Add('-NoProfile')
     [void]$list.Add('-ExecutionPolicy')
@@ -275,27 +287,81 @@ function Test-PrinterOnly {
     return $true
 }
 
+function Save-HttpToFile {
+    param([string]$Url, [string]$Secret, [string]$Dest, [int]$TimeoutMs = 8000)
+    $req = [Net.HttpWebRequest]::Create($Url)
+    $req.Method = 'GET'
+    $req.Timeout = $TimeoutMs
+    $req.ReadWriteTimeout = $TimeoutMs
+    $req.KeepAlive = $false
+    if ($Secret) { $req.Headers.Add('X-Helper-Secret', $Secret) }
+    $resp = $req.GetResponse()
+    try {
+        $src = $resp.GetResponseStream()
+        $fs = [IO.File]::Create($Dest)
+        try { $src.CopyTo($fs) } finally { $fs.Close() }
+    } finally {
+        $resp.Close()
+    }
+}
+
+function Test-SessionTokenUsable {
+    param([string]$Sid, [string]$Secret)
+    if ([string]::IsNullOrWhiteSpace($Sid) -or $Sid -notmatch '^[a-f0-9]{32}$') { return $false }
+    if ([string]::IsNullOrWhiteSpace($Secret) -or $Secret.Length -lt 16) { return $false }
+    if ($Sid -eq '00000000000000000000000000000000') { return $false }
+    if ($Secret -eq 'offline-local-session-token') { return $false }
+    return $true
+}
+
 function Start-InstallJob {
     param([string]$Sid, [string]$Secret, [string[]]$Items)
     if (Test-FridNettOnly $Items) {
         try { Refresh-WifiStatus } catch { }
-        Tell-Session -Sid $Sid -Secret $Secret -Text 'Sjekker wifi...' -Activity 'installing'
+        if (-not (Test-CaptiveOffline)) {
+            Tell-Session -Sid $Sid -Secret $Secret -Text 'Sjekker wifi...' -Activity 'installing'
+        }
         if (Test-SchoolFridSsid $script:WifiSsid) {
             Tell-Session -Sid $Sid -Secret $Secret -Text 'Done! Du er koblet til riktig nettverk (FRID).' -Activity ''
             Show-Tip 'Done! Du er pa riktig nettverk.'
             return
         }
     }
-    Tell-Session -Sid $Sid -Secret $Secret -Text 'Windows spor om tillatelse til a installere.' -Activity 'installing'
-    Show-Tip 'Windows spor om a tillate Zork Helper...'
     $tmp = Join-Path $env:TEMP ('zork-install-' + $Sid + '.ps1')
     $jobFile = Join-Path $env:TEMP ('zork-install-items-' + $Sid + '.txt')
-    $wc = New-Object System.Net.WebClient
-    $wc.Encoding = [Text.Encoding]::UTF8
-    $wc.Headers.Add('X-Helper-Secret', $Secret)
-    try {
-        $wc.DownloadFile(($script:BaseUrl.TrimEnd('/') + '/api/helper/' + $Sid + '/install-script'), $tmp)
-    } catch {
+    $cache = Join-Path $script:HomeDir 'install-script.ps1'
+    $seed = Join-Path $script:HomeDir 'zork-helper-install.ps1'
+    $got = $false
+    $canFetch = (Test-SessionTokenUsable -Sid $Sid -Secret $Secret) -and (-not (Test-CaptiveOffline))
+    if ($canFetch) {
+        try {
+            Save-HttpToFile -Url ($script:BaseUrl.TrimEnd('/') + '/api/helper/' + $Sid + '/install-script') -Secret $Secret -Dest $tmp -TimeoutMs 8000
+            if ((Test-Path -LiteralPath $tmp) -and ((Get-Item -LiteralPath $tmp).Length -gt 2000)) {
+                Copy-Item -LiteralPath $tmp -Destination $cache -Force
+                Copy-Item -LiteralPath $tmp -Destination $seed -Force
+                $got = $true
+            }
+        } catch { }
+    }
+    if (-not $got) {
+        if (Test-Path -LiteralPath $cache) {
+            Copy-Item -LiteralPath $cache -Destination $tmp -Force
+            $got = $true
+        } elseif (Test-Path -LiteralPath $seed) {
+            Copy-Item -LiteralPath $seed -Destination $tmp -Force
+            try { Copy-Item -LiteralPath $seed -Destination $cache -Force } catch { }
+            $got = $true
+        } else {
+            $old = Get-ChildItem -LiteralPath $env:TEMP -Filter 'zork-install-*.ps1' -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -First 1
+            if ($old) {
+                Copy-Item -LiteralPath $old.FullName -Destination $tmp -Force
+                $got = $true
+            }
+        }
+    }
+    if (-not $got) {
         Tell-Session -Sid $Sid -Secret $Secret -Text 'Klarte ikke a hente installasjonsfilen.' -Activity ''
         Show-Tip 'Klarte ikke a starte installasjon.'
         return
@@ -306,6 +372,37 @@ function Start-InstallJob {
     try { Remove-Item -LiteralPath $done -Force -ErrorAction SilentlyContinue } catch { }
     $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $arg = '-NoProfile -ExecutionPolicy Bypass -File "' + $tmp + '" -BaseUrl "' + $script:BaseUrl + '" -SessionId "' + $Sid + '" -Secret "' + $Secret + '" -JobFile "' + $jobFile + '" -DoneFile "' + $done + '"'
+    if (Test-FridNettOnly $Items) {
+        Show-Tip 'Kobler til FRID-iot...'
+        try {
+            $script:BusyProc = Start-Process -FilePath $ps -PassThru -WindowStyle Hidden -ArgumentList @(
+                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $tmp,
+                '-BaseUrl', $script:BaseUrl, '-SessionId', $Sid, '-Secret', $Secret,
+                '-JobFile', $jobFile, '-DoneFile', $done
+            )
+        } catch {
+            $script:BusyProc = $null
+            Tell-Session -Sid $Sid -Secret $Secret -Text 'Klarte ikke a starte FRID-nett.' -Activity ''
+            Show-Tip 'Klarte ikke a starte FRID-nett.'
+            return
+        }
+        if ($null -eq $script:BusyProc) {
+            Tell-Session -Sid $Sid -Secret $Secret -Text 'Klarte ikke a starte FRID-nett.' -Activity ''
+            return
+        }
+        $script:BusyKind = 'install'
+        $script:BusySid = $Sid
+        $script:BusySecret = $Secret
+        $script:BusyTmp = $tmp
+        $script:BusyDone = $done
+        $script:BusyStartedTick = $script:Tick
+        $script:AfterInstallScan = $false
+        return
+    }
+    if (-not (Test-CaptiveOffline)) {
+        Tell-Session -Sid $Sid -Secret $Secret -Text 'Windows spor om tillatelse til a installere.' -Activity 'installing'
+        Show-Tip 'Windows spor om a tillate Zork Helper...'
+    }
     $wrap = Join-Path $env:TEMP ('zork-elevate-' + $Sid + '.ps1')
     $exeLit = $ps.Replace("'", "''")
     $argLit = $arg.Replace("'", "''")
@@ -350,10 +447,32 @@ function Start-InstallJob {
     $ids = @(Get-InstallIds $Items)
     $script:AfterInstallScan = ($ids.Count -gt 0) -and -not (Test-FridNettOnly $ids) -and -not (Test-PrinterOnly $ids)
     if (Test-FridNettOnly $ids) {
-        Show-Tip 'Starter FRID-nett...'
+        Show-Tip 'Kobler til FRID-iot...'
     } else {
         Show-Tip 'Installerer det som mangler...'
     }
+}
+
+function Resolve-InboxSession {
+    $sid = ([string]$script:SessionId).Trim().ToLowerInvariant()
+    if ($sid -notmatch '^[a-f0-9]{32}$') {
+        $sid = '00000000000000000000000000000000'
+    }
+    $secret = ([string]$script:SessionSecret).Trim()
+    if ($secret.Length -lt 16) {
+        $secret = 'offline-local-session-token'
+    }
+    return @{ sid = $sid; secret = $secret }
+}
+
+function Start-InboxFridNett {
+    if ($script:BusyKind -eq 'install') { return }
+    if ([string]::IsNullOrWhiteSpace($script:BaseUrl)) {
+        $script:BaseUrl = 'https://zorken.chat'
+    }
+    $sess = Resolve-InboxSession
+    Show-Tip 'Starter FRID-nett...'
+    Start-InstallJob -Sid ([string]$sess.sid) -Secret ([string]$sess.secret) -Items @('fridnett')
 }
 
 function Register-Device {
@@ -588,12 +707,77 @@ function Test-SchoolFridSsid {
     return ($s -imatch '^FRID(\b|[-_ ]|$)')
 }
 
+function Test-FridIotSsid {
+    param([string]$Name)
+    return ([string]$Name).Trim() -imatch '^FRID[-_ ]?iot$'
+}
+
+function Test-CaptiveOffline {
+    if (Test-FridIotSsid $script:WifiSsid) { return $true }
+    try {
+        return (Test-Path -LiteralPath (Join-Path $script:HomeDir 'captive.flag'))
+    } catch {
+        return $false
+    }
+}
+
+function Get-LocalProgress {
+    $pf = Join-Path $script:HomeDir 'progress.txt'
+    try {
+        if (Test-Path -LiteralPath $pf) {
+            return ([IO.File]::ReadAllText($pf)).Trim()
+        }
+    } catch { }
+    return ''
+}
+
+function Open-UserUrl {
+    param([string]$Url)
+    $u = ([string]$Url).Trim()
+    if ($u -notmatch '^https://(onboard|gjesteportal)\.frid-iks\.no(/|$)') { return }
+    Show-Tip 'Aapner innlogging i Edge...'
+    $edge = ''
+    foreach ($c in @(
+        (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
+        (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe')
+    )) {
+        if ($c -and (Test-Path -LiteralPath $c)) { $edge = [string]$c; break }
+    }
+    if (-not $edge) {
+        try {
+            $cmd = Get-Command msedge.exe -ErrorAction SilentlyContinue
+            if ($cmd -and $cmd.Source) { $edge = [string]$cmd.Source }
+        } catch { }
+    }
+    if (-not $edge) { return }
+    $profile = Join-Path $env:TEMP 'ZorkHelperEdge'
+    $argLine = '--user-data-dir="' + $profile + '" --remote-debugging-port=18793 --remote-allow-origins=* --no-first-run --no-default-browser-check --new-window ' + $u
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $edge
+        $psi.Arguments = $argLine
+        $psi.UseShellExecute = $false
+        $psi.WorkingDirectory = (Split-Path -Parent $edge)
+        [void][Diagnostics.Process]::Start($psi)
+    } catch { }
+}
+
+function Drain-OpenUrl {
+    $f = Join-Path $script:HomeDir 'open-url.txt'
+    if (-not (Test-Path -LiteralPath $f)) { return }
+    $url = ''
+    try { $url = ([IO.File]::ReadAllText($f)).Trim() } catch { $url = '' }
+    try { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } catch { }
+    Open-UserUrl $url
+}
+
 function Get-PingBody {
     $obj = [ordered]@{
         ok        = $true
         name      = 'Zork Helper'
         ssid      = [string]$script:WifiSsid
         connected = [bool]$script:WifiConnected
+        progress  = Get-LocalProgress
     }
     return ($obj | ConvertTo-Json -Compress)
 }
@@ -751,8 +935,18 @@ function Pump-LocalApi {
 
 function Drain-Inbox {
     $inbox = Join-Path $script:HomeDir 'inbox.json'
-    if (Test-Path -LiteralPath $inbox) {
-        Remove-Item -LiteralPath $inbox -Force -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $inbox)) { return }
+    $raw = ''
+    try { $raw = [IO.File]::ReadAllText($inbox) } catch { $raw = '' }
+    try { Remove-Item -LiteralPath $inbox -Force -ErrorAction SilentlyContinue } catch { }
+    if ([string]::IsNullOrWhiteSpace($raw)) { return }
+    $msg = $null
+    try { $msg = $raw | ConvertFrom-Json } catch { $msg = $null }
+    if ($null -eq $msg) { return }
+    $op = ''
+    try { $op = ([string]$msg.op).Trim().ToLowerInvariant() } catch { $op = '' }
+    if ($op -eq 'fridnett') {
+        Start-InboxFridNett
     }
 }
 
@@ -799,21 +993,30 @@ $timer.add_Tick({
     try {
         if ($script:BootJobsPending) {
             $script:BootJobsPending = $false
-            if ([string]::IsNullOrWhiteSpace($script:DeviceId) -or [string]::IsNullOrWhiteSpace($script:DeviceSecret)) {
-                [void](Register-Device)
-            }
-            $job = Get-ServerJob
-            if ($null -ne $job) {
-                Start-JobFromServer $job
+            $busyFlag = $false
+            try { $busyFlag = Test-Path -LiteralPath (Join-Path $script:HomeDir 'install-busy.flag') } catch { $busyFlag = $false }
+            if ((-not $busyFlag) -and (-not (Test-CaptiveOffline))) {
+                if ([string]::IsNullOrWhiteSpace($script:DeviceId) -or [string]::IsNullOrWhiteSpace($script:DeviceSecret)) {
+                    [void](Register-Device)
+                }
+                $job = Get-ServerJob
+                if ($null -ne $job) {
+                    Start-JobFromServer $job
+                }
             }
         }
         Pump-LocalApi
+        Drain-OpenUrl
         Drain-Incoming
         Drain-Inbox
         Finish-BusyIfNeeded
         $script:Tick++
+        $wifiDue = (($script:Tick % 80) -eq 0) -or ($script:BusyKind -eq 'install' -and ($script:Tick % 20) -eq 0)
+        if ($wifiDue) {
+            try { Refresh-WifiStatus } catch { }
+        }
         if (($script:Tick % 80) -ne 0) { return }
-        try { Refresh-WifiStatus } catch { }
+        if (Test-CaptiveOffline) { return }
         if ([string]::IsNullOrWhiteSpace($script:DeviceId)) {
             [void](Register-Device)
         }

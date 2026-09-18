@@ -1979,6 +1979,8 @@ class TestConsoleApps:
         assert "ZorkHelper.command" in page
         assert "?os=mac" in page
         assert "zorkhelper://wake" in page
+        assert "isFridNettInstall" in page
+        assert "wakeHelperApp('fridnett')" in page
         assert "loopback-network" in page
         assert "helperLoopbackDenied" in page
         assert "allowDownload: false" in page
@@ -2033,6 +2035,12 @@ class TestPcHelper:
         assert "install-busy.flag" in tray
         assert "Drain-OpenUrl" in tray
         assert "open-url.txt" in tray
+        assert "zork-helper-install.ps1" in tray
+        assert "Start-InboxFridNett" in tray
+        assert "Resolve-InboxSession" in tray
+        assert "Test-SessionTokenUsable" in tray
+        assert "offline-local-session-token" in tray
+        assert "op -eq 'fridnett'" in tray
         assert "--new-window" in tray
         assert "msedge.exe" in tray
         assert "ZorkHelperEdge" in tray
@@ -2210,6 +2218,8 @@ class TestPcHelper:
         assert "127.0.0.1:18792" in opener
         assert "zork-helper-tray.ps1" in opener
         assert "WindowStyle Hidden" in opener
+        assert "Get-InboxOp" in opener
+        assert "fridnett" in opener
         assert "Invoke-Expression" not in opener
         assert pc_helper.HELPER_PROTOCOL == "zorkhelper"
         install = pc_helper.install_script()
@@ -2220,6 +2230,9 @@ class TestPcHelper:
         assert "Write-Progress" in boot
         assert "Loading..." in boot
         assert "Send-BootProgress" in boot
+        assert "/install-script" in boot
+        assert "zork-helper-install.ps1" in boot
+        assert "install-script.ps1" in boot
         assert "HasExited" not in boot
         assert "/v1/ping" in boot
         assert "/open" in boot
@@ -2600,6 +2613,8 @@ class TestConsoleHelper:
         assert "helperAlreadyOnThisPc" in dispatch
         assert "waitForLoopbackDecision" in page
         assert dispatch.find("wakeHelperApp") < dispatch.rfind("downloadHelperLauncher")
+        assert "isFridNettJob" in dispatch
+        assert 'wakeHelperApp("fridnett")' in dispatch
         assert "waitForLocalHelper" in page
         assert "8000" in dispatch
         install = page.split("async function helperInstallItems")[1].split("async function pollHelper")[0]

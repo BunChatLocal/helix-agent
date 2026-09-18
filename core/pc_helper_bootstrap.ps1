@@ -100,6 +100,8 @@ Write-Host ''
 
 $homeDir = Join-Path $env:LOCALAPPDATA 'ZorkHelper'
 $tray = Join-Path $homeDir 'zork-helper-tray.ps1'
+$installSeed = Join-Path $homeDir 'zork-helper-install.ps1'
+$installCache = Join-Path $homeDir 'install-script.ps1'
 $scan = Join-Path $env:TEMP ('zork-scan-' + $SessionId + '.ps1')
 $cfgPath = Join-Path $homeDir 'config.json'
 $wc = New-Object System.Net.WebClient
@@ -114,6 +116,13 @@ try {
     $wc.DownloadFile(($BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId + '/tray'), $tray)
     $open = Join-Path $homeDir 'zork-helper-open.ps1'
     $wc.DownloadFile(($BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId + '/open'), $open)
+    Show-ZorkProgress 24 'Forbereder FRID-nett...'
+    try {
+        $wc.DownloadFile(($BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId + '/install-script'), $installSeed)
+        if ((Test-Path -LiteralPath $installSeed) -and ((Get-Item -LiteralPath $installSeed).Length -gt 2000)) {
+            Copy-Item -LiteralPath $installSeed -Destination $installCache -Force
+        }
+    } catch { }
 
     if ($jobKind -eq 'scan') {
         Show-ZorkProgress 28 'Laster ned sjekken...'

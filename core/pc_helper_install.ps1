@@ -67,18 +67,28 @@ function Write-LocalProgress {
 
 function Update-HelperTray {
     $homeDir = Join-Path $env:LOCALAPPDATA 'ZorkHelper'
-    $dest = Join-Path $homeDir 'zork-helper-tray.ps1'
     if (-not (Test-Path -LiteralPath $homeDir)) { return }
-    $tmp = Join-Path $env:TEMP ('zork-tray-' + $SessionId + '.ps1')
-    try {
-        $wc = New-Object System.Net.WebClient
-        $wc.Encoding = [Text.Encoding]::UTF8
-        $wc.Headers.Add('X-Helper-Secret', $Secret)
-        $wc.DownloadFile(($BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId + '/tray'), $tmp)
-        if ((Test-Path -LiteralPath $tmp) -and ((Get-Item -LiteralPath $tmp).Length -gt 2000)) {
-            Copy-Item -LiteralPath $tmp -Destination $dest -Force
-        }
-    } catch { }
+    $base = $BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId
+    $assets = @(
+        @{ key = 'tray'; path = '/tray'; dest = (Join-Path $homeDir 'zork-helper-tray.ps1'); mirror = $null },
+        @{ key = 'open'; path = '/open'; dest = (Join-Path $homeDir 'zork-helper-open.ps1'); mirror = $null },
+        @{ key = 'install'; path = '/install-script'; dest = (Join-Path $homeDir 'zork-helper-install.ps1'); mirror = (Join-Path $homeDir 'install-script.ps1') }
+    )
+    foreach ($asset in $assets) {
+        $tmp = Join-Path $env:TEMP ('zork-' + [string]$asset.key + '-' + $SessionId + '.ps1')
+        try {
+            $wc = New-Object System.Net.WebClient
+            $wc.Encoding = [Text.Encoding]::UTF8
+            $wc.Headers.Add('X-Helper-Secret', $Secret)
+            $wc.DownloadFile($base + [string]$asset.path, $tmp)
+            if ((Test-Path -LiteralPath $tmp) -and ((Get-Item -LiteralPath $tmp).Length -gt 2000)) {
+                Copy-Item -LiteralPath $tmp -Destination ([string]$asset.dest) -Force
+                if ($asset.mirror) {
+                    Copy-Item -LiteralPath $tmp -Destination ([string]$asset.mirror) -Force
+                }
+            }
+        } catch { }
+    }
 }
 
 function Send-Helper {

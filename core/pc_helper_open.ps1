@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# Protocol handler: zorkhelper://wake
+# Protocol handler: zorkhelper://wake and zorkhelper://fridnett
 # Starts the tray if it is not already listening. Never puts secrets in the URL.
 param([string]$Uri = '')
 
@@ -10,6 +10,19 @@ $homeDir = Join-Path $env:LOCALAPPDATA 'ZorkHelper'
 $tray = Join-Path $homeDir 'zork-helper-tray.ps1'
 $inbox = Join-Path $homeDir 'inbox.json'
 $pingUrl = 'http://127.0.0.1:18792/v1/wake'
+
+function Get-InboxOp {
+    param([string]$RawUri)
+    $u = ([string]$RawUri).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($u)) {
+        if ($u -match '(?i)^zorkhelper://([^/?#]+)') {
+            $op = ([string]$Matches[1]).Trim().ToLowerInvariant()
+            if ($op -eq 'fridnett') { return 'fridnett' }
+            if ($op -eq 'wake') { return 'wake' }
+        }
+    }
+    return 'wake'
+}
 
 function Test-LocalHelper {
     try {
@@ -26,8 +39,10 @@ function Test-LocalHelper {
 }
 
 New-Item -ItemType Directory -Force -Path $homeDir | Out-Null
+$op = Get-InboxOp $Uri
 try {
-    Set-Content -LiteralPath $inbox -Value '{"op":"wake"}' -Encoding ASCII
+    $msg = @{ op = $op } | ConvertTo-Json -Compress
+    Set-Content -LiteralPath $inbox -Value $msg -Encoding ASCII
 } catch { }
 
 if (Test-LocalHelper) { exit 0 }

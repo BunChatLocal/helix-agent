@@ -5139,15 +5139,22 @@ function helixApp() {
     markHelperInstalled() {
       try { localStorage.setItem('zorkHelperInstalled', '1'); } catch {}
     },
-    wakeHelperApp() {
+    wakeHelperApp(op) {
+      const cmd = String(op || 'wake').trim().toLowerCase() === 'fridnett' ? 'fridnett' : 'wake';
       try {
         const a = document.createElement('a');
-        a.href = 'zorkhelper://wake';
+        a.href = 'zorkhelper://' + cmd;
         a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
         a.remove();
       } catch {}
+    },
+    isFridNettInstall(kind, items) {
+      if (String(kind || '').toLowerCase() !== 'install') return false;
+      const ids = Array.isArray(items) ? items.map(v => String(v || '').trim().toLowerCase()).filter(Boolean) : [];
+      if (!ids.length) return false;
+      return ids.every(id => id === 'fridnett');
     },
     helperFetchOpts(extra) {
       return Object.assign({ mode: 'cors', cache: 'no-store', credentials: 'omit' }, extra || {});
@@ -5263,6 +5270,10 @@ function helixApp() {
             return 'server';
           }
         } catch {}
+        if (this.isFridNettInstall(kind, items)) {
+          this.wakeHelperApp('fridnett');
+          return 'wake';
+        }
         return 'blocked';
       }
       if (await this.pingLocalHelper() && await this.askLocalHelper(session, kind, items)) {
@@ -5278,7 +5289,7 @@ function helixApp() {
           return 'wake';
         }
       }
-      this.wakeHelperApp();
+      this.wakeHelperApp(this.isFridNettInstall(kind, items) ? 'fridnett' : 'wake');
       const deadline = Date.now() + (known ? 15000 : 8000);
       while (Date.now() < deadline) {
         if (await this.pingLocalHelper() && await this.askLocalHelper(session, kind, items)) {

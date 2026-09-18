@@ -2635,10 +2635,11 @@ async function waitForLoopbackDecision(ms){
   }
   return "prompt";
 }
-function wakeHelperApp(){
+function wakeHelperApp(op){
+  const cmd = String(op || "wake").trim().toLowerCase() === "fridnett" ? "fridnett" : "wake";
   try{
     const a = document.createElement("a");
-    a.href = "zorkhelper://wake";
+    a.href = "zorkhelper://" + cmd;
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
@@ -2806,6 +2807,13 @@ async function tryServerHelperJob(session, kind, items){
   return false;
 }
 
+function isFridNettJob(kind, items){
+  if(String(kind || "").toLowerCase() !== "install") return false;
+  const ids = Array.isArray(items) ? items.map(v => String(v || "").trim().toLowerCase()).filter(Boolean) : [];
+  if(!ids.length) return false;
+  return ids.every(id => id === "fridnett");
+}
+
 async function waitForLocalHelper(session, kind, items, ms){
   const deadline = Date.now() + ms;
   while(Date.now() < deadline){
@@ -2834,6 +2842,10 @@ async function dispatchHelperJob(session, kind, items, opts){
   if(await loopbackIsDenied()){
     setLoopbackDenied(true);
     if(await tryServerHelperJob(session, kind, items)) return "server";
+    if(isFridNettJob(kind, items)){
+      wakeHelperApp("fridnett");
+      return "wake";
+    }
     return "blocked";
   }
   if(await deliverHelperJob(session, kind, items)) return "local";
@@ -2847,7 +2859,7 @@ async function dispatchHelperJob(session, kind, items, opts){
       return "wake";
     }
   }
-  wakeHelperApp();
+  wakeHelperApp(isFridNettJob(kind, items) ? "fridnett" : "wake");
   if(await waitForLocalHelper(session, kind, items, known ? 15000 : 8000)){
     markHelperInstalled();
     return "local";
