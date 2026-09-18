@@ -608,6 +608,7 @@
           <button type="button" class="chip example" data-t="ex2">PC-en er treg</button>
           <button type="button" class="chip example" data-t="ex3">Jeg får ikke logget inn</button>
           <button type="button" class="chip example" data-t="ex4">Skriveren virker ikke</button>
+          <button type="button" class="chip pc-check" id="pcHelperUpdateChip" hidden data-t="pchelperupdate">Sjekk Zork Helper</button>
           <button type="button" class="chip pc-check" id="pcFridNettChip" hidden data-t="pcfridnett">FRID-nett</button>
           <button type="button" class="chip pc-check" id="pcPrinterChip" hidden data-t="pcprinter">Skaff printer</button>
           <button type="button" class="chip pc-check" id="pcCheckChip" hidden data-t="pccheck">Sjekk denne PC-en</button>
@@ -651,6 +652,7 @@
         </div>
         <div class="hint-row">
           <div class="hint" id="hint" data-t="hint">Enter sender · Shift+Enter gir ny linje</div>
+          <button type="button" class="pc-check-btn" id="pcHelperUpdateBtn" hidden data-t="pchelperupdate">Sjekk Zork Helper</button>
           <button type="button" class="pc-fridnett-btn" id="pcFridNettBtn" hidden data-t="pcfridnett">FRID-nett</button>
           <button type="button" class="pc-printer-btn" id="pcPrinterBtn" hidden data-t="pcprinter">Skaff printer</button>
           <button type="button" class="pc-check-btn" id="pcCheckBtn" hidden data-t="pccheck">Sjekk denne PC-en</button>
@@ -722,6 +724,11 @@ const I18N = {
     pcstay:"Bli på denne siden til sjekken er ferdig.",
     pctrayscan:"Zork Helper sjekker denne PC-en.",
     pchelperon:"Zork Helper er klar ved klokken",
+    pchelperupdate:"Sjekk/oppdater Zork Helper",
+    pchelperupdating:"Sjekker om Zork Helper er oppdatert…",
+    pchelperuptodate:"Zork Helper er oppdatert og klar.",
+    pchelperneedsupdate:"Zork Helper er utdatert eller mangler filer. Oppdaterer nå…",
+    pchelperstartupdate:"Starter oppdatering av Zork Helper…",
     pcwake:"Klikk Åpne hvis Windows spør.",
     pcinstall:"Installer / oppdater med Zork Helper",
     pcsketchup:"SketchUp",
@@ -860,6 +867,11 @@ const I18N = {
     pcstay:"Stay on this page until the check finishes.",
     pctrayscan:"Zork Helper is checking this PC.",
     pchelperon:"Zork Helper is ready by the clock",
+    pchelperupdate:"Check/update Zork Helper",
+    pchelperupdating:"Checking whether Zork Helper is up to date…",
+    pchelperuptodate:"Zork Helper is up to date and ready.",
+    pchelperneedsupdate:"Zork Helper is outdated or missing files. Updating now…",
+    pchelperstartupdate:"Starting a Zork Helper update…",
     pcwake:"Click Open if Windows asks.",
     pcinstall:"Install / update with Zork Helper",
     pcsketchup:"SketchUp",
@@ -1236,6 +1248,8 @@ function signOut(){
   helperPrinterJob = false;
   helperPrinterTold = false;
   helperLocalRoute = false;
+  helperApiRev = 0;
+  helperReadyLocal = false;
   helperSession = null;
   helperCard = null;
   if(loopbackPermStatus){
@@ -2025,10 +2039,15 @@ function applyPcCheckVisibility(){
   const win = isWindowsPc();
   const show = isHelperPc();
   const showFrid = win && helperWifiProbed && !onFridNetwork();
+  const showUpdate = win;
   const showPrinter = win;
   ["pcCheckChip", "pcCheckBtn"].forEach(id => {
     const el = $(id);
     if(el) el.hidden = !show;
+  });
+  ["pcHelperUpdateChip", "pcHelperUpdateBtn"].forEach(id => {
+    const el = $(id);
+    if(el) el.hidden = !showUpdate;
   });
   ["pcFridNettChip", "pcFridNettBtn"].forEach(id => {
     const el = $(id);
@@ -2042,7 +2061,7 @@ function applyPcCheckVisibility(){
 
 function refreshHelperPresence(online){
   const title = online ? t("pchelperon") : "";
-  ["pcCheckChip", "pcCheckBtn", "pcFridNettChip", "pcFridNettBtn", "pcPrinterChip", "pcPrinterBtn"].forEach(id => {
+  ["pcCheckChip", "pcCheckBtn", "pcHelperUpdateChip", "pcHelperUpdateBtn", "pcFridNettChip", "pcFridNettBtn", "pcPrinterChip", "pcPrinterBtn"].forEach(id => {
     const el = $(id);
     if(el) el.title = title;
   });
@@ -2098,7 +2117,7 @@ function expectInstallStart(){
 
 function setPcCheckBusy(on){
   helperBusy = on;
-  ["pcCheckChip", "pcCheckBtn", "pcFridNettChip", "pcFridNettBtn", "pcPrinterChip", "pcPrinterBtn"].forEach(id => {
+  ["pcCheckChip", "pcCheckBtn", "pcHelperUpdateChip", "pcHelperUpdateBtn", "pcFridNettChip", "pcFridNettBtn", "pcPrinterChip", "pcPrinterBtn"].forEach(id => {
     const el = $(id);
     if(el) el.disabled = on;
   });
@@ -2462,6 +2481,12 @@ function paintHelperCard(session){
         btn.onclick = () => requestHelperInstall();
         actions.appendChild(btn);
       }
+      const updateBtn = document.createElement("button");
+      updateBtn.type = "button";
+      updateBtn.className = "pc-sketchup";
+      updateBtn.textContent = t("pchelperupdate");
+      updateBtn.onclick = () => startHelperUpdateCheck();
+      actions.appendChild(updateBtn);
       const su = document.createElement("button");
       su.type = "button";
       su.className = "pc-sketchup";
@@ -2557,9 +2582,12 @@ async function downloadHelperLauncher(sessionId){
 }
 
 const HELPER_INSTALLED_KEY = "zorkHelperInstalled";
+const HELPER_MIN_API_REV = 3;
 let helperLoopbackHost = "127.0.0.1";
 let loopbackPermStatus = null;
 let loopbackDenied = false;
+let helperApiRev = 0;
+let helperReadyLocal = false;
 
 async function queryLoopbackPermission(){
   if(!navigator.permissions || !navigator.permissions.query) return null;
@@ -2616,6 +2644,25 @@ function helperAlreadyOnThisPc(){
   if(helperSeenThisTab) return true;
   try { return localStorage.getItem(HELPER_INSTALLED_KEY) === "1"; } catch(_){ return false; }
 }
+
+function rememberHelperHealth(data){
+  if(!data || typeof data !== "object") return;
+  const explicit = (
+    Object.prototype.hasOwnProperty.call(data, "helper_api_rev") ||
+    Object.prototype.hasOwnProperty.call(data, "helper_ready") ||
+    Object.prototype.hasOwnProperty.call(data, "install_seed_ok") ||
+    Object.prototype.hasOwnProperty.call(data, "install_cache_ok")
+  );
+  if(!explicit) return;
+  const rev = Number(data.helper_api_rev || 0);
+  helperApiRev = Number.isFinite(rev) ? Math.max(0, Math.floor(rev)) : 0;
+  const hasInstall = !!(data.install_seed_ok || data.install_cache_ok);
+  helperReadyLocal = !!data.helper_ready && hasInstall;
+}
+
+function helperLooksUpdated(){
+  return helperApiRev >= HELPER_MIN_API_REV && helperReadyLocal;
+}
 function sleepMs(ms){
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -2667,6 +2714,7 @@ async function pingOneHelper(session, host, ms){
       helperSeenThisTab = true;
       try{
         const data = await r.json();
+        rememberHelperHealth(data);
         if(data && Object.prototype.hasOwnProperty.call(data, "ssid")){
           const ssid = String(data.ssid || "").trim();
           if(ssid){
@@ -2695,6 +2743,8 @@ async function pingLocalHelper(session, ms){
   if(!found.some(Boolean)){
     helperOnlineLocal = false;
     if(!helperOnSchoolFrid) helperWifiKnown = false;
+    helperApiRev = 0;
+    helperReadyLocal = false;
   }
   if(!found.some(Boolean) && !loopbackDenied){
     const status = await queryLoopbackPermission();
@@ -2881,6 +2931,23 @@ async function waitForHelperPing(session, ms){
     await sleepMs(250);
   }
   return false;
+}
+
+async function startHelperUpdateCheck(){
+  if(helperBusy || helperInstallBusy) return;
+  if(!isWindowsPc()){
+    flash(t("pcnowin"));
+    return;
+  }
+  flash(t("pchelperupdating"));
+  const seen = await pingLocalHelper(helperSession, 1500);
+  if(seen && helperLooksUpdated()){
+    markHelperInstalled();
+    flash(t("pchelperuptodate"));
+    return;
+  }
+  flash(seen ? t("pchelperneedsupdate") : t("pchelperstartupdate"));
+  await startPcCheck();
 }
 
 async function startFridNett(){
@@ -3259,6 +3326,8 @@ document.querySelectorAll(".chip.example").forEach(c => c.onclick = () => {
 });
 $("pcCheckChip").onclick = startPcCheck;
 $("pcCheckBtn").onclick = startPcCheck;
+$("pcHelperUpdateChip").onclick = startHelperUpdateCheck;
+$("pcHelperUpdateBtn").onclick = startHelperUpdateCheck;
 $("pcFridNettChip").onclick = startFridNett;
 $("pcFridNettBtn").onclick = startFridNett;
 $("pcPrinterChip").onclick = startPrinter;

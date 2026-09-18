@@ -2031,6 +2031,11 @@ class TestPcHelper:
         assert "Test-CaptiveOffline" in tray
         assert "install-script.ps1" in tray
         assert "Save-HttpToFile" in tray
+        assert "Get-HelperHealth" in tray
+        assert "helper_api_rev" in tray
+        assert "helper_ready" in tray
+        assert "install_seed_ok" in tray
+        assert "install_cache_ok" in tray
         assert "progress  = Get-LocalProgress" in tray
         assert "install-busy.flag" in tray
         assert "Drain-OpenUrl" in tray
@@ -2500,6 +2505,10 @@ class TestConsoleHelper:
         assert 'me.console_role === "admin"' in page
         assert "pcopenmac" in page
         assert "?os=mac" in page
+        assert 'id="pcHelperUpdateChip"' in page
+        assert 'id="pcHelperUpdateBtn"' in page
+        assert "startHelperUpdateCheck" in page
+        assert "pchelperupdate" in page
         assert 'id="pcFridNettBtn"' in page
         assert "startFridNett" in page
         assert "pcfridnett" in page
@@ -2576,6 +2585,9 @@ class TestConsoleHelper:
         assert "Hvis FRID ber om brukernavn/passord da, be dem gå til IT Helpdesk i 1. etasje." in page
         assert "waitForLoopbackDecision" in page
         assert "helperSeenThisTab" in page
+        assert "HELPER_MIN_API_REV" in page
+        assert "helperLooksUpdated" in page
+        assert "rememberHelperHealth" in page
         assert "probeHelperWifi" in page
         assert "FRID[-_ ]?iot" in page
         assert "const show = !isPupil" not in page

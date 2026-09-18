@@ -56,6 +56,7 @@ $script:AfterInstallScan = $false
 $script:WifiSsid = ''
 $script:WifiConnected = $false
 $script:WifiCheckedAt = 0
+$script:HelperApiRev = 3
 
 function Get-Cfg {
     if (-not (Test-Path -LiteralPath $script:CfgPath)) { return $null }
@@ -721,6 +722,41 @@ function Test-CaptiveOffline {
     }
 }
 
+function Test-HelperScriptFile {
+    param([string]$Path, [int]$MinBytes = 1)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    try {
+        if (-not (Test-Path -LiteralPath $Path)) { return $false }
+        $size = [int64](Get-Item -LiteralPath $Path -ErrorAction Stop).Length
+        return ($size -ge [int64]$MinBytes)
+    } catch {
+        return $false
+    }
+}
+
+function Get-HelperHealth {
+    $tray = Join-Path $script:HomeDir 'zork-helper-tray.ps1'
+    $open = Join-Path $script:HomeDir 'zork-helper-open.ps1'
+    $seed = Join-Path $script:HomeDir 'zork-helper-install.ps1'
+    $cache = Join-Path $script:HomeDir 'install-script.ps1'
+    $trayOk = Test-HelperScriptFile -Path $tray -MinBytes 2000
+    $openOk = Test-HelperScriptFile -Path $open -MinBytes 400
+    $seedOk = Test-HelperScriptFile -Path $seed -MinBytes 2000
+    $cacheOk = Test-HelperScriptFile -Path $cache -MinBytes 2000
+    $installOk = $seedOk -or $cacheOk
+    $cfgOk = $false
+    try { $cfgOk = Test-Path -LiteralPath $script:CfgPath } catch { $cfgOk = $false }
+    return [ordered]@{
+        helper_api_rev   = [int]$script:HelperApiRev
+        helper_ready     = [bool]($trayOk -and $openOk -and $installOk)
+        tray_ok          = [bool]$trayOk
+        open_ok          = [bool]$openOk
+        install_seed_ok  = [bool]$seedOk
+        install_cache_ok = [bool]$cacheOk
+        config_ok        = [bool]$cfgOk
+    }
+}
+
 function Get-LocalProgress {
     $pf = Join-Path $script:HomeDir 'progress.txt'
     try {
@@ -772,12 +808,20 @@ function Drain-OpenUrl {
 }
 
 function Get-PingBody {
+    $health = Get-HelperHealth
     $obj = [ordered]@{
         ok        = $true
         name      = 'Zork Helper'
         ssid      = [string]$script:WifiSsid
         connected = [bool]$script:WifiConnected
         progress  = Get-LocalProgress
+        helper_api_rev   = [int]$health.helper_api_rev
+        helper_ready     = [bool]$health.helper_ready
+        tray_ok          = [bool]$health.tray_ok
+        open_ok          = [bool]$health.open_ok
+        install_seed_ok  = [bool]$health.install_seed_ok
+        install_cache_ok = [bool]$health.install_cache_ok
+        config_ok        = [bool]$health.config_ok
     }
     return ($obj | ConvertTo-Json -Compress)
 }
