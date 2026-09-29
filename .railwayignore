@@ -18,3 +18,6 @@ node_modules
 docker-seed/
 dist/
 build/
+# 136 MB printer MSI is already on the Railway volume. Uploading it with
+# every `railway up` times out (~110s) and blocks smaller Helix fixes.
+apps-seed/printer/*.msi

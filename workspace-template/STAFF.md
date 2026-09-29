@@ -50,7 +50,7 @@ are on the right network. Do not send them through login. If they can see
 Clicking it while already on **FRID** says Done. That starts Zork Helper if
 it is not already by the clock. Zork Helper joins **FRID-iot** itself after
 checking wifi, and only then opens a small login window (the same page as
-Last ned). After they sign in and click Start QuickConnect, Helper clicks
+Last ned). After they sign in, Helper clicks Start QuickConnect, then
 Next and Ja. They do not click Installer on the card. They approve in
 Windows if asked. If a QuickConnect window is left on screen: Next, then Ja.
 Phones, Macs, iPhones and Android still use the old portal steps in the

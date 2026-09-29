@@ -3365,23 +3365,6 @@ async def helper_skoleprogrammer(sid: str, request: Request):
     )
 
 
-@app.get("/api/helper/{sid}/tool/fridnett")
-async def helper_fridnett(sid: str, request: Request):
-    from core import pc_helper
-    if not pc_helper.check_secret(sid, _helper_secret(request)):
-        raise HTTPException(404, "Not found")
-    found = pc_helper.fridnett_file()
-    if not found:
-        raise HTTPException(404, "Not found")
-    row, path = found
-    return FileResponse(
-        path,
-        media_type="application/octet-stream",
-        filename=row.get("filename") or path.name,
-        headers={"Cache-Control": "no-store"},
-    )
-
-
 @app.get("/api/helper/{sid}/tool/printer")
 async def helper_printer(sid: str, request: Request):
     from core import pc_helper

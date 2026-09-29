@@ -45,8 +45,8 @@ the clock. Helper then checks wifi: already on **FRID** is Done. On
 **FRID-iot** it forgets that network and joins it again with the bootstrap
 password. On any other network it joins **FRID-iot** if it is in range.
 The login window (same page as Last ned) opens only after they are on
-**FRID-iot**. After they sign in and click **Start QuickConnect**, Helper
-clicks Next and Ja. They should not click Installer on the card. Phones,
+**FRID-iot**. After they sign in, Helper clicks **Start QuickConnect**, then
+Next and Ja. They should not click Installer on the card. Phones,
 Macs, iPhones and Android have no Zork Helper: use the old steps below.
 
 On Windows they also need a working school email and Microsoft Authenticator

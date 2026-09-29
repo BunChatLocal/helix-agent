@@ -33,7 +33,6 @@ $Allowed = @{
 
 $script:SkipHelixHttp = $false
 $script:EdgeDebugPort = 0
-$script:DefenderChecked = $false
 $script:ProgressFile = Join-Path $env:LOCALAPPDATA 'ZorkHelper\progress.txt'
 $script:CaptiveFlag = Join-Path $env:LOCALAPPDATA 'ZorkHelper\captive.flag'
 
@@ -395,18 +394,11 @@ function Add-WlanInterfaceArg {
 }
 
 function Get-WifiSsid {
-    try {
-        $profiles = @(Get-NetConnectionProfile -ErrorAction Stop)
-        foreach ($p in $profiles) {
-            $alias = ''
-            try { $alias = [string]$p.InterfaceAlias } catch { $alias = '' }
-            if ($alias -notmatch 'Wi-?Fi|Wireless|WLAN') { continue }
-            $n = [string]$p.Name
-            if (-not [string]::IsNullOrWhiteSpace($n) -and $n -ne '*') {
-                return @{ Ssid = $n.Trim(); Connected = $true }
-            }
-        }
-    } catch { }
+    # The real 802.11 SSID comes from netsh. The network *name* from
+    # Get-NetConnectionProfile is unreliable for this: on a domain-joined FRID
+    # network it reads back as "ad.viken.no", not "FRID", so the FRID/FRID-iot
+    # checks would never match. Read netsh first; fall back to the profile name
+    # only when netsh gives us nothing (adapter naming, timeout).
     $ssid = ''
     $state = ''
     $r = Invoke-Netsh -NetshArgs @('wlan', 'show', 'interfaces') -TimeoutMs 6000
@@ -419,8 +411,23 @@ function Get-WifiSsid {
             $state = $Matches[2].Trim().ToLower()
         }
     }
-    $up = ($state -eq 'connected' -or $state -eq 'tilkoblet')
-    return @{ Ssid = $ssid; Connected = $up }
+    if (-not [string]::IsNullOrWhiteSpace($ssid)) {
+        $up = ($state -eq 'connected' -or $state -eq 'tilkoblet')
+        return @{ Ssid = $ssid; Connected = $up }
+    }
+    try {
+        $profiles = @(Get-NetConnectionProfile -ErrorAction Stop)
+        foreach ($p in $profiles) {
+            $alias = ''
+            try { $alias = [string]$p.InterfaceAlias } catch { $alias = '' }
+            if ($alias -notmatch 'Wi-?Fi|Wireless|WLAN') { continue }
+            $n = [string]$p.Name
+            if (-not [string]::IsNullOrWhiteSpace($n) -and $n -ne '*') {
+                return @{ Ssid = $n.Trim(); Connected = $true }
+            }
+        }
+    } catch { }
+    return @{ Ssid = ''; Connected = $false }
 }
 
 function Get-SsidMatch {
@@ -619,6 +626,7 @@ public static class ZorkFridUi {
     public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     public const uint BM_CLICK = 0x00F5;
     static string Title(IntPtr hWnd) {
         StringBuilder sb = new StringBuilder(512);
@@ -629,21 +637,52 @@ public static class ZorkFridUi {
         if (string.IsNullOrEmpty(text)) return "";
         return text.Replace("&", "").Trim().TrimEnd('>').Trim();
     }
-    static bool TitleLooksLikeOnboard(string title) {
+    static List<IntPtr> Nodes(IntPtr root) {
+        List<IntPtr> nodes = new List<IntPtr>();
+        nodes.Add(root);
+        EnumChildWindows(root, (h, l) => { nodes.Add(h); return true; }, IntPtr.Zero);
+        return nodes;
+    }
+    static string BodyText(IntPtr root) {
+        StringBuilder all = new StringBuilder();
+        foreach (IntPtr h in Nodes(root)) { all.Append(Title(h)); all.Append(' '); }
+        return all.ToString().ToLowerInvariant();
+    }
+    static bool IsWizard(string title) {
         if (string.IsNullOrEmpty(title)) return false;
         string t = title.ToLowerInvariant();
-        if (t.Contains("user account control") || t.Contains("brukerkontokontroll")) return false;
-        if (t.Contains("microsoft edge") || t.Contains("google chrome") || t.Contains("firefox")) return false;
-        if (t.Contains("sign in") || t.Contains("logg p") || t.Contains("microsoftonline")) return false;
         return t.Contains("quickconnect") || t.Contains("aruba") || t.Contains("clearpass")
-            || t.Contains("security warning") || t.Contains("sikkerhetsadvarsel")
-            || t.Contains("root ca");
+            || t.Contains("frid onboard");
+    }
+    static bool IsCertWarning(string title) {
+        if (string.IsNullOrEmpty(title)) return false;
+        string t = title.ToLowerInvariant();
+        return t.Contains("security warning") || t.Contains("sikkerhetsadvarsel")
+            || t.Contains("root certificate") || t.Contains("root ca") || t.Contains("certificate");
+    }
+    // Only ever confirm a certificate prompt that is the expected FRID/Viken CA.
+    // This keeps the helper from ever clicking Ja/Yes on some unrelated dialog
+    // (for example the Windows location-access prompt, which the pupil decides).
+    static bool ConfirmedFridCert(IntPtr root) {
+        string body = BodyText(root);
+        return body.Contains("viken root ca") || body.Contains("viken issuing")
+            || body.Contains("frid");
+    }
+    // Hide (nCmdShow=0) or show (nCmdShow=5) the top-level windows owned by the
+    // given process ids. Used to tuck the helper's Edge window away after login.
+    public static int ShowWindowsForPids(string csvPids, int nCmdShow) {
+        HashSet<uint> pids = new HashSet<uint>();
+        foreach (string s in csvPids.Split(',')) { uint v; if (uint.TryParse(s.Trim(), out v)) pids.Add(v); }
+        int n = 0;
+        List<IntPtr> roots = new List<IntPtr>();
+        EnumWindows((h, l) => { roots.Add(h); return true; }, IntPtr.Zero);
+        foreach (IntPtr root in roots) {
+            uint pid; GetWindowThreadProcessId(root, out pid);
+            if (pids.Contains(pid) && Title(root).Length > 0) { ShowWindow(root, nCmdShow); n++; }
+        }
+        return n;
     }
     public static int ClickButtons(int processId, bool allowClose) {
-        HashSet<string> go = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string[] names = { "Next", "Neste", "Ja", "Yes", "Finish", "Connect" };
-        foreach (string n in names) go.Add(n);
-        if (allowClose) { go.Add("Close"); go.Add("Lukk"); }
         int flags = 0;
         List<IntPtr> roots = new List<IntPtr>();
         EnumWindows((h, l) => {
@@ -653,11 +692,23 @@ public static class ZorkFridUi {
         foreach (IntPtr root in roots) {
             uint pid;
             GetWindowThreadProcessId(root, out pid);
-            if (pid != (uint)processId && !TitleLooksLikeOnboard(Title(root))) continue;
-            List<IntPtr> nodes = new List<IntPtr>();
-            nodes.Add(root);
-            EnumChildWindows(root, (h, l) => { nodes.Add(h); return true; }, IntPtr.Zero);
-            foreach (IntPtr h in nodes) {
+            string title = Title(root);
+            bool ownByQc = (pid == (uint)processId);
+            bool wizard = IsWizard(title);
+            bool cert = IsCertWarning(title);
+            if (!ownByQc && !wizard && !cert) continue;
+
+            HashSet<string> go = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (wizard || ownByQc) {
+                go.Add("Next"); go.Add("Neste"); go.Add("Connect"); go.Add("Finish");
+                if (allowClose) { go.Add("Close"); go.Add("Lukk"); }
+            }
+            if (cert && ConfirmedFridCert(root)) {
+                go.Add("Ja"); go.Add("Yes");
+            }
+            if (go.Count == 0) continue;
+
+            foreach (IntPtr h in Nodes(root)) {
                 string text = Norm(Title(h));
                 if (text.Length == 0 || !go.Contains(text)) continue;
                 SendMessage(h, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
@@ -683,33 +734,30 @@ function Start-FridWizardClicks {
     }
     $allowClose = $false
     $deadline = (Get-Date).AddMinutes(8)
-    while (-not $Process.HasExited -and (Get-Date) -lt $deadline) {
+    $goneStreak = 0
+    # ArubaQuickConnect.exe is a self-extractor: it unpacks and launches the real
+    # QuickConnect.exe wizard, then can exit on its own. So don't stop when the
+    # process we started exits — keep clicking Next/Ja/Connect/Finish until every
+    # QuickConnect process is gone (a short streak guards against a momentary gap).
+    while ((Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 700
-        try { $Process.Refresh() } catch { break }
         try {
             $flags = [ZorkFridUi]::ClickButtons($qcPid, $allowClose)
             if (($flags -band 2) -ne 0) { $allowClose = $true }
         } catch { }
+        $alive = @(Get-FridQuickConnectProcesses)
+        if ($alive.Count -eq 0) {
+            $goneStreak++
+            if ($goneStreak -ge 4) { break }
+        } else {
+            $goneStreak = 0
+        }
     }
 }
 
 function Get-FridQuickConnectProcesses {
     Get-Process -ErrorAction SilentlyContinue |
         Where-Object { [string]$_.ProcessName -match '(?i)ArubaQuickConnect|QuickConnect' }
-}
-
-function Test-TextInList {
-    param($List, [string]$Needle)
-    $want = ([string]$Needle).Trim()
-    if ([string]::IsNullOrWhiteSpace($want)) { return $false }
-    foreach ($item in @($List)) {
-        $txt = ([string]$item).Trim()
-        if ([string]::IsNullOrWhiteSpace($txt)) { continue }
-        if ([string]::Equals($txt, $want, [StringComparison]::OrdinalIgnoreCase)) {
-            return $true
-        }
-    }
-    return $false
 }
 
 function Get-EdgeExe {
@@ -747,68 +795,43 @@ function Stop-ZorkHelperEdge {
     } catch { }
 }
 
-function Ensure-ZorkDefenderExclusions {
-    if ($script:DefenderChecked) { return }
-    $script:DefenderChecked = $true
-    $add = Get-Command Add-MpPreference -ErrorAction SilentlyContinue
-    $get = Get-Command Get-MpPreference -ErrorAction SilentlyContinue
-    if (-not $add -or -not $get) { return }
-
-    $cache = Get-FridNettCacheExe
-    $paths = New-Object System.Collections.ArrayList
-    [void]$paths.Add((Join-Path $env:LOCALAPPDATA 'ZorkHelper'))
-    [void]$paths.Add((Get-EdgeProfileDir))
-    if (-not [string]::IsNullOrWhiteSpace($cache)) { [void]$paths.Add($cache) }
-
-    $procs = New-Object System.Collections.ArrayList
-    $edge = Get-EdgeExe
-    if (-not [string]::IsNullOrWhiteSpace($edge)) { [void]$procs.Add($edge) }
-    if (-not [string]::IsNullOrWhiteSpace($cache)) { [void]$procs.Add($cache) }
-
-    $pref = $null
-    try { $pref = Get-MpPreference -ErrorAction Stop } catch { return }
-    if ($null -eq $pref) { return }
-
-    $hadError = $false
-    $changed = 0
-    $firstErr = ''
-    $knownPaths = @($pref.ExclusionPath)
-    $knownProcs = @($pref.ExclusionProcess)
-
-    foreach ($raw in @($paths.ToArray())) {
-        $path = ([string]$raw).Trim()
-        if ([string]::IsNullOrWhiteSpace($path)) { continue }
-        if (Test-TextInList -List $knownPaths -Needle $path) { continue }
-        try {
-            Add-MpPreference -ExclusionPath $path -ErrorAction Stop
-            $changed++
-            $knownPaths += $path
-        } catch {
-            $hadError = $true
-            if (-not $firstErr) { $firstErr = [string]$_.Exception.Message }
+function Get-ZorkHelperEdgePids {
+    $mark = 'ZorkHelperEdge'
+    $ids = New-Object System.Collections.Generic.List[string]
+    try {
+        Get-CimInstance Win32_Process -Filter "Name = 'msedge.exe'" -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($_.CommandLine -and $_.CommandLine.IndexOf($mark, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                [void]$ids.Add([string]$_.ProcessId)
+            }
         }
-    }
+    } catch { }
+    return @($ids.ToArray())
+}
 
-    foreach ($raw in @($procs.ToArray())) {
-        $proc = ([string]$raw).Trim()
-        if ([string]::IsNullOrWhiteSpace($proc)) { continue }
-        if (Test-TextInList -List $knownProcs -Needle $proc) { continue }
-        try {
-            Add-MpPreference -ExclusionProcess $proc -ErrorAction Stop
-            $changed++
-            $knownProcs += $proc
-        } catch {
-            $hadError = $true
-            if (-not $firstErr) { $firstErr = [string]$_.Exception.Message }
-        }
-    }
+function Set-ZorkHelperEdgeVisible {
+    param([bool]$Visible)
+    try { Ensure-FridUi } catch { return }
+    $pids = @(Get-ZorkHelperEdgePids)
+    if ($pids.Count -eq 0) { return }
+    $show = if ($Visible) { 5 } else { 0 }   # SW_SHOW / SW_HIDE
+    try { [void][ZorkFridUi]::ShowWindowsForPids([string]::Join(',', $pids), $show) } catch { }
+}
 
-    if ($changed -gt 0) {
-        Note 'Windows-sikkerhet: la til unntak for Zork Helper.'
-    } elseif ($hadError) {
-        $why = Clip-NetshNote $firstErr 180
-        if ([string]::IsNullOrWhiteSpace($why)) { $why = 'ukjent feil' }
-        Note ('Windows-sikkerhet lot ikke helper legge til unntak (' + $why + '). Fortsetter uten unntak.')
+# Only ever run an Aruba QuickConnect the pupil just downloaded from the portal,
+# and only when it carries a valid Hewlett Packard Enterprise signature. There is
+# no bundled copy any more: each portal download is personal to the signed-in
+# account, so the exe must come from this pupil's own login.
+function Test-IsArubaQuickConnect {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) { return $false }
+    try {
+        $sig = Get-AuthenticodeSignature -LiteralPath $Path -ErrorAction Stop
+        if ([string]$sig.Status -ne 'Valid') { return $false }
+        $subject = ''
+        try { $subject = [string]$sig.SignerCertificate.Subject } catch { $subject = '' }
+        return ($subject -match '(?i)Hewlett\s*Packard\s*Enterprise')
+    } catch {
+        return $false
     }
 }
 
@@ -1110,16 +1133,16 @@ function Wait-FridQuickConnectProcess {
     $ignore = @()
     if ($null -ne $IgnoreIds) { $ignore = @($IgnoreIds) }
     try { Ensure-EdgeCdp } catch { }
+    try { Ensure-FridUi } catch { }
     $port = Get-EdgeDebugPort
     $clickedQc = $false
     $startedDl = $false
+    $hidEdge = $false
     $clickAt = Get-Date
     $watchAt = Get-Date
-    $t = 0
     $notedClick = $false
     $deadline = (Get-Date).AddSeconds($Seconds)
     while ((Get-Date) -lt $deadline) {
-        $t++
         Start-Sleep -Seconds 1
         $p = Get-FridQuickConnectProcesses |
             Where-Object { $ignore -notcontains $_.Id } |
@@ -1127,78 +1150,62 @@ function Wait-FridQuickConnectProcess {
         if ($p) { return $p }
         $ready = $false
         try { $ready = [ZorkEdgeCdp]::HasReadyPage($port) } catch { $ready = $false }
-        if (-not $clickedQc) {
-            $clickedNow = $false
-            if ($ready) {
-                if (-not $notedClick) {
-                    Note 'Innlogging ferdig. Klikker Start QuickConnect...'
-                    $notedClick = $true
-                }
-                $r = ''
-                try { $r = [string][ZorkEdgeCdp]::ClickStartQuickConnect($port) } catch { $r = '' }
-                if ($r -match 'clicked') { $clickedNow = $true }
+
+        # Once the pupil has signed in and the portal shows the QuickConnect
+        # page, tuck the helper's Edge window out of sight and take over.
+        if ($ready -and -not $hidEdge) {
+            Set-ZorkHelperEdgeVisible $false
+            $hidEdge = $true
+        }
+
+        if (-not $clickedQc -and $ready) {
+            if (-not $notedClick) {
+                Note 'Innlogging ferdig. Zork Helper laster ned og starter QuickConnect...'
+                $notedClick = $true
             }
-            if (-not $clickedNow -and (($t % 2) -eq 0 -or $ready)) {
-                if (Invoke-UiaNamedClick @('Start QuickConnect')) {
-                    if (-not $notedClick) {
-                        Note 'Innlogging ferdig. Klikker Start QuickConnect...'
-                        $notedClick = $true
-                    }
-                    $clickedNow = $true
-                }
+            $clickedNow = $false
+            $r = ''
+            try { $r = [string][ZorkEdgeCdp]::ClickStartQuickConnect($port) } catch { $r = '' }
+            if ($r -match 'clicked') { $clickedNow = $true }
+            if (-not $clickedNow) {
+                if (Invoke-UiaNamedClick @('Start QuickConnect')) { $clickedNow = $true }
             }
             if ($clickedNow) {
                 $clickedQc = $true
                 $clickAt = Get-Date
             }
         }
-        if (-not $startedDl -and ((Get-Date) - $watchAt).TotalSeconds -ge 5) {
+
+        # If Edge questions a low-reputation download, keep the file.
+        if ($clickedQc -and -not $startedDl) {
+            [void](Invoke-UiaNamedClick @('Behold', 'Behold likevel', 'Behold fil', 'Keep', 'Keep anyway'))
+        }
+
+        # Launch the exe the pupil just downloaded, but only once it has fully
+        # landed and carries a valid HPE signature. Launching it here (from the
+        # already-elevated job) also means no second UAC prompt.
+        if (-not $startedDl) {
             $dl = Find-NewQuickConnectExe -After $watchAt
-            if ($dl) {
+            if ($dl -and (Test-IsArubaQuickConnect $dl)) {
                 try {
                     Start-Process -FilePath $dl | Out-Null
                     $startedDl = $true
-                    if (-not $clickedQc) {
-                        $clickedQc = $true
-                        $clickAt = Get-Date
-                    }
+                    if (-not $clickedQc) { $clickedQc = $true; $clickAt = Get-Date }
                     Note 'Starter QuickConnect...'
                 } catch { }
             }
         }
-        if ($clickedQc) {
-            [void](Invoke-UiaNamedClick @('Apne fil', 'Åpne fil', 'Open file'))
-            if (-not $startedDl -and ((Get-Date) - $clickAt).TotalSeconds -ge 3) {
-                $dl = Find-NewQuickConnectExe -After $clickAt
-                if ($dl) {
-                    try {
-                        Start-Process -FilePath $dl | Out-Null
-                        $startedDl = $true
-                        Note 'Starter QuickConnect...'
-                    } catch { }
-                }
-            }
+
+        # If the download is stuck behind a prompt we cannot reach while Edge is
+        # hidden, show it again so the pupil can finish it. The helper keeps
+        # watching and takes over as soon as QuickConnect appears.
+        if ($clickedQc -and -not $startedDl -and $hidEdge -and ((Get-Date) - $clickAt).TotalSeconds -ge 45) {
+            Set-ZorkHelperEdgeVisible $true
+            $hidEdge = $false
+            Note 'Fullfor nedlastingen i nettleseren (klikk Behold hvis du blir spurt). Zork Helper fortsetter automatisk.'
         }
     }
     return $null
-}
-
-function Get-FridNettCacheExe {
-    return (Join-Path $env:LOCALAPPDATA 'ZorkHelper\ArubaQuickConnect.exe')
-}
-
-function Save-FridNettCache {
-    param([string]$From)
-    $dest = Get-FridNettCacheExe
-    try {
-        $dir = Split-Path -Parent $dest
-        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
-            New-Item -ItemType Directory -Force -Path $dir | Out-Null
-        }
-        Copy-Item -LiteralPath $From -Destination $dest -Force
-        try { Unblock-File -LiteralPath $dest -ErrorAction SilentlyContinue } catch { }
-    } catch { }
-    return $dest
 }
 
 function Install-FridNett {
@@ -1209,36 +1216,7 @@ function Install-FridNett {
         return
     }
 
-    try { Ensure-ZorkDefenderExclusions } catch { }
-
     $onIot = $probe.Connected -and (Get-SsidMatch $probe.Ssid 'FRID-iot')
-    $exe = Get-FridNettCacheExe
-    if (-not $onIot) {
-        Note 'Laster ned FRID-nett...'
-        $tmp = Join-Path $env:TEMP ('zork-fridnett-' + $SessionId + '.exe')
-        $wc = New-Object System.Net.WebClient
-        $wc.Headers.Add('X-Helper-Secret', $Secret)
-        try {
-            $wc.DownloadFile(($BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId + '/tool/fridnett'), $tmp)
-        } catch {
-            if (Test-Path -LiteralPath $exe) {
-                Note 'Bruker FRID-nett som ligger pa PCen.'
-            } else {
-                throw 'Klarte ikke a hente FRID-nett. Prov igjen pa skolen.'
-            }
-        }
-        if (Test-Path -LiteralPath $tmp) {
-            if ((Get-Item -LiteralPath $tmp).Length -lt 1000) {
-                throw 'FRID-nett-filen mangler pa serveren.'
-            }
-            $bytes = Get-Content -LiteralPath $tmp -Encoding Byte -TotalCount 2
-            if ($bytes.Length -lt 2 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) {
-                throw 'FRID-nett-filen ser ikke ut som et Windows-program.'
-            }
-            try { Unblock-File -LiteralPath $tmp -ErrorAction SilentlyContinue } catch { }
-            $exe = Save-FridNettCache $tmp
-        }
-    }
 
     Set-CaptiveOffline $true
     if ($onIot) {
@@ -1257,38 +1235,38 @@ function Install-FridNett {
     $ignore = @()
     try { $ignore = @(Get-FridQuickConnectProcesses | ForEach-Object { $_.Id }) } catch { $ignore = @() }
 
-    Note 'Pa FRID-iot. Aapner innlogging. Logg inn i vinduet. Zork Helper klikker Start QuickConnect etterpaa.'
+    Note 'Pa FRID-iot. Aapner innlogging. Logg inn i vinduet med skolekontoen. Zork Helper tar over etterpaa.'
     Start-Sleep -Seconds 2
     Open-FridOnboardLogin
 
+    # No bundled exe: the QuickConnect must be the one this pupil downloads after
+    # their own login. If it never turns up, stop and tell them what to do.
     $p = Wait-FridQuickConnectProcess -IgnoreIds $ignore -Seconds 480
     if ($null -eq $p) {
-        if ($exe -and (Test-Path -LiteralPath $exe)) {
-            Note 'Fant ikke QuickConnect. Starter programmet selv. Godkjenn i Windows hvis du blir spurt.'
-            $p = Start-Process -FilePath $exe -PassThru
-            if ($null -eq $p) { throw 'Klarte ikke a starte FRID-nett.' }
-        } else {
-            throw 'Fant ikke QuickConnect. Logg inn i vinduet. Zork Helper klikker Start QuickConnect etter innlogging.'
-        }
-    } else {
-        Note 'Fant QuickConnect. Fortsetter...'
+        Set-ZorkHelperEdgeVisible $true
+        throw 'Fant ikke QuickConnect. Logg inn i vinduet og klikk Start QuickConnect. Zork Helper fortsetter automatisk etterpaa.'
     }
+    Note 'QuickConnect kjorer. Zork Helper klikker Next og Ja. Hvis Windows spor om posisjon, svar selv Ja eller Nei.'
     Start-FridWizardClicks -Process $p
     try {
         if (-not $p.HasExited) { $p.WaitForExit(120000) | Out-Null }
     } catch { }
     $code = 0
     try { $code = [int]$p.ExitCode } catch { $code = 0 }
+    Stop-ZorkHelperEdge
     Connect-FridAndForgetIot
     $back = Get-WifiSsid
     if ($back.Connected -and (Get-SsidMatch $back.Ssid 'FRID')) {
         Set-CaptiveOffline $false
+        $script:FridAlreadyOk = $true
+        Note 'Done! Du er koblet til riktig nettverk (FRID).'
+        return
     }
     if ($code -and $code -ne 0) {
         Note ('FRID-nett ble lukket (kode ' + $code + ').')
         return
     }
-    Note 'FRID-nett er ferdig.'
+    Note 'FRID-nett er ferdig. Koble til FRID i wifi-listen hvis du ikke er der enna.'
 }
 
 function Test-MsiOk {

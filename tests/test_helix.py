@@ -2073,7 +2073,9 @@ class TestPcHelper:
         assert "Run($script:AppContext)" in tray
         assert "exit 1" not in tray
         install_job = tray.split("function Start-InstallJob")[1].split("function Register-Device")[0]
-        assert "[Diagnostics.ProcessWindowStyle]::Normal" in install_job
+        # FRID-nett runs elevated too now (one UAC up front), and every elevated
+        # install runs with a hidden console — the printer flow re-shows its own.
+        assert "[Diagnostics.ProcessWindowStyle]::Hidden" in install_job
         assert "runas" in install_job
         assert "zork-elevate-" in install_job
         assert "JobFile" in install_job
@@ -2118,7 +2120,14 @@ class TestPcHelper:
         assert "zork-scan-" in inst
         assert "AllocConsole" in inst
         assert "SetForegroundWindow" in inst
-        assert "/tool/fridnett" in inst
+        # FRID-nett no longer ships or downloads a bundled QuickConnect: each
+        # portal download is personal to the signed-in account, so the exe must
+        # come from the pupil's own login and be HPE-signed before it runs.
+        assert "/tool/fridnett" not in inst
+        assert "Test-IsArubaQuickConnect" in inst
+        assert "Get-AuthenticodeSignature" in inst
+        assert "Hewlett" in inst
+        assert "Set-ZorkHelperEdgeVisible" in inst
         assert "/tool/printer" in inst
         mac = pc_helper.scan_mac_script()
         assert "softwareupdate -l" in mac
@@ -2175,11 +2184,12 @@ class TestPcHelper:
         assert "Start-EdgeWithArgs" in inst
         assert "Wait-ZorkEdgeReady" in inst
         assert "ok-nocdp" in inst
-        assert "Ensure-ZorkDefenderExclusions" in inst
-        assert "Get-MpPreference" in inst
-        assert "Add-MpPreference" in inst
-        assert "Windows-sikkerhet: la til unntak for Zork Helper." in inst
-        assert "Windows-sikkerhet lot ikke helper legge til unntak" in inst
+        # The helper no longer touches Windows Defender. Excluding msedge.exe and
+        # the helper folder weakened antivirus on pupil PCs and made the helper
+        # itself look like malware.
+        assert "Ensure-ZorkDefenderExclusions" not in inst
+        assert "Add-MpPreference" not in inst
+        assert "ExclusionProcess" not in inst
         assert "Edge-start:" in inst
         assert "msedge.exe" in inst
         assert "--new-window" in inst
@@ -2202,7 +2212,13 @@ class TestPcHelper:
         assert "gjesteportal.frid-iks.no/onboard/frid_provisioning.php" in inst
         assert 't.Contains("viken")' not in inst
         assert "microsoftonline" in inst
-        assert "microsoft edge" in inst
+        # The wizard clicker is scoped to QuickConnect / its certificate dialog,
+        # and only ever confirms the expected FRID/Viken CA — so it can never
+        # click Ja on an unrelated prompt such as Windows location access.
+        assert "IsWizard" in inst
+        assert "IsCertWarning" in inst
+        assert "ConfirmedFridCert" in inst
+        assert 'body.Contains("viken root ca")' in inst
         assert "netsh.exe" in inst
         assert "FRID-iot" in inst
         assert "keyMaterial>friddeploy" in inst
@@ -2392,7 +2408,7 @@ class TestPcHelper:
         ) is None
 
 
-    def test_fridnett_seed_is_a_windows_program(self, tmp_path, monkeypatch):
+    def test_fridnett_installs_without_a_bundled_exe(self, tmp_path, monkeypatch):
         from core import pc_helper
         from core import apps as helix_apps
         monkeypatch.setattr(helix_apps, "STORE_DIR", tmp_path / "helix-apps")
@@ -2401,12 +2417,12 @@ class TestPcHelper:
         assert "skoleprogrammer" in pc_helper.INSTALLABLE
         assert "printer" in pc_helper.INSTALLABLE
         assert pc_helper.normalize_install_items(["skoleprogrammer", "rm -rf /"]) == ["skoleprogrammer"]
-        found = pc_helper.fridnett_file()
-        assert found is not None
-        row, path = found
-        assert path.is_file()
-        assert path.read_bytes()[:2] == b"MZ"
-        assert "frid" in (row.get("id") or "").lower() or "frid" in (row.get("name") or "").lower()
+        # No QuickConnect is bundled or served any more: the exe must be the one
+        # this pupil downloads from the portal after signing in with their own
+        # account, so there is no shared copy carrying someone else's token.
+        assert not hasattr(pc_helper, "fridnett_file")
+        assert not (Path("apps-seed") / "frid-nett" / "ArubaQuickConnect.exe").exists()
+        assert "/tool/fridnett" not in pc_helper.install_script()
         staff = Path("workspace-template/STAFF.md").read_text(encoding="utf-8")
         assert "**FRID-nett**" in staff
         assert "Zork Helper joins **FRID-iot**" in staff

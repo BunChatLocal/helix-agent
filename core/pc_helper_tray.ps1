@@ -372,37 +372,21 @@ function Start-InstallJob {
     $done = Join-Path $script:HomeDir ('install-' + $Sid + '.done')
     try { Remove-Item -LiteralPath $done -Force -ErrorAction SilentlyContinue } catch { }
     $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    $arg = '-NoProfile -ExecutionPolicy Bypass -File "' + $tmp + '" -BaseUrl "' + $script:BaseUrl + '" -SessionId "' + $Sid + '" -Secret "' + $Secret + '" -JobFile "' + $jobFile + '" -DoneFile "' + $done + '"'
-    if (Test-FridNettOnly $Items) {
-        Show-Tip 'Kobler til FRID-iot...'
-        try {
-            $script:BusyProc = Start-Process -FilePath $ps -PassThru -WindowStyle Hidden -ArgumentList @(
-                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $tmp,
-                '-BaseUrl', $script:BaseUrl, '-SessionId', $Sid, '-Secret', $Secret,
-                '-JobFile', $jobFile, '-DoneFile', $done
-            )
-        } catch {
-            $script:BusyProc = $null
-            Tell-Session -Sid $Sid -Secret $Secret -Text 'Klarte ikke a starte FRID-nett.' -Activity ''
-            Show-Tip 'Klarte ikke a starte FRID-nett.'
-            return
-        }
-        if ($null -eq $script:BusyProc) {
-            Tell-Session -Sid $Sid -Secret $Secret -Text 'Klarte ikke a starte FRID-nett.' -Activity ''
-            return
-        }
-        $script:BusyKind = 'install'
-        $script:BusySid = $Sid
-        $script:BusySecret = $Secret
-        $script:BusyTmp = $tmp
-        $script:BusyDone = $done
-        $script:BusyStartedTick = $script:Tick
-        $script:AfterInstallScan = $false
-        return
-    }
+    # Run the install elevated. FRID-nett needs admin so the (already-elevated)
+    # helper can click QuickConnect's certificate dialog; asking here — before any
+    # wifi switch — means the pupil's single "Ja" comes up while still online, and
+    # a "Nei" stops everything cleanly. The child console stays hidden; the printer
+    # flow re-shows its own console when it needs one.
+    $arg = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $tmp + '" -BaseUrl "' + $script:BaseUrl + '" -SessionId "' + $Sid + '" -Secret "' + $Secret + '" -JobFile "' + $jobFile + '" -DoneFile "' + $done + '"'
+    $fridOnly = Test-FridNettOnly $Items
     if (-not (Test-CaptiveOffline)) {
-        Tell-Session -Sid $Sid -Secret $Secret -Text 'Windows spor om tillatelse til a installere.' -Activity 'installing'
-        Show-Tip 'Windows spor om a tillate Zork Helper...'
+        if ($fridOnly) {
+            Tell-Session -Sid $Sid -Secret $Secret -Text 'Godkjenn i Windows for a starte FRID-nett.' -Activity 'installing'
+            Show-Tip 'Godkjenn i Windows for a starte FRID-nett...'
+        } else {
+            Tell-Session -Sid $Sid -Secret $Secret -Text 'Windows spor om tillatelse til a installere.' -Activity 'installing'
+            Show-Tip 'Windows spor om a tillate Zork Helper...'
+        }
     }
     $wrap = Join-Path $env:TEMP ('zork-elevate-' + $Sid + '.ps1')
     $exeLit = $ps.Replace("'", "''")
@@ -414,7 +398,7 @@ function Start-InstallJob {
         '$info.UseShellExecute = $true',
         '$info.Verb = ''runas''',
         '$info.CreateNoWindow = $false',
-        '$info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Normal',
+        '$info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden',
         'try {',
         '    $p = [Diagnostics.Process]::Start($info)',
         '    if ($null -eq $p) { exit 2 }',
@@ -672,6 +656,34 @@ function Find-HeaderEnd {
     return -1
 }
 
+function Get-WifiSsidFromNetsh {
+    # netsh reports the true 802.11 SSID. Get-NetConnectionProfile.Name does not:
+    # on a domain-joined FRID network it reads "ad.viken.no", which never matches
+    # "FRID"/"FRID-iot" and made the tray miss that the PC was already on FRID.
+    $netsh = Join-Path $env:SystemRoot 'System32\netsh.exe'
+    $tag = [guid]::NewGuid().ToString('N')
+    $outFile = Join-Path $env:TEMP ('zork-trayssid-' + $tag + '.out')
+    $ssid = ''
+    $state = ''
+    try {
+        $p = Start-Process -FilePath $netsh -ArgumentList @('wlan', 'show', 'interfaces') -PassThru -WindowStyle Hidden -RedirectStandardOutput $outFile
+        if ($p -and $p.WaitForExit(6000)) {
+            $text = ''
+            try { $text = [IO.File]::ReadAllText($outFile) } catch { $text = '' }
+            foreach ($line in @($text -split "`r?`n")) {
+                if ($line -match '^\s*BSSID\s') { continue }
+                if ($line -match '^\s*SSID(?:\s+\d+)?\s*:\s*(.+)\s*$') { $ssid = $Matches[1].Trim() }
+                if ($line -match '^\s*(State|Tilstand)\s*:\s*(.+)\s*$') { $state = $Matches[2].Trim().ToLower() }
+            }
+        } elseif ($p) {
+            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch { }
+        }
+    } catch { }
+    finally { Remove-Item -LiteralPath $outFile -Force -ErrorAction SilentlyContinue }
+    if ([string]::IsNullOrWhiteSpace($ssid)) { return $null }
+    return @{ Ssid = $ssid; Connected = ($state -eq 'connected' -or $state -eq 'tilkoblet') }
+}
+
 function Refresh-WifiStatus {
     $now = [Environment]::TickCount
     if ($script:WifiCheckedAt) {
@@ -679,6 +691,12 @@ function Refresh-WifiStatus {
         if ($delta -ge 0 -and $delta -lt 8000) { return }
     }
     $script:WifiCheckedAt = $now
+    $fromNetsh = Get-WifiSsidFromNetsh
+    if ($null -ne $fromNetsh -and -not [string]::IsNullOrWhiteSpace($fromNetsh.Ssid)) {
+        $script:WifiSsid = [string]$fromNetsh.Ssid
+        $script:WifiConnected = [bool]$fromNetsh.Connected
+        return
+    }
     $ssid = ''
     try {
         $profiles = @(Get-NetConnectionProfile -ErrorAction Stop)
@@ -702,10 +720,11 @@ function Refresh-WifiStatus {
 
 function Test-SchoolFridSsid {
     param([string]$Name)
+    # Success means the pupil is on FRID itself — never FRID-iot, FRID-gjest or
+    # any other FRID-prefixed network. Exact match only.
     $s = ([string]$Name).Trim()
     if ([string]::IsNullOrWhiteSpace($s)) { return $false }
-    if ($s -imatch '^FRID[-_ ]?iot$' -or $s -imatch '^FRID[-_ ]?gie?st$') { return $false }
-    return ($s -imatch '^FRID(\b|[-_ ]|$)')
+    return ($s -ieq 'FRID')
 }
 
 function Test-FridIotSsid {

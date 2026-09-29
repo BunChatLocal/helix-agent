@@ -2125,10 +2125,11 @@ function onFridNetwork(){
   return isSchoolFridSsid(helperWifiSsid);
 }
 function isSchoolFridSsid(ssid){
+  // Done means the pupil is on FRID itself — not FRID-iot, FRID-gjest or any
+  // other FRID-prefixed network. Exact match only.
   const s = String(ssid || "").trim();
   if(!s) return false;
-  if(/^FRID[-_ ]?iot$/i.test(s) || /^FRID[-_ ]?gie?st$/i.test(s)) return false;
-  return /^FRID(\b|[-_ ]|$)/i.test(s);
+  return /^FRID$/i.test(s);
 }
 
 function offerFridNettCard(){

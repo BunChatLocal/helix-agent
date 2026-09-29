@@ -625,17 +625,6 @@ def skoleprogrammer_file():
     return _app_file_by_names("skoleprogrammer")
 
 
-def fridnett_file():
-    """Return (catalog row, path) for FRID-nett / Aruba QuickConnect."""
-    found = _app_file_by_names("fridnett", "frid-nett", "quickconnect")
-    if found:
-        return found
-    seed = Path(__file__).resolve().parent.parent / "apps-seed" / "frid-nett" / "ArubaQuickConnect.exe"
-    if seed.is_file():
-        return {"id": "frid-nett", "name": "FRID-nett", "filename": seed.name}, seed
-    return None
-
-
 def printer_file():
     """Return (catalog row, path) for Viken Print / SafeQ on the Apps shelf."""
     found = _app_file_by_names("printer", "vikenprint", "viken-print")
