@@ -716,6 +716,14 @@ const I18N = {
     pcprinterdonenote:"Skoleskriveren er installert. Da kan du skrive ut.",
     pcprinterfail:"Klarte ikke å installere skriveren",
     pcprinterfailnote:"Prøv Skaff printer igjen. Godkjenn i Windows hvis du blir spurt.",
+    pcdidntwork:"Funker ikke?",
+    pcmanualstopping:"Stopper Zork Helper og viser manuelle steg…",
+    pcmanualstopped:"Zork Helper er stoppet. Bruk disse manuelle stegene:",
+    pcmanualcantstop:"Kunne ikke stoppe Zork Helper automatisk. Lukk eventuelle helper-vinduer, og bruk manuelle steg:",
+    pcmanualfridsteps:"**Manuell FRID-nett**\n1. Koble til **FRID-iot** (passord **friddeploy**).\n2. Åpne [onboard.frid-iks.no](https://onboard.frid-iks.no).\n3. Logg inn og trykk **Last ned**.\n4. Kjør **Aruba QuickConnect** og trykk **Next** og **Ja**.\n5. Koble til **FRID**.\n\nHvis FRID ber om brukernavn/passord etterpå: gå til IT Helpdesk i 1. etasje.",
+    pcmanualprintersteps:"**Manuell skriver**\n1. Last ned skriverfilen fra lenken under.\n2. Kjør filen og godkjenn i Windows.\n3. Hvis installasjonen stopper, prøv én gang til.\n\nHvis det fortsatt feiler: gå til IT Helpdesk i 1. etasje.",
+    pcmanualprinterlink:"Last ned skriverfilen",
+    pcmanualprinterlinkfail:"Klarte ikke hente skriverfilen automatisk. Gå til IT Helpdesk i 1. etasje for manuell installasjon.",
     pcwait:"Sjekker denne PC-en…",
     pcopen:"Klikk Åpne hvis Windows eller nettleseren spør.",
     pcuac:"Etter første gang ligger Zork Helper ved klokken nede til høyre.",
@@ -858,6 +866,14 @@ const I18N = {
     pcprinterdonenote:"The school printer is installed. You can print.",
     pcprinterfail:"Could not install the printer",
     pcprinterfailnote:"Press Get printer again. Approve in Windows if you are asked.",
+    pcdidntwork:"Didn't work?",
+    pcmanualstopping:"Stopping Zork Helper and showing manual steps…",
+    pcmanualstopped:"Zork Helper is stopped. Use these manual steps:",
+    pcmanualcantstop:"Could not stop Zork Helper automatically. Close any helper windows, then use these manual steps:",
+    pcmanualfridsteps:"**Manual FRID-nett**\n1. Connect to **FRID-iot** (password **friddeploy**).\n2. Open [onboard.frid-iks.no](https://onboard.frid-iks.no).\n3. Sign in and click **Last ned**.\n4. Run **Aruba QuickConnect**, then click **Next** and **Yes**.\n5. Connect to **FRID**.\n\nIf FRID still asks for username/password afterwards, go to the IT Helpdesk on the 1st floor.",
+    pcmanualprintersteps:"**Manual printer install**\n1. Download the printer file from the link below.\n2. Run the file and approve in Windows.\n3. If installation stops, try once more.\n\nIf it still fails, go to the IT Helpdesk on the 1st floor.",
+    pcmanualprinterlink:"Download printer file",
+    pcmanualprinterlinkfail:"Could not fetch the printer file automatically. Go to the IT Helpdesk on the 1st floor for manual install.",
     pcwait:"Checking this PC…",
     pcopen:"Click Open if Windows or the browser asks.",
     pcuac:"After the first time, Zork Helper stays by the clock on the taskbar.",
@@ -1034,6 +1050,14 @@ function render(text){
   s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, "");
   s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>")
        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  // Safe markdown links: only http(s) and blob URLs are turned into anchors.
+  s = s.replace(/\[([^\]\n]{1,160})\]\(([^)\s]{1,1200})\)/g, (_, label, href) => {
+    const url = String(href || "").trim();
+    if(!/^(https?:|blob:)/i.test(url)){
+      return `${label} (${url})`;
+    }
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  });
   return s.replace(new RegExp(SENT + "(\\d+)" + SENT, "g"), (_, i) =>
     `<pre><code>${blocks[i]}</code></pre><button class="copy" data-code="${i}">${t("copy")}</button>`
   );
@@ -1244,6 +1268,11 @@ function signOut(){
   helperPrinterJob = false;
   helperPrinterTold = false;
   helperLocalRoute = false;
+  helperLastRequestedAction = "";
+  if(helperManualPrinterUrl){
+    try { URL.revokeObjectURL(helperManualPrinterUrl); } catch(_){}
+    helperManualPrinterUrl = "";
+  }
   helperApiRev = 0;
   helperReadyLocal = false;
   helperSession = null;
@@ -2062,6 +2091,7 @@ let helperBusy = false;
 let helperTimer = null;
 let helperSession = null;
 let helperCard = null;
+const HELPER_AUTO_AGENT_MESSAGES = false;
 let helperInstallBusy = false;
 let helperAwaitingInstall = false;
 let helperToldAgent = false;
@@ -2078,6 +2108,8 @@ let helperPrinterJob = false;
 let helperPrinterDone = false;
 let helperPrinterTold = false;
 let helperLocalRoute = false;
+let helperLastRequestedAction = "";
+let helperManualPrinterUrl = "";
 
 function stopHelperPoll(){
   if(helperTimer){
@@ -2297,6 +2329,140 @@ function helperHeadline(session){
   return { text: t("pcwait"), spin: true };
 }
 
+function helperManualTarget(){
+  if(helperFridJob) return "fridnett";
+  if(helperPrinterJob) return "printer";
+  return helperLastRequestedAction || "";
+}
+
+async function stopLocalHelperInstall(session){
+  if(!session || !session.id || !session.handoff) return false;
+  try{
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 4000);
+    const r = await fetch(localHelperUrl(session) + "/v1/stop", helperFetchOpts({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        base_url: location.origin,
+        session_id: session.id,
+        session_secret: session.handoff,
+        kind: "install",
+      }),
+      signal: c.signal,
+    }));
+    clearTimeout(t);
+    if(!r.ok) return false;
+    let data = null;
+    try { data = await r.json(); } catch(_){}
+    return !!(data && data.ok);
+  }catch(_){
+    return false;
+  }
+}
+
+function parseDownloadName(contentDisposition, fallback){
+  const raw = String(contentDisposition || "");
+  const utf = raw.match(/filename\*=UTF-8''([^;]+)/i);
+  if(utf && utf[1]){
+    try { return decodeURIComponent(utf[1]).replace(/^["']|["']$/g, "") || fallback; }
+    catch(_){}
+  }
+  const plain = raw.match(/filename="?([^";]+)"?/i);
+  if(plain && plain[1]) return plain[1];
+  return fallback;
+}
+
+async function buildManualPrinterDownload(sessionHint){
+  if(helperManualPrinterUrl){
+    try { URL.revokeObjectURL(helperManualPrinterUrl); } catch(_){}
+    helperManualPrinterUrl = "";
+  }
+  let sid = "";
+  let secret = "";
+  if(sessionHint && sessionHint.id && sessionHint.handoff){
+    sid = String(sessionHint.id || "");
+    secret = String(sessionHint.handoff || "");
+  }
+  if(!sid || !secret){
+    try{
+      const session = await api("/api/helper/sessions", { method: "POST", body: JSON.stringify({ kind: "install", items: ["printer"] }) });
+      sid = String(session.id || "");
+      secret = String(session.handoff || "");
+    }catch(_){}
+  }
+  if(!sid || !secret) return null;
+  try{
+    const r = await fetch("/api/helper/" + encodeURIComponent(sid) + "/tool/printer", {
+      method: "GET",
+      headers: { Authorization: "Bearer " + token, "X-Helper-Secret": secret },
+      cache: "no-store",
+    });
+    if(!r.ok) return null;
+    const blob = await r.blob();
+    if(!blob || blob.size < 1024) return null;
+    helperManualPrinterUrl = URL.createObjectURL(blob);
+    const name = parseDownloadName(r.headers.get("content-disposition"), "VikenPrint.msi");
+    return { url: helperManualPrinterUrl, name };
+  }catch(_){
+    return null;
+  }
+}
+
+async function manualFallbackMessage(kind, sessionHint, stopped){
+  const intro = stopped ? t("pcmanualstopped") : t("pcmanualcantstop");
+  if(kind === "fridnett"){
+    return intro + "\n\n" + t("pcmanualfridsteps");
+  }
+  if(kind === "printer"){
+    const dl = await buildManualPrinterDownload(sessionHint);
+    if(dl && dl.url){
+      return intro + "\n\n" + t("pcmanualprintersteps") + "\n\n- [" + t("pcmanualprinterlink") + " (" + dl.name + ")](" + dl.url + ")";
+    }
+    return intro + "\n\n" + t("pcmanualprintersteps") + "\n\n" + t("pcmanualprinterlinkfail");
+  }
+  return intro;
+}
+
+async function triggerHelperManualFallback(kind){
+  const target = kind || helperManualTarget();
+  if(!target) return;
+  helperLastRequestedAction = target;
+  flash(t("pcmanualstopping"));
+  const sessionSnapshot = helperSession ? Object.assign({}, helperSession) : null;
+  const stopped = await stopLocalHelperInstall(sessionSnapshot);
+  stopHelperPoll();
+  helperInstallBusy = false;
+  helperAwaitingInstall = false;
+  helperFridOffer = false;
+  helperFridJob = false;
+  helperFridDone = false;
+  helperPrinterJob = false;
+  helperPrinterDone = false;
+  helperPrinterTold = false;
+  helperLocalRoute = false;
+  helperSession = null;
+  setPcCheckBusy(false);
+  paintHelperCard(null);
+  add("a", await manualFallbackMessage(target, sessionSnapshot, stopped));
+  scroll();
+}
+
+function appendDidntWorkAction(card, kind){
+  if(!card || isMacPc()) return;
+  const target = kind || helperManualTarget();
+  if(!target) return;
+  const actions = document.createElement("div");
+  actions.className = "pc-actions";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "pc-sketchup";
+  btn.textContent = t("pcdidntwork");
+  btn.onclick = () => triggerHelperManualFallback(target);
+  actions.appendChild(btn);
+  card.appendChild(actions);
+}
+
 function itemMark(row, session){
   if(row.reboot || (row.id === "winupdate" && helperLogsSayReboot(session))){
     return { cls: "pc-warn", text: t("pcrebootshort") };
@@ -2348,6 +2514,7 @@ function paintHelperCard(session){
     p.className = "pc-meta";
     p.textContent = t("pcfridnettdonenote");
     card.appendChild(p);
+    appendDidntWorkAction(card, "fridnett");
     scroll();
     return;
   }
@@ -2356,6 +2523,7 @@ function paintHelperCard(session){
     p.className = "pc-meta";
     p.textContent = t("pcprinterdonenote");
     card.appendChild(p);
+    appendDidntWorkAction(card, "printer");
     scroll();
     return;
   }
@@ -2368,6 +2536,7 @@ function paintHelperCard(session){
     hint.className = "pc-meta";
     hint.textContent = t("pcprinterfailnote");
     card.appendChild(hint);
+    appendDidntWorkAction(card, "printer");
     scroll();
     return;
   }
@@ -2514,6 +2683,9 @@ function paintHelperCard(session){
       confirm.appendChild(go);
       card.appendChild(confirm);
     }
+  }
+  if(helperFridJob || helperPrinterJob){
+    appendDidntWorkAction(card);
   }
   scroll();
 }
@@ -3011,6 +3183,7 @@ async function startFridNett(){
     return;
   }
   if(!(await ensureHelperReadyForRun())) return;
+  helperLastRequestedAction = "fridnett";
   helperFridOffer = false;
   helperFridJob = true;
   helperFridDone = false;
@@ -3085,6 +3258,7 @@ async function startFridNett(){
 }
 
 function tellAgentFridNettAlreadyOnFrid(){
+  if(!HELPER_AUTO_AGENT_MESSAGES) return;
   if(busy || ctxBlocked) return;
   sendTurn(
     "Brukeren har trykket FRID-nett. De er allerede på wifi-nettverket FRID. Si at det er i orden — Done — de er på riktig nettverk. Ikke send dem til innlogging, Last ned eller onboard.frid-iks.no.",
@@ -3094,6 +3268,7 @@ function tellAgentFridNettAlreadyOnFrid(){
 }
 
 function tellAgentFridNettStarted(){
+  if(!HELPER_AUTO_AGENT_MESSAGES) return;
   if(busy || ctxBlocked) return;
   sendTurn(
     "Brukeren har trykket FRID-nett. Si at de må være på skolen og godkjenne i Windows hvis de blir spurt. Zork Helper sjekker wifi: er de på FRID, er de ferdige. Ellers kobler den til FRID-iot med passordet og åpner innlogging først når de er på FRID-iot. De logger inn med skolekontoen. Helper klikker Start QuickConnect etter innlogging, deretter Next og Ja i QuickConnect. Etterpå prøver helper å koble til FRID. Hvis FRID ber om brukernavn/passord da, be dem gå til IT Helpdesk i 1. etasje. De skal ikke trykke Installer på kortet. Ikke send dem til onboard.frid-iks.no nå.",
@@ -3103,6 +3278,7 @@ function tellAgentFridNettStarted(){
 }
 
 function tellAgentPrinterStarted(){
+  if(!HELPER_AUTO_AGENT_MESSAGES) return;
   if(busy || ctxBlocked) return;
   sendTurn(
     "Brukeren har trykket Skaff printer. Si at de må godkjenne i Windows hvis de blir spurt. Zork Helper laster ned og installerer skoleskriveren. De skal ikke trykke noe mer på kortet. Ikke send dem til AppsAnywhere eller et MSI-filnavn.",
@@ -3112,6 +3288,7 @@ function tellAgentPrinterStarted(){
 }
 
 function tellAgentPrinterFinished(ok, detail){
+  if(!HELPER_AUTO_AGENT_MESSAGES) return;
   if(helperPrinterTold || busy || ctxBlocked) return;
   helperPrinterTold = true;
   if(ok){
@@ -3136,6 +3313,7 @@ async function startPrinter(){
     return;
   }
   if(!(await ensureHelperReadyForRun())) return;
+  helperLastRequestedAction = "printer";
   helperFridOffer = false;
   helperFridJob = false;
   helperFridDone = false;

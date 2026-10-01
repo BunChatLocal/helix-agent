@@ -521,6 +521,62 @@ function Start-JobFromServer {
     }
 }
 
+function Stop-BusyInstall {
+    param([string]$Reason = 'Installasjon avbrutt.')
+    if ($script:BusyKind -ne 'install') { return $false }
+    $sid = [string]$script:BusySid
+    $secret = [string]$script:BusySecret
+    $tmp = [string]$script:BusyTmp
+    $done = [string]$script:BusyDone
+    $script:AfterInstallScan = $false
+
+    try {
+        if ($script:BusyProc) {
+            Stop-Process -Id $script:BusyProc.Id -Force -ErrorAction SilentlyContinue
+        }
+    } catch { }
+
+    try {
+        $procs = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'msiexec.exe'" -ErrorAction Stop)
+        foreach ($p in $procs) {
+            $cmd = [string]$p.CommandLine
+            if ([string]::IsNullOrWhiteSpace($cmd)) { continue }
+            $owned = $false
+            if ($tmp -and $cmd.IndexOf($tmp, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $owned = $true }
+            if (-not $owned -and $sid) {
+                if ($cmd.IndexOf(('zork-elevate-' + $sid), [StringComparison]::OrdinalIgnoreCase) -ge 0) { $owned = $true }
+                elseif ($cmd.IndexOf(('zork-install-' + $sid), [StringComparison]::OrdinalIgnoreCase) -ge 0) { $owned = $true }
+                elseif ($cmd.IndexOf(('zork-printer-' + $sid), [StringComparison]::OrdinalIgnoreCase) -ge 0) { $owned = $true }
+            }
+            if ($owned) {
+                try { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue } catch { }
+            }
+        }
+    } catch { }
+
+    if ($sid -and $secret) {
+        try { Tell-Session -Sid $sid -Secret $secret -Text $Reason -Activity '' } catch { }
+    }
+
+    try {
+        if ($tmp -and (Test-Path -LiteralPath $tmp)) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+        if ($done -and (Test-Path -LiteralPath $done)) { Remove-Item -LiteralPath $done -Force -ErrorAction SilentlyContinue }
+        if ($sid) {
+            $jobFile = Join-Path $env:TEMP ('zork-install-items-' + $sid + '.txt')
+            if (Test-Path -LiteralPath $jobFile) { Remove-Item -LiteralPath $jobFile -Force -ErrorAction SilentlyContinue }
+        }
+    } catch { }
+
+    $script:BusyProc = $null
+    $script:BusyKind = ''
+    $script:BusySid = ''
+    $script:BusySecret = ''
+    $script:BusyTmp = ''
+    $script:BusyDone = ''
+    $script:BusyStartedTick = 0
+    return $true
+}
+
 function Test-InstallStillRunning {
     $tmp = [string]$script:BusyTmp
     try {
@@ -964,6 +1020,24 @@ function Handle-LocalClient {
             if ($job.items) { $items = @($job.items) }
             Enqueue-LocalJob @{ kind = $kind; session_id = $sid; session_secret = $secret; items = $items }
             Write-LocalHttp $stream 200 '{"ok":true}' $allowOrigin
+            return
+        }
+        if ($req -match '^POST\s+/v1/stop') {
+            $job = $null
+            try { $job = $body | ConvertFrom-Json } catch { }
+            if ($null -eq $job) { Write-LocalHttp $stream 400 '{"ok":false}' $allowOrigin; return }
+            $sid = [string]$job.session_id
+            $secret = [string]$job.session_secret
+            $origin = [string]$job.base_url
+            if ($sid -notmatch '^[a-f0-9]{32}$') { Write-LocalHttp $stream 400 '{"ok":false}' $allowOrigin; return }
+            if ($secret.Length -lt 16) { Write-LocalHttp $stream 400 '{"ok":false}' $allowOrigin; return }
+            if (-not (Test-JobAllowed -JobUrl $origin -HeaderOrigin $headerOrigin -Sid $sid -Secret $secret)) {
+                Write-LocalHttp $stream 403 '{"ok":false}' $allowOrigin
+                return
+            }
+            $stopped = Stop-BusyInstall -Reason 'Installasjon avbrutt. Bruk manuelle steg.'
+            if ($stopped) { Write-LocalHttp $stream 200 '{"ok":true,"stopped":true}' $allowOrigin }
+            else { Write-LocalHttp $stream 200 '{"ok":true,"stopped":false}' $allowOrigin }
             return
         }
         Write-LocalHttp $stream 404 '{"ok":false}' $allowOrigin

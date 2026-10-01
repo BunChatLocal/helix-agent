@@ -2058,6 +2058,7 @@ class TestPcHelper:
         assert "Refresh-WifiStatus" not in ping_block
         assert "Get-PingBody" in ping_block
         assert "/v1/wake" in tray
+        assert "/v1/stop" in tray
         assert "18792" in tray
         assert "zorkhelper" in tray
         assert "URL Protocol" in tray
@@ -2091,6 +2092,7 @@ class TestPcHelper:
         assert "BusyStartedTick" in tray
         assert "-not $script:SkipScan" not in tray
         assert "Test-InstallStillRunning" in tray
+        assert "function Stop-BusyInstall" in tray
         assert "zork-printer-" in tray
         assert "CreateNoWindow" in install_job
         assert "zork-elevate-" in install_job
@@ -2549,6 +2551,10 @@ class TestConsoleHelper:
         assert "pcprinterstartnote" in page
         assert "tellAgentPrinterFinished" in page
         assert "laster ned printer" in page
+        assert "pcdidntwork" in page
+        assert "triggerHelperManualFallback" in page
+        assert "manualFallbackMessage" in page
+        assert "/v1/stop" in page
         headline = page.split("function helperHeadline")[1].split("function paintHelperCard")[0]
         printer_head = headline.split("if(helperPrinterJob){")[1].split("if(helperFridJob){")[0]
         assert 't("pcprinteruac")' in printer_head
@@ -2608,6 +2614,7 @@ class TestConsoleHelper:
         assert "HELPER_MIN_API_REV" in page
         assert "helperLooksUpdated" in page
         assert "rememberHelperHealth" in page
+        assert "HELPER_AUTO_AGENT_MESSAGES = false" in page
         assert "waitForHelperSessionTerminal(session.id, 20000)" in page
         assert "probeHelperWifi" in page
         assert "FRID[-_ ]?iot" in page
