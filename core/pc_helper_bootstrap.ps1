@@ -1,5 +1,6 @@
 #Requires -Version 5.1
-# First-run window: progress bar, then the tray stays by the clock.
+# First run. Runs hidden: every step reports to the chat, which draws the
+# progress bar. Then the tray stays in the notification area.
 param(
     [Parameter(Mandatory = $true)][string]$BaseUrl,
     [Parameter(Mandatory = $true)][string]$SessionId,
@@ -13,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 try { $Host.UI.RawUI.WindowTitle = 'Zork Helper' } catch { }
 
 function Send-BootProgress {
-    param([string]$Text)
+    param([string]$Text, [int]$Percent)
     try {
         $pwc = New-Object System.Net.WebClient
         $pwc.Encoding = [Text.Encoding]::UTF8
@@ -21,7 +22,7 @@ function Send-BootProgress {
         $pwc.Headers.Add('X-Helper-Secret', $Secret)
         $clip = $Text
         if ($clip.Length -gt 180) { $clip = $clip.Substring(0, 180) }
-        $body = (@{ text = $clip } | ConvertTo-Json -Compress)
+        $body = (@{ text = $clip; percent = $Percent } | ConvertTo-Json -Compress)
         [void]$pwc.UploadString(($BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId + '/progress'), 'POST', $body)
     } catch { }
 }
@@ -29,22 +30,8 @@ function Send-BootProgress {
 function Show-ZorkProgress {
     param([int]$Percent, [string]$Text)
     $pct = [Math]::Max(0, [Math]::Min(100, $Percent))
-    $fill = [int][Math]::Floor($pct / 5)
-    if ($fill -gt 20) { $fill = 20 }
-    $bar = ('#' * $fill) + ('-' * (20 - $fill))
-    $line = '  [{0}] {1,3}%  Loading...  {2}' -f $bar, $pct, $Text
-    if ($line.Length -gt 79) { $line = $line.Substring(0, 79) }
     Write-Progress -Activity 'Zork Helper' -Status ('Loading... {0}%' -f $pct) -PercentComplete $pct -CurrentOperation $Text
-    Write-Host ("`r" + $line.PadRight(79)) -NoNewline
-    if ($Text -ne 'Ferdig') { Send-BootProgress $Text }
-}
-
-function Show-ZorkError {
-    param([string]$Message)
-    try { Write-Progress -Activity 'Zork Helper' -Completed } catch { }
-    Write-Host ''
-    Write-Host '  Feil' -ForegroundColor Red
-    Write-Host ('  ' + $Message) -ForegroundColor Red
+    if ($Text -ne 'Ferdig') { Send-BootProgress $Text $pct }
 }
 
 function Send-BootError {
@@ -87,16 +74,8 @@ function Send-LocalJob {
     }
 }
 
-Write-Host ''
-Write-Host '  Zork Helper' -ForegroundColor Cyan
 $jobKind = ([string]$JobKind).Trim().ToLower()
 if ($jobKind -ne 'install') { $jobKind = 'scan' }
-if ($jobKind -eq 'install') {
-    Write-Host '  Starter Zork Helper...' -ForegroundColor Gray
-} else {
-    Write-Host '  Sjekker denne PC-en...' -ForegroundColor Gray
-}
-Write-Host ''
 
 $homeDir = Join-Path $env:LOCALAPPDATA 'ZorkHelper'
 $tray = Join-Path $homeDir 'zork-helper-tray.ps1'
@@ -152,13 +131,12 @@ try {
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Milliseconds 300
 
-    Show-ZorkProgress 50 'Starter Zork Helper ved klokken...'
-    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    $trayProc = Start-Process -FilePath $ps -PassThru -ArgumentList @(
-        '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', $tray
+    Show-ZorkProgress 50 'Starter Zork Helper...'
+    $trayProc = Start-Process -FilePath $ps -PassThru -WindowStyle Hidden -ArgumentList @(
+        '-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', $tray
     )
     if (-not $trayProc) {
-        throw 'Klarte ikke starte Zork Helper ved klokken.'
+        throw 'Klarte ikke starte Zork Helper.'
     }
     $up = $false
     for ($i = 0; $i -lt 40; $i++) {
@@ -174,7 +152,7 @@ try {
         } catch { }
     }
     if (-not $up) {
-        throw 'Zork Helper startet, men ikonet ved klokken svarte ikke.'
+        throw 'Zork Helper startet, men svarte ikke.'
     }
     try {
         $wc.Headers['Content-Type'] = 'application/json; charset=utf-8'
@@ -196,20 +174,9 @@ try {
         }
     }
 
-    Show-ZorkProgress 100 'Ferdig'
     try { Write-Progress -Activity 'Zork Helper' -Completed } catch { }
-    Write-Host ''
-    Write-Host ''
-    Write-Host '  Ferdig. Zork Helper ligger ved klokken.' -ForegroundColor Green
-    Write-Host '  Du kan lukke dette vinduet.' -ForegroundColor Gray
-    Start-Sleep -Seconds 4
     exit 0
 } catch {
-    $msg = [string]$_.Exception.Message
-    Send-BootError $msg
-    Show-ZorkError $msg
-    Write-Host ''
-    Write-Host '  Trykk en tast for aa lukke.' -ForegroundColor Gray
-    try { $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') } catch { Start-Sleep -Seconds 20 }
+    Send-BootError ([string]$_.Exception.Message)
     exit 1
 }

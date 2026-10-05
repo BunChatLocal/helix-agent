@@ -25,13 +25,7 @@ function Show-ScanProgress {
     param([int]$Percent, [string]$Text)
     $pct = [Math]::Max(0, [Math]::Min(100, $Percent))
     Write-Progress -Activity 'Zork Helper' -Status ('Loading... {0}%' -f $pct) -PercentComplete $pct -CurrentOperation $Text
-    $fill = [int][Math]::Floor($pct / 5)
-    if ($fill -gt 20) { $fill = 20 }
-    $bar = ('#' * $fill) + ('-' * (20 - $fill))
-    $line = '  [{0}] {1,3}%  Loading...  {2}' -f $bar, $pct, $Text
-    if ($line.Length -gt 79) { $line = $line.Substring(0, 79) }
-    Write-Host ("`r" + $line.PadRight(79)) -NoNewline
-    try { Send-Helper -Path "/api/helper/$SessionId/progress" -Body @{ text = $Text } } catch { }
+    try { Send-Helper -Path "/api/helper/$SessionId/progress" -Body @{ text = $Text; percent = $pct } } catch { }
 }
 
 function Get-Prop {
@@ -178,30 +172,89 @@ function Get-WindowsUpdateItem {
     }
 }
 
+function Get-ZorkSha256 {
+    param([string]$Path)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($Path)))
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 function Update-HelperTray {
     $homeDir = Join-Path $env:LOCALAPPDATA 'ZorkHelper'
     if (-not (Test-Path -LiteralPath $homeDir)) { return }
     $base = $BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId
     $assets = @(
-        @{ key = 'tray'; path = '/tray'; dest = (Join-Path $homeDir 'zork-helper-tray.ps1'); mirror = $null },
-        @{ key = 'open'; path = '/open'; dest = (Join-Path $homeDir 'zork-helper-open.ps1'); mirror = $null },
-        @{ key = 'install'; path = '/install-script'; dest = (Join-Path $homeDir 'zork-helper-install.ps1'); mirror = (Join-Path $homeDir 'install-script.ps1') }
+        @{ key = 'tray'; path = '/tray'; dest = (Join-Path $homeDir 'zork-helper-tray.ps1'); mirror = $null; min = 2000 },
+        @{ key = 'open'; path = '/open'; dest = (Join-Path $homeDir 'zork-helper-open.ps1'); mirror = $null; min = 500 },
+        @{ key = 'install'; path = '/install-script'; dest = (Join-Path $homeDir 'zork-helper-install.ps1'); mirror = (Join-Path $homeDir 'install-script.ps1'); min = 2000 }
     )
     foreach ($asset in $assets) {
-        $tmp = Join-Path $env:TEMP ('zork-' + [string]$asset.key + '-' + $SessionId + '.ps1')
+        $tmp = Join-Path $env:TEMP ('zork-update-' + [string]$asset.key + '-' + $SessionId + '.ps1')
         try {
             $wc = New-Object System.Net.WebClient
             $wc.Encoding = [Text.Encoding]::UTF8
             $wc.Headers.Add('X-Helper-Secret', $Secret)
             $wc.DownloadFile($base + [string]$asset.path, $tmp)
-            if ((Test-Path -LiteralPath $tmp) -and ((Get-Item -LiteralPath $tmp).Length -gt 2000)) {
-                Copy-Item -LiteralPath $tmp -Destination ([string]$asset.dest) -Force
+            if ((Test-Path -LiteralPath $tmp) -and ((Get-Item -LiteralPath $tmp).Length -gt [int]$asset.min)) {
+                $dest = [string]$asset.dest
+                # Rewriting an unchanged tray would make it restart after every job.
+                $same = $false
+                if (Test-Path -LiteralPath $dest) {
+                    $same = ((Get-ZorkSha256 $tmp) -eq (Get-ZorkSha256 $dest))
+                }
+                if (-not $same) {
+                    Copy-Item -LiteralPath $tmp -Destination $dest -Force
+                    if ($asset.key -eq 'tray') { $script:TrayReplaced = $true }
+                }
                 if ($asset.mirror) {
                     Copy-Item -LiteralPath $tmp -Destination ([string]$asset.mirror) -Force
                 }
             }
         } catch { }
+        try { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue } catch { }
     }
+}
+
+$script:TrayReplaced = $false
+
+# Trays before rev 4 never reload a replaced file, so the new one would not run
+# until the next login. Newer trays restart themselves once idle.
+function Restart-OldTray {
+    $rev = 0
+    try {
+        $req = [Net.HttpWebRequest]::Create('http://127.0.0.1:18792/v1/ping')
+        $req.Method = 'GET'
+        $req.Timeout = 1500
+        $resp = $req.GetResponse()
+        try {
+            $reader = New-Object IO.StreamReader($resp.GetResponseStream())
+            $body = $reader.ReadToEnd()
+            $reader.Close()
+        } finally { $resp.Close() }
+    } catch {
+        return
+    }
+    try { $rev = [int](($body | ConvertFrom-Json).helper_api_rev) } catch { $rev = 0 }
+    if ($rev -ge 4) { return }
+    $homeDir = Join-Path $env:LOCALAPPDATA 'ZorkHelper'
+    $tray = Join-Path $homeDir 'zork-helper-tray.ps1'
+    $pidFile = Join-Path $homeDir 'tray.pid'
+    if (-not (Test-Path -LiteralPath $tray)) { return }
+    try {
+        $old = 0
+        [void][int]::TryParse(([IO.File]::ReadAllText($pidFile)).Trim(), [ref]$old)
+        if ($old -gt 0) { Stop-Process -Id $old -Force -ErrorAction SilentlyContinue }
+    } catch { }
+    Start-Sleep -Milliseconds 500
+    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    try {
+        Start-Process -FilePath $ps -WindowStyle Hidden -ArgumentList @(
+            '-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', $tray
+        ) | Out-Null
+    } catch { }
 }
 
 try {
@@ -425,14 +478,11 @@ $result = @{
 }
 Show-ScanProgress 92 'Sender resultatet...'
 Send-Helper -Path "/api/helper/$SessionId/result" -Body @{ data = $result }
-Show-ScanProgress 100 'Ferdig'
 try { Write-Progress -Activity 'Zork Helper' -Completed } catch { }
-Write-Host ''
+if ($script:TrayReplaced) { Restart-OldTray }
 } catch {
     $msg = [string]$_.Exception.Message
     try { Write-Progress -Activity 'Zork Helper' -Completed } catch { }
-    Write-Host ''
-    Write-Host ('  Feil: ' + $msg) -ForegroundColor Red
     try {
         Send-Helper -Path "/api/helper/$SessionId/error" -Body @{ message = $msg.Substring(0, [Math]::Min(180, $msg.Length)) }
     } catch { }

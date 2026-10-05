@@ -247,7 +247,6 @@ on **FRID**, not while they are still only on **FRID-iot**.
 - They are already at the 2-device limit and genuinely need a third
 - MFA needs re-registering and they can't get in to do it themselves
 - The certificate installs but the FRID network still refuses the device
-- Anything requiring admin rights on the device — a pupil has none
 - Last ned does nothing, and they are not on **FRID-iot** at school
 
 ## Verified local knowledge

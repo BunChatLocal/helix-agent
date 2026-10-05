@@ -3202,6 +3202,12 @@ async def helper_create(request: Request, claims: dict = Depends(require_auth)):
     return view
 
 
+@app.get("/api/helper/version", dependencies=[Depends(require_auth)])
+async def helper_version():
+    from core import pc_helper
+    return {"tray_version": pc_helper.tray_version()}
+
+
 @app.get("/api/helper/sessions/{sid}", dependencies=[Depends(require_auth)])
 async def helper_status(sid: str, claims: dict = Depends(require_auth)):
     from core import pc_helper
@@ -3460,6 +3466,7 @@ async def helper_progress(sid: str, request: Request):
     activity = body.get("activity") if "activity" in body else None
     row = pc_helper.add_progress(
         sid, _helper_secret(request, body), str(body.get("text") or ""), activity=activity,
+        percent=body.get("percent"),
     )
     if not row:
         raise HTTPException(404, "Not found")

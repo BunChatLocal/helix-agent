@@ -1429,6 +1429,10 @@ class TestPupilKnowledgeIsInlined:
         assert "Sjekk denne PC-en" in student
         assert "**Skaff printer**" in student
         assert "ZorkHelper.command" in student
+        assert "Never mention Zork Helper, the clock" in student
+        assert "is administrator on it" in " ".join(student.split())
+        assert "no admin rights" not in student
+        assert "a pupil has none" not in skill
         assert "## Scoping questions" not in skill
         assert "browser reports" in student.lower()
         assert "list the networks they see" in student.lower()
@@ -1462,6 +1466,7 @@ class TestPupilKnowledgeIsInlined:
         assert "hvilke nettverk" in marker
         assert "last ned" in marker
         assert "frid-nett" in marker
+        assert "ikke nevn zork helper, klokken" in marker
 
 
 class TestSharedCoreIsActuallyShared:
@@ -2120,8 +2125,36 @@ class TestPcHelper:
         assert "Install-Printer" in inst
         assert "Stop-ZorkScanJobs" in inst
         assert "zork-scan-" in inst
-        assert "AllocConsole" in inst
-        assert "SetForegroundWindow" in inst
+        assert "AllocConsole" not in inst
+        # Old trays launch this script in a visible console; it hides itself.
+        assert inst.index("ShowWindow($selfHwnd, 0)") < inst.index("Set-StrictMode")
+        # An existing install is reported as done; re-running the MSI fails with 1603.
+        printer_fn = inst.split("function Install-Printer")[1].split("function ")[0]
+        assert printer_fn.index("Test-PrinterInstalled") < printer_fn.index("/tool/printer")
+        assert "Viken Print" in inst
+        assert "min = 500" in inst and "min = 500" in pc_helper.scan_script()
+        assert "Length -gt [int]$asset.min" in inst
+        # A tray replaced on disk restarts itself once idle.
+        assert "Test-SelfReplaced" in tray
+        assert "$script:Relaunch = $true" in tray
+        tail = tray.split("[System.Windows.Forms.Application]::Run(")[1]
+        assert tail.index("ReleaseMutex") < tail.index("if ($script:Relaunch)")
+        # The tray reports a hash of itself; the chat compares it to this build's.
+        assert len(pc_helper.tray_version()) == 16
+        assert "tray_version     = [string]$script:SelfVersion" in tray
+        assert "tray_version     = [string]$health.tray_version" in tray
+        scan_src = pc_helper.scan_script()
+        for src in (inst, scan_src):
+            updater = src.split("function Update-HelperTray")[1].split("\nfunction ")[0]
+            # An unchanged tray must not be rewritten, or it restarts after every job.
+            assert "Get-ZorkSha256" in updater
+            assert "if (-not $same)" in updater
+        # Get-FileHash is a module command that a helper process could not load.
+        for src in (inst, scan_src, tray):
+            assert "Get-FileHash" not in src
+            assert "zork-update-" in updater
+        assert "if ($script:TrayReplaced) { Restart-OldTray }" in scan_src
+        assert scan_src.index('/result" -Body') < scan_src.index("if ($script:TrayReplaced) { Restart-OldTray }")
         # FRID-nett no longer ships or downloads a bundled QuickConnect: each
         # portal download is personal to the signed-in account, so the exe must
         # come from the pupil's own login and be HPE-signed before it runs.
@@ -2147,9 +2180,10 @@ class TestPcHelper:
         assert "Done! Printer er installert." in inst
         assert "Klarte ikke a installere printer." in inst
         assert "Test-MsiOk" in inst
-        assert "Show-PrinterBar" in inst
-        assert "Show-PrinterWindow" in inst
-        assert "Write-Progress" in inst
+        # Pupils closed the printer console mid-download; progress lives in the chat.
+        assert "Show-PrinterWindow" not in inst
+        assert "SetForegroundWindow" not in inst
+        assert "'/qn'" in inst
         assert "Laster ned printer... " in inst
         assert "3010" in inst
         assert "msiexec.exe" in inst
@@ -2261,7 +2295,13 @@ class TestPcHelper:
         assert "/open" in boot
         assert "zorkhelper" in boot
         assert "Update-HelperTray" in inst
-        assert boot.index("Starter Zork Helper ved klokken") < boot.index("Sjekker programmer")
+        assert boot.index("Starter Zork Helper...") < boot.index("Sjekker programmer")
+        assert "ved klokken" not in boot
+        assert "ReadKey" not in boot
+        assert "Write-Host" not in boot
+        assert "percent = $Percent" in boot
+        assert "ReadKey" not in Path("core/pc_helper_launch.ps1").read_text(encoding="utf-8")
+        assert "percent = $pct" in pc_helper.scan_script()
         assert "Send-LocalJob" in boot
         assert "AllowEmptyString" in boot
         assert "__DEFAULT_JOB_ITEMS__" in Path("core/pc_helper_bootstrap.ps1").read_text(encoding="utf-8")
@@ -2277,8 +2317,11 @@ class TestPcHelper:
             row["base_url"], row["id"], row["secret"],
             job_kind="install", job_items=["fridnett"],
         )
+        assert "pause" not in install_cmd
+        assert "Start-Process -FilePath powershell.exe -WindowStyle Hidden" in install_cmd
+        assert len(install_cmd.split("\r\n")[2]) < 8000
         marker = "-EncodedCommand "
-        encoded = install_cmd.split(marker, 1)[1].split("\r\n", 1)[0].strip()
+        encoded = install_cmd.split(marker, 1)[1].split("'", 1)[0].strip()
         decoded = base64.b64decode(encoded).decode("utf-16le")
         assert "-JobKind" in decoded
         assert "install" in decoded
@@ -2298,6 +2341,34 @@ class TestPcHelper:
             "host": "PC1", "items": [{"id": "office", "name": "Office", "found": True}],
         }) is None
         assert pc_helper.get(row["id"])["status"] == "waiting"
+
+    def test_chat_treats_a_tray_from_another_build_as_outdated(self):
+        page = Path("web/static/chat.html").read_text(encoding="utf-8")
+        looks = page.split("function helperLooksUpdated")[1].split("\n}")[0]
+        assert "helperTrayIsCurrent()" in looks
+        ready = page.split("async function ensureHelperReadyForRun")[1].split("\n}\n")[0]
+        assert ready.index("loadExpectedHelperVersion") < ready.index("helperLooksUpdated")
+        assert "helperVersionWaived = true" in ready
+        assert '"/api/helper/version"' in page
+
+    def test_progress_percent_is_per_step_and_cleared_by_the_result(self):
+        """The chat draws the bar from this, so a stale percent would freeze it."""
+        from core import pc_helper
+        pc_helper.reset_store()
+        row = pc_helper.create_session(owner="ada@frid-iks.no", base_url="http://localhost")
+        sid, secret = row["id"], row["secret"]
+        assert pc_helper.public_view(pc_helper.get(sid))["percent"] is None
+        assert pc_helper.add_progress(sid, secret, "Sjekker Teams...", percent=52)["percent"] == 52
+        assert pc_helper.add_progress(sid, secret, "x", percent=250)["percent"] == 100
+        assert pc_helper.add_progress(sid, secret, "x", percent="nope")["percent"] is None
+        assert pc_helper.add_progress(sid, secret, "x", percent=True)["percent"] is None
+        pc_helper.add_progress(sid, secret, "Sjekker printer...", percent=70)
+        assert pc_helper.add_progress(sid, secret, "Installerer...")["percent"] is None
+        pc_helper.add_progress(sid, secret, "Sender resultatet...", percent=92)
+        done = pc_helper.set_result(sid, secret, {"host": "PC1", "items": []})
+        assert done["percent"] is None
+        pc_helper.add_progress(sid, secret, "Sender resultatet...", percent=92)
+        assert pc_helper.set_error(sid, secret, "feil")["percent"] is None
 
     def test_result_is_clipped_to_known_fields(self):
         from core import pc_helper
@@ -2575,6 +2646,8 @@ class TestConsoleHelper:
         startp = page.split("async function startPrinter")[1].split("async function startPcCheck")[0]
         assert "stopWifiWatch" in startp
         assert "ensureHelperReadyForRun" in startp
+        # The card (and its waiting bar) must appear before the slow readiness check.
+        assert startp.index("paintHelperCard(null)") < startp.index("ensureHelperReadyForRun")
         assert "if(helperSession && helperSession.id)" not in startp
         startf = page.split("async function startFridNett")[1].split("function tellAgentFridNettAlreadyOnFrid")[0]
         assert "stopWifiWatch" in startf

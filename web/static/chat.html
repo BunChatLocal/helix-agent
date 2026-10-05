@@ -709,9 +709,9 @@ const I18N = {
     pcprinterdl:"Laster ned skriveren…",
     pcprinterinst:"Installerer skriveren…",
     pcprinteruac:"Godkjenn i Windows for å installere skriveren.",
-    pcprinteruacnote:"Se etter et vindu bak nettleseren. Godkjenn i Windows hvis du blir spurt.",
+    pcprinteruacnote:"Godkjenn i Windows hvis du blir spurt.",
     pcprinterstart:"Starter skriverinstallasjonen…",
-    pcprinterstartnote:"Zork Helper starter. Et vindu kan ligge bak nettleseren.",
+    pcprinterstartnote:"Zork Helper starter.",
     pcprinterdone:"Done!",
     pcprinterdonenote:"Skoleskriveren er installert. Da kan du skrive ut.",
     pcprinterfail:"Klarte ikke å installere skriveren",
@@ -859,9 +859,9 @@ const I18N = {
     pcprinterdl:"Downloading the printer…",
     pcprinterinst:"Installing the printer…",
     pcprinteruac:"Approve in Windows to install the printer.",
-    pcprinteruacnote:"Look for a window behind the browser. Approve in Windows if you are asked.",
+    pcprinteruacnote:"Approve in Windows if you are asked.",
     pcprinterstart:"Starting the printer install…",
-    pcprinterstartnote:"Zork Helper is starting. A window may be behind the browser.",
+    pcprinterstartnote:"Zork Helper is starting.",
     pcprinterdone:"Done!",
     pcprinterdonenote:"The school printer is installed. You can print.",
     pcprinterfail:"Could not install the printer",
@@ -2585,6 +2585,13 @@ function paintHelperCard(session){
       p.textContent = t("pcprinterstartnote");
     }
     card.appendChild(p);
+    if(!downloading){
+      // Shown from the click on; it only starts filling when the download does.
+      const bar = document.createElement("div");
+      bar.className = "pc-bar pc-bar-busy";
+      bar.appendChild(document.createElement("span"));
+      card.appendChild(bar);
+    }
     if(downloading){
       const bar = document.createElement("div");
       bar.className = "pc-bar" + (prog && prog.pct != null ? "" : " pc-bar-busy");
@@ -2604,6 +2611,26 @@ function paintHelperCard(session){
     p.className = "pc-meta";
     p.textContent = logs.length ? t("pctrayscan") : (isMacPc() ? t("pcopenmac") : t("pcopen"));
     card.appendChild(p);
+  }
+  const stepPct = session && typeof session.percent === "number" ? Math.max(0, Math.min(100, session.percent)) : null;
+  if(headline.spin && stepPct != null && !card.querySelector(".pc-bar")){
+    const step = lastHelperLine(session);
+    if(step){
+      const lab = document.createElement("p");
+      lab.className = "pc-meta";
+      lab.textContent = step;
+      card.appendChild(lab);
+    }
+    const bar = document.createElement("div");
+    bar.className = "pc-bar";
+    const fill = document.createElement("span");
+    fill.style.width = stepPct + "%";
+    bar.appendChild(fill);
+    card.appendChild(bar);
+    const pctLab = document.createElement("p");
+    pctLab.className = "pc-bar-label";
+    pctLab.textContent = stepPct + "%";
+    card.appendChild(pctLab);
   }
   if(status === "error"){
     const err = document.createElement("p");
@@ -2747,6 +2774,9 @@ let loopbackPermStatus = null;
 let loopbackDenied = false;
 let helperApiRev = 0;
 let helperReadyLocal = false;
+let helperTrayVersion = "";
+let helperExpectedVersion = null;
+let helperVersionWaived = false;
 
 async function queryLoopbackPermission(){
   if(!navigator.permissions || !navigator.permissions.query) return null;
@@ -2817,10 +2847,27 @@ function rememberHelperHealth(data){
   helperApiRev = Number.isFinite(rev) ? Math.max(0, Math.floor(rev)) : 0;
   const hasInstall = !!(data.install_seed_ok || data.install_cache_ok);
   helperReadyLocal = !!data.helper_ready && hasInstall;
+  helperTrayVersion = String(data.tray_version || "");
+}
+
+async function loadExpectedHelperVersion(){
+  if(helperExpectedVersion !== null) return helperExpectedVersion;
+  try{
+    const r = await api("/api/helper/version");
+    helperExpectedVersion = String((r && r.tray_version) || "");
+  }catch(_){
+    return "";
+  }
+  return helperExpectedVersion;
+}
+
+function helperTrayIsCurrent(){
+  if(helperVersionWaived || !helperExpectedVersion) return true;
+  return helperTrayVersion === helperExpectedVersion;
 }
 
 function helperLooksUpdated(){
-  return helperApiRev >= HELPER_MIN_API_REV && helperReadyLocal;
+  return helperApiRev >= HELPER_MIN_API_REV && helperReadyLocal && helperTrayIsCurrent();
 }
 function sleepMs(ms){
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -2904,6 +2951,7 @@ async function pingLocalHelper(session, ms){
     if(!helperOnSchoolFrid) helperWifiKnown = false;
     helperApiRev = 0;
     helperReadyLocal = false;
+    helperTrayVersion = "";
   }
   if(!found.some(Boolean) && !loopbackDenied){
     const status = await queryLoopbackPermission();
@@ -3115,6 +3163,7 @@ async function ensureHelperReadyForRun(){
   if(helperPreflightBusy) return false;
   const wasBusy = !!helperBusy;
   if(!wasBusy) setPcCheckBusy(true);
+  await loadExpectedHelperVersion();
   const online = await pingLocalHelper(helperSession, 1500);
   if(online && helperLooksUpdated()){
     markHelperInstalled();
@@ -3157,7 +3206,15 @@ async function ensureHelperReadyForRun(){
       }
       return true;
     }
+    // The refresh replaced the tray file; the tray restarts on it a few seconds
+    // later. Send the job to the new tray, not the one about to exit.
+    const restartBy = Date.now() + 15000;
     await pingLocalHelper(session, 1500);
+    while(!helperTrayIsCurrent() && Date.now() < restartBy){
+      await sleepMs(1000);
+      await pingLocalHelper(session, 1500);
+    }
+    if(!helperTrayIsCurrent()) helperVersionWaived = true;
     if(!helperLooksUpdated()){
       // Older trays may not include helper_api_rev yet. A successful refresh pass
       // still means the newest helper files were downloaded before we continue.
@@ -3312,7 +3369,19 @@ async function startPrinter(){
     flash(t("pcnowin"));
     return;
   }
-  if(!(await ensureHelperReadyForRun())) return;
+  // The readiness check can take many seconds; show the printer card at once.
+  stopHelperPoll();
+  helperFridOffer = false;
+  helperFridJob = false;
+  helperFridDone = false;
+  helperPrinterJob = true;
+  helperPrinterDone = false;
+  paintHelperCard(null);
+  if(!(await ensureHelperReadyForRun())){
+    helperPrinterJob = false;
+    paintHelperCard(null);
+    return;
+  }
   helperLastRequestedAction = "printer";
   helperFridOffer = false;
   helperFridJob = false;

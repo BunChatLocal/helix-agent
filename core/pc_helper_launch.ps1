@@ -32,9 +32,6 @@ try {
     $body = (@{ message = $msg.Substring(0, [Math]::Min(180, $msg.Length)) } | ConvertTo-Json -Compress)
     [void]$wc.UploadString($base + '/api/helper/' + $id + '/error', 'POST', $body)
   } catch {}
-  Write-Host $msg
-  Write-Host 'Zork Helper failed. Press a key to close.'
-  try { $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') } catch { Start-Sleep -Seconds 20 }
   exit 1
 } finally {
   Remove-Item -LiteralPath $boot -Force -ErrorAction SilentlyContinue

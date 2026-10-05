@@ -56,7 +56,32 @@ $script:AfterInstallScan = $false
 $script:WifiSsid = ''
 $script:WifiConnected = $false
 $script:WifiCheckedAt = 0
-$script:HelperApiRev = 3
+$script:HelperApiRev = 4
+$script:Relaunch = $false
+$script:SelfStamp = [datetime]::MinValue
+try { $script:SelfStamp = (Get-Item -LiteralPath $PSCommandPath).LastWriteTimeUtc } catch { }
+# Matches pc_helper.tray_version() when this is the build the server serves.
+# .NET directly: the PowerShell hash cmdlet lives in a module that is not always
+# loadable in a helper process.
+$script:SelfVersion = ''
+try {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $bytes = [IO.File]::ReadAllBytes($PSCommandPath)
+    $script:SelfVersion = ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant().Substring(0, 16)
+    $sha.Dispose()
+} catch { }
+
+# A scan or install overwrites this file with the newest tray, but a running
+# tray keeps its old code until it restarts — on a pupil PC that can be days.
+function Test-SelfReplaced {
+    if ($script:SelfStamp -eq [datetime]::MinValue) { return $false }
+    try {
+        $item = Get-Item -LiteralPath $PSCommandPath -ErrorAction Stop
+        return ($item.LastWriteTimeUtc -ne $script:SelfStamp) -and ($item.Length -gt 2000)
+    } catch {
+        return $false
+    }
+}
 
 function Get-Cfg {
     if (-not (Test-Path -LiteralPath $script:CfgPath)) { return $null }
@@ -375,8 +400,8 @@ function Start-InstallJob {
     # Run the install elevated. FRID-nett needs admin so the (already-elevated)
     # helper can click QuickConnect's certificate dialog; asking here — before any
     # wifi switch — means the pupil's single "Ja" comes up while still online, and
-    # a "Nei" stops everything cleanly. The child console stays hidden; the printer
-    # flow re-shows its own console when it needs one.
+    # a "Nei" stops everything cleanly. The child console stays hidden; progress
+    # goes to the chat.
     $arg = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $tmp + '" -BaseUrl "' + $script:BaseUrl + '" -SessionId "' + $Sid + '" -Secret "' + $Secret + '" -JobFile "' + $jobFile + '" -DoneFile "' + $done + '"'
     $fridOnly = Test-FridNettOnly $Items
     if (-not (Test-CaptiveOffline)) {
@@ -823,6 +848,7 @@ function Get-HelperHealth {
     try { $cfgOk = Test-Path -LiteralPath $script:CfgPath } catch { $cfgOk = $false }
     return [ordered]@{
         helper_api_rev   = [int]$script:HelperApiRev
+        tray_version     = [string]$script:SelfVersion
         helper_ready     = [bool]($trayOk -and $openOk -and $installOk)
         tray_ok          = [bool]$trayOk
         open_ok          = [bool]$openOk
@@ -891,6 +917,7 @@ function Get-PingBody {
         connected = [bool]$script:WifiConnected
         progress  = Get-LocalProgress
         helper_api_rev   = [int]$health.helper_api_rev
+        tray_version     = [string]$health.tray_version
         helper_ready     = [bool]$health.helper_ready
         tray_ok          = [bool]$health.tray_ok
         open_ok          = [bool]$health.open_ok
@@ -1153,6 +1180,14 @@ $timer.add_Tick({
             try { Refresh-WifiStatus } catch { }
         }
         if (($script:Tick % 80) -ne 0) { return }
+        $idle = ($null -eq $script:BusyProc) -and [string]::IsNullOrWhiteSpace($script:BusyKind)
+        $busyFlag = $false
+        try { $busyFlag = Test-Path -LiteralPath (Join-Path $script:HomeDir 'install-busy.flag') } catch { $busyFlag = $true }
+        if ($idle -and (-not $busyFlag) -and (Test-SelfReplaced)) {
+            $script:Relaunch = $true
+            $script:AppContext.ExitThread()
+            return
+        }
         if (Test-CaptiveOffline) { return }
         if ([string]::IsNullOrWhiteSpace($script:DeviceId)) {
             [void](Register-Device)
@@ -1175,3 +1210,11 @@ $timer.Stop()
 $script:Notify.Visible = $false
 try { Remove-Item -LiteralPath (Join-Path $script:HomeDir 'tray.pid') -Force -ErrorAction SilentlyContinue } catch { }
 try { $mutex.ReleaseMutex() } catch { }
+if ($script:Relaunch) {
+    $ps = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    try {
+        Start-Process -FilePath $ps -WindowStyle Hidden -ArgumentList @(
+            '-NoProfile', '-STA', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath
+        ) | Out-Null
+    } catch { }
+}

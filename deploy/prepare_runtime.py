@@ -127,7 +127,7 @@ def _refresh_pupil_wifi_helper() -> None:
                 text = skill_live.read_text(encoding="utf-8")
             except OSError:
                 text = ""
-            if "Pupils do not have FRID-nett" in text or "under the composer" in text or "if they can see **FRID-nett**" not in text:
+            if "Pupils do not have FRID-nett" in text or "under the composer" in text or "if they can see **FRID-nett**" not in text or "a pupil has none" in text:
                 shutil.copy2(skill_tmpl, skill_live)
                 print("prepare_runtime: wifi skill updated so pupils get FRID-nett")
     student_live = HOME / "workspace" / "STUDENT.md"
@@ -142,7 +142,7 @@ def _refresh_pupil_wifi_helper() -> None:
         text = student_live.read_text(encoding="utf-8")
     except OSError:
         return
-    if "press **FRID-nett**" in text and "Last ned sertifikat" not in text and "**Skaff printer**" in text and "ZorkHelper.command" in text and "they see **FRID-nett**" in text:
+    if "press **FRID-nett**" in text and "Last ned sertifikat" not in text and "**Skaff printer**" in text and "ZorkHelper.command" in text and "they see **FRID-nett**" in text and "Name the button and stop" in text and "Their PC is their own" in text:
         return
     shutil.copy2(student_tmpl, student_live)
     print("prepare_runtime: STUDENT.md wifi helper instructions updated from template")

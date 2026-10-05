@@ -10,6 +10,18 @@ param(
     [string]$DoneFile = ''
 )
 
+# Trays from before October start this script in a visible console, and a pupil
+# who sees it may close it mid-install. This file is fetched fresh for every job,
+# so hiding the window here reaches those PCs before their tray is replaced.
+try {
+    Add-Type -Namespace ZorkSelf -Name Win -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+'@
+    $selfHwnd = [ZorkSelf.Win]::GetConsoleWindow()
+    if ($selfHwnd -ne [IntPtr]::Zero) { [void][ZorkSelf.Win]::ShowWindow($selfHwnd, 0) }
+} catch { }
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -64,29 +76,49 @@ function Write-LocalProgress {
     } catch { }
 }
 
+function Get-ZorkSha256 {
+    param([string]$Path)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($Path)))
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 function Update-HelperTray {
     $homeDir = Join-Path $env:LOCALAPPDATA 'ZorkHelper'
     if (-not (Test-Path -LiteralPath $homeDir)) { return }
     $base = $BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId
     $assets = @(
-        @{ key = 'tray'; path = '/tray'; dest = (Join-Path $homeDir 'zork-helper-tray.ps1'); mirror = $null },
-        @{ key = 'open'; path = '/open'; dest = (Join-Path $homeDir 'zork-helper-open.ps1'); mirror = $null },
-        @{ key = 'install'; path = '/install-script'; dest = (Join-Path $homeDir 'zork-helper-install.ps1'); mirror = (Join-Path $homeDir 'install-script.ps1') }
+        @{ key = 'tray'; path = '/tray'; dest = (Join-Path $homeDir 'zork-helper-tray.ps1'); mirror = $null; min = 2000 },
+        @{ key = 'open'; path = '/open'; dest = (Join-Path $homeDir 'zork-helper-open.ps1'); mirror = $null; min = 500 },
+        @{ key = 'install'; path = '/install-script'; dest = (Join-Path $homeDir 'zork-helper-install.ps1'); mirror = (Join-Path $homeDir 'install-script.ps1'); min = 2000 }
     )
     foreach ($asset in $assets) {
-        $tmp = Join-Path $env:TEMP ('zork-' + [string]$asset.key + '-' + $SessionId + '.ps1')
+        $tmp = Join-Path $env:TEMP ('zork-update-' + [string]$asset.key + '-' + $SessionId + '.ps1')
         try {
             $wc = New-Object System.Net.WebClient
             $wc.Encoding = [Text.Encoding]::UTF8
             $wc.Headers.Add('X-Helper-Secret', $Secret)
             $wc.DownloadFile($base + [string]$asset.path, $tmp)
-            if ((Test-Path -LiteralPath $tmp) -and ((Get-Item -LiteralPath $tmp).Length -gt 2000)) {
-                Copy-Item -LiteralPath $tmp -Destination ([string]$asset.dest) -Force
+            if ((Test-Path -LiteralPath $tmp) -and ((Get-Item -LiteralPath $tmp).Length -gt [int]$asset.min)) {
+                $dest = [string]$asset.dest
+                # Rewriting an unchanged tray would make it restart after every job.
+                $same = $false
+                if (Test-Path -LiteralPath $dest) {
+                    $same = ((Get-ZorkSha256 $tmp) -eq (Get-ZorkSha256 $dest))
+                }
+                if (-not $same) {
+                    Copy-Item -LiteralPath $tmp -Destination $dest -Force
+                    if ($asset.key -eq 'tray') { $script:TrayReplaced = $true }
+                }
                 if ($asset.mirror) {
                     Copy-Item -LiteralPath $tmp -Destination ([string]$asset.mirror) -Force
                 }
             }
         } catch { }
+        try { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue } catch { }
     }
 }
 
@@ -1282,56 +1314,32 @@ function Stop-ZorkScanJobs {
     } catch { }
 }
 
-function Show-PrinterWindow {
-    try { $Host.UI.RawUI.WindowTitle = 'Zork Helper - Skrivernedlasting' } catch { }
-    try {
-        if (-not ('ZorkPrinterWin' -as [type])) {
-            Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public static class ZorkPrinterWin {
-    [DllImport("kernel32.dll")] public static extern bool AllocConsole();
-    [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
-    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-}
-"@
+function Test-PrinterInstalled {
+    $roots = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    foreach ($row in @(Get-ItemProperty -Path $roots -ErrorAction SilentlyContinue)) {
+        $prop = $row.PSObject.Properties['DisplayName']
+        if ($null -eq $prop) { continue }
+        $name = [string]$prop.Value
+        foreach ($want in @('YSoft SafeQ', 'SafeQ FlexiSpooler', 'Viken Print', 'FlexiSpooler')) {
+            if ($name -like ('*' + $want + '*')) { return $true }
         }
-        $hwnd = [ZorkPrinterWin]::GetConsoleWindow()
-        if ($hwnd -eq [IntPtr]::Zero) {
-            [void][ZorkPrinterWin]::AllocConsole()
-            $hwnd = [ZorkPrinterWin]::GetConsoleWindow()
-        }
-        if ($hwnd -ne [IntPtr]::Zero) {
-            [void][ZorkPrinterWin]::ShowWindow($hwnd, 9)
-            [void][ZorkPrinterWin]::ShowWindow($hwnd, 5)
-            [void][ZorkPrinterWin]::SetForegroundWindow($hwnd)
-        }
-    } catch { }
-    Write-Host ''
-    Write-Host '  Zork Helper'
-    Write-Host '  Laster ned skoleskriveren. Bli i dette vinduet til det er ferdig.'
-    Write-Host ''
-}
-
-function Show-PrinterBar {
-    param([int]$Percent, [string]$Text)
-    $pct = [Math]::Max(0, [Math]::Min(100, $Percent))
-    $fill = [int][Math]::Floor($pct / 5)
-    if ($fill -gt 20) { $fill = 20 }
-    $bar = ('#' * $fill) + ('-' * (20 - $fill))
-    $line = '  [{0}] {1,3}%  {2}' -f $bar, $pct, $Text
-    if ($line.Length -gt 79) { $line = $line.Substring(0, 79) }
-    try { $Host.UI.RawUI.WindowTitle = ('Zork Helper - Skriver {0}%' -f $pct) } catch { }
-    try { Write-Progress -Activity 'Zork Helper' -Status $Text -PercentComplete $pct } catch { }
-    Write-Host ("`r" + $line.PadRight(79)) -NoNewline
+    }
+    return (Test-Path -LiteralPath 'C:\SafeQ6')
 }
 
 function Install-Printer {
     Stop-ZorkScanJobs
-    Show-PrinterWindow
+    # Running the MSI over an existing install makes Windows repair it, and that
+    # repair fails with 1603 — so a PC that already has it would report failure.
+    if (Test-PrinterInstalled) {
+        Note 'Printer er allerede installert pa denne PC-en.'
+        $script:PrinterOk = $true
+        return
+    }
     Note 'Laster ned printer...'
-    Show-PrinterBar 0 'Laster ned printer...'
     $msi = Join-Path $env:TEMP ('zork-printer-' + $SessionId + '.msi')
     $url = ($BaseUrl.TrimEnd('/') + '/api/helper/' + $SessionId + '/tool/printer')
     $req = [Net.HttpWebRequest]::Create($url)
@@ -1354,17 +1362,12 @@ function Install-Printer {
         $buf = New-Object byte[] 65536
         $got = [int64]0
         $lastNote = 0
-        $lastUi = -1
         while (($n = $src.Read($buf, 0, $buf.Length)) -gt 0) {
             $fs.Write($buf, 0, $n)
             $got += $n
             if ($total -gt 0) {
                 $pct = [int](($got * 100) / $total)
                 if ($pct -gt 100) { $pct = 100 }
-                if ($pct -ne $lastUi) {
-                    Show-PrinterBar $pct 'Laster ned printer...'
-                    $lastUi = $pct
-                }
                 if ($pct -ge 1 -and $lastNote -eq 0) {
                     Note 'Laster ned printer... 1%'
                     $lastNote = 1
@@ -1378,7 +1381,6 @@ function Install-Printer {
                 $mb = [int]($got / 1048576)
                 if ($mb -ge ($lastNote + 5)) {
                     $lastNote = $mb - ($mb % 5)
-                    Show-PrinterBar 0 ('Laster ned printer... ' + $lastNote + ' MB')
                     Note ('Laster ned printer... ' + $lastNote + ' MB')
                 }
             }
@@ -1392,14 +1394,10 @@ function Install-Printer {
         throw 'Printer-filen mangler pa serveren.'
     }
     Note 'Laster ned printer... 100%'
-    Show-PrinterBar 100 'Laster ferdig.'
-    try { Write-Progress -Activity 'Zork Helper' -Completed } catch { }
-    Write-Host ''
-    Write-Host '  Laster ferdig. Installerer...'
     try { Unblock-File -LiteralPath $msi -ErrorAction SilentlyContinue } catch { }
-    Note 'Installerer printer. Godkjenn i Windows hvis du blir spurt.'
-    try { $Host.UI.RawUI.WindowTitle = 'Zork Helper - Installerer skriver' } catch { }
-    $p = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/i', $msi, '/qb', '/norestart') -Wait -PassThru
+    Note 'Installerer printer...'
+    # Silent: this process is already elevated, so the MSI needs no prompt.
+    $p = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/i', $msi, '/qn', '/norestart') -Wait -PassThru
     if ($null -eq $p) { throw 'Klarte ikke a starte printer-installasjonen.' }
     $code = 0
     try { $code = [int]$p.ExitCode } catch { $code = 0 }
@@ -1408,8 +1406,6 @@ function Install-Printer {
         return
     }
     Note 'Printer er ferdig.'
-    try { $Host.UI.RawUI.WindowTitle = 'Zork Helper - Skriver ferdig' } catch { }
-    Write-Host '  Ferdig.'
     $script:PrinterOk = $true
 }
 

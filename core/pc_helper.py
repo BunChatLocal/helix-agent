@@ -14,6 +14,7 @@ caller-supplied commands.
 from __future__ import annotations
 
 import base64
+import hashlib
 import re
 import secrets
 import threading
@@ -118,6 +119,7 @@ def create_session(*, owner: str, base_url: str) -> dict:
             "expires": now + SESSION_TTL_SEC,
             "status": "waiting",
             "activity": "",
+            "percent": None,
             "log": [],
             "result": None,
             "error": "",
@@ -151,6 +153,7 @@ def public_view(row: dict) -> dict:
         "id": row.get("id") or "",
         "status": row.get("status") or "waiting",
         "activity": row.get("activity") or "",
+        "percent": row.get("percent"),
         "created": row.get("created") or 0,
         "expires": row.get("expires") or 0,
         "log": list(row.get("log") or []),
@@ -202,7 +205,17 @@ _CLEAR_ACTIVITY_LOG = frozenset({
 })
 
 
-def add_progress(sid: str, secret: str, text: str, activity=None) -> dict | None:
+def _clean_percent(raw) -> int | None:
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        return max(0, min(100, int(raw)))
+    except (TypeError, ValueError):
+        return None
+
+
+def add_progress(sid: str, secret: str, text: str, activity=None, percent=None) -> dict | None:
+    """``percent`` belongs to this step only; a step without one clears the bar."""
     with _LOCK:
         row = _get_locked(sid)
         if not row or not secrets.compare_digest(row["secret"], secret):
@@ -210,6 +223,7 @@ def add_progress(sid: str, secret: str, text: str, activity=None) -> dict | None
         if row["status"] not in ("done", "error"):
             row["status"] = "scanning"
         _append_log_locked(row, text)
+        row["percent"] = _clean_percent(percent)
         if activity is not None:
             act = str(activity).strip().lower()
             if act in ("", "scanning", "installing"):
@@ -260,6 +274,7 @@ def set_result(sid: str, secret: str, data: dict) -> dict | None:
         row["result"] = payload
         row["status"] = "done"
         row["activity"] = ""
+        row["percent"] = None
         row["error"] = ""
         _append_log_locked(row, "Sjekken er ferdig.")
         return dict(row)
@@ -272,6 +287,7 @@ def set_error(sid: str, secret: str, message: str) -> dict | None:
             return None
         row["status"] = "error"
         row["activity"] = ""
+        row["percent"] = None
         row["error"] = (message or "Helper failed").strip()[:300]
         _append_log_locked(row, row["error"])
         return dict(row)
@@ -295,6 +311,12 @@ def scan_mac_script() -> str:
 def tray_script() -> str:
     text = TRAY_SCRIPT_PATH.read_text(encoding="utf-8-sig")
     return _with_bom(text)
+
+
+def tray_version() -> str:
+    """Hash of the tray exactly as served. The tray hashes its own file on disk
+    the same way, so the two match only when the PC runs this build's tray."""
+    return hashlib.sha256(tray_script().encode("utf-8")).hexdigest()[:16]
 
 
 def open_script() -> str:
@@ -365,7 +387,12 @@ def launcher_mac(base_url: str, sid: str, secret: str) -> str:
 
 
 def launcher_cmd(base_url: str, sid: str, secret: str, job_kind: str = "scan", job_items=None) -> str:
-    """Tiny cmd: open a progress window, then leave the tray by the clock."""
+    """Tiny cmd: hand the bootstrap to a hidden PowerShell and close at once.
+
+    Progress shows in the chat, not in a console. The work runs in a new
+    process started hidden because ``-WindowStyle Hidden`` on the cmd's own
+    console does not hide it when Windows Terminal is the default console.
+    """
     if not ID_RE.match(sid) or not SECRET_RE.match(secret):
         raise ValueError("invalid session")
     kind = "install" if str(job_kind or "").strip().lower() == "install" else "scan"
@@ -382,13 +409,12 @@ def launcher_cmd(base_url: str, sid: str, secret: str, job_kind: str = "scan", j
     encoded = _encoded_ps(bootstrap)
     return (
         "@echo off\r\n"
-        "rem Zork Helper tray launcher v2\r\n"
-        "title Zork Helper\r\n"
-        "echo Zork Helper\r\n"
-        "powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand "
+        "rem Zork Helper tray launcher v3\r\n"
+        "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command "
+        "\"Start-Process -FilePath powershell.exe -WindowStyle Hidden -ArgumentList "
+        "'-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand "
         + encoded
-        + "\r\n"
-        "if errorlevel 1 pause\r\n"
+        + "'\"\r\n"
     )
 
 
