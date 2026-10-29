@@ -1,0 +1,8 @@
+{
+  "lastCheck": "2026-10-29T06:06:00Z",
+  "checksConfigured": false,
+  "emailConfigured": false,
+  "calendarConfigured": false,
+  "remindersConfigured": false,
+  "note": "Heartbeat enabled but requires mail/calendar API setup to function. Nightly check completed 2026-10-29 — no checks configured."
+}

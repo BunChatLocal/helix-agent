@@ -1,0 +1,2 @@
+{"ts": 1791349355.773766, "role": "user", "content": "Sak LOAD-S02-47. Elev far ikke pa FRID-wifi, telefonen spor om passord. Hva er den vanlige arsaken? Svar kort."}
+{"ts": 1791349355.777815, "role": "assistant", "content": "Telefonen mangler sertifikat. Wifi-nettverket **FRID** krever et sertifikat \u2014 det holder ikke \u00e5 skrive inn passord. Eleven m\u00e5 koble til **FRID-iot** (passord: `friddeploy`) og hente sertifikatet fra <https://onboard.frid-iks.no/> f\u00f8rst."}

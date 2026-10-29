@@ -1,0 +1,87 @@
+[
+  {
+    "id": "fbaefda6-6774-4920-9b3c-36f15675baa9",
+    "ts": 1787572725.7820306,
+    "updated": 1787651648.072218,
+    "kind": "issue",
+    "subject": "AI klarer ikke svare på Powerpoint spørsmål",
+    "description": "får error som ai ikke kan svare på",
+    "status": "refused",
+    "name": "Testmoderator",
+    "email": "testmoderator@frid-iks.no",
+    "role": "moderator",
+    "replies": [
+      {
+        "id": "dd781500-35e1-4d01-86ac-1964ed126a80",
+        "ts": 1787572744.313576,
+        "text": "kan du sende en screenshot av error?",
+        "name": "Administrator",
+        "email": "",
+        "role": "operator"
+      },
+      {
+        "id": "6d851a0d-a14c-4261-a6be-fd28e60f8af9",
+        "ts": 1787573207.8321812,
+        "text": "nei, det går ikke. kan du fikse det?",
+        "name": "Testmoderator",
+        "email": "testmoderator@frid-iks.no",
+        "role": "moderator"
+      },
+      {
+        "id": "f60b2450-14e7-488a-bb0c-0ecf1ea1f3f8",
+        "ts": 1787574531.5480976,
+        "text": "det skal funke nå.",
+        "images": [],
+        "name": "Administrator",
+        "email": "",
+        "role": "operator"
+      },
+      {
+        "id": "99964e5b-9ad1-41b3-86fa-e9cc6176d3a0",
+        "ts": 1787575486.2112877,
+        "text": "her",
+        "images": [
+          "c24b950917754cf7adb8e2109a174dbe.png"
+        ],
+        "name": "Testmoderator",
+        "email": "testmoderator@frid-iks.no",
+        "role": "moderator"
+      },
+      {
+        "id": "410630de-b05a-43a5-9b0e-181ec0ee17df",
+        "ts": 1787651648.072218,
+        "text": "kunnskap til ai bot er ikke fokus på dette tidspunktet, så vi avslutter henvendelsen.",
+        "images": [],
+        "name": "Jorgenthin",
+        "email": "jorgenthin@frid-iks.no",
+        "role": "admin"
+      }
+    ],
+    "reporter_seen": 1787651648.1057553
+  },
+  {
+    "id": "c75be8da-e185-4346-9e5d-9b854d19bb03",
+    "ts": 1787578293.481187,
+    "updated": 1787648097.1972463,
+    "kind": "issue",
+    "subject": "test",
+    "description": "test",
+    "status": "finished",
+    "name": "Testmoderator",
+    "email": "testmoderator@frid-iks.no",
+    "role": "moderator",
+    "images": [],
+    "replies": [
+      {
+        "id": "7d8e906d-02c0-45c8-9b34-41861ec3ee23",
+        "ts": 1787648093.9071157,
+        "text": "funker",
+        "images": [],
+        "name": "Jorgenthin",
+        "email": "jorgenthin@frid-iks.no",
+        "role": "admin"
+      }
+    ],
+    "reporter_seen": 1787651545.471432
+  }
+]

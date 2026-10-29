@@ -16,6 +16,7 @@ agent-transcripts
 node_modules
 .env
 docker-seed/
+runtime-home/
 dist/
 build/
 # 136 MB printer MSI is already on the Railway volume. Uploading it with

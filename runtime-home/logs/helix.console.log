@@ -1,0 +1,760 @@
+2026-10-27 06:00:14,673 [INFO] helix.main: Helix starting up...
+2026-10-27 06:01:13,953 [INFO] helix.session: Session database backed up to sessions-20261027.db
+2026-10-27 06:01:13,983 [INFO] helix.main: Session manager started (agent: helix)
+2026-10-27 06:01:14,044 [WARNING] helix.main: Dropped 50 cached web model session(s) so operator identity cannot ride in on --resume
+2026-10-27 06:01:14,045 [INFO] helix.main: Agent loop initialized (default model: claude-sonnet-4-6)
+2026-10-27 06:01:14,089 [INFO] helix.queue: Task queue started
+2026-10-27 06:01:14,090 [INFO] helix.main: Task queue started
+2026-10-27 06:01:22,018 [INFO] helix.main: Web admin UI starting on http://127.0.0.1:18791
+2026-10-27 06:01:22,020 [INFO] helix.main: Discord disabled (set discord.enabled=true in config to enable)
+2026-10-27 06:01:22,021 [INFO] helix.main: Telegram disabled (set telegram.enabled=true in config to enable)
+2026-10-27 06:01:22,028 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-10-27 06:01:22,451 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-10-27 06:01:22,452 [INFO] helix.main: Retention: conversations purged daily at 03:30 — 30 days, pupils 5
+2026-10-27 06:01:22,457 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-10-27 06:01:22,458 [INFO] helix.main: Scheduled cron: morning load (0 7 * * *)
+2026-10-27 06:01:22,463 [INFO] apscheduler.scheduler: Added job "_run_heartbeat_job" to job store "default"
+2026-10-27 06:01:22,464 [INFO] apscheduler.scheduler: Added job "_run_retention_job" to job store "default"
+2026-10-27 06:01:22,464 [INFO] apscheduler.scheduler: Added job "_execute_cron" to job store "default"
+2026-10-27 06:01:22,465 [INFO] apscheduler.scheduler: Scheduler started
+2026-10-27 06:01:22,466 [INFO] helix.main: Scheduler started (1 user cron(s) + heartbeat)
+2026-10-27 06:01:22,467 [INFO] helix.main: Helix fully started.
+2026-10-27 06:01:22,468 [INFO] helix.main:   Admin UI: http://127.0.0.1:18791
+2026-10-27 06:01:23,352 [INFO] helix.session: Retention: purged 150 session(s) — 36 other, 114 pupil
+2026-10-27 06:01:23,352 [INFO] helix.main: Retention job removed 150 session(s)
+2026-10-27 06:06:22,029 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 06:36:22 CET)" (scheduled at 2026-10-27 06:06:22.022615+01:00)
+2026-10-27 06:06:22,469 [INFO] helix.cli_backend: Starting new Claude session: fbe33a26-71f2-474e-97cb-096814ba23de (staff)
+2026-10-27 06:06:40,078 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=2 duration_ms=7887 api_ms=7451 in=18 cache_read=13294 out=635
+2026-10-27 06:06:40,154 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 06:36:22 CET)" executed successfully
+2026-10-27 06:36:22,033 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 07:06:22 CET)" (scheduled at 2026-10-27 06:36:22.022615+01:00)
+2026-10-27 06:36:34,888 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=5068 api_ms=12408 in=28 cache_read=27198 out=1022
+2026-10-27 06:36:34,893 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 07:06:22 CET)" executed successfully
+2026-10-27 07:00:00,006 [INFO] apscheduler.executors.default: Running job "_execute_cron (trigger: cron[month='*', day='*', day_of_week='*', hour='7', minute='0'], next run at: 2026-10-28 07:00:00 CET)" (scheduled at 2026-10-27 07:00:00+01:00)
+2026-10-27 07:00:00,106 [INFO] helix.web: Running cron job: morning load (e5700f84)
+2026-10-27 07:00:00,112 [INFO] helix.web: Cron [morning load] is a load probe (50 users)
+2026-10-27 07:00:01,361 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n0@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,485 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n1@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,501 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n2@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,516 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n3@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,532 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n4@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,535 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n5@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,539 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n6@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,564 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n7@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,570 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n8@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,573 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n9@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,577 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n10@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,596 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n11@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,599 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n12@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,603 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n13@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,607 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n14@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,612 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n15@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,615 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n16@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,618 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n17@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,623 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n18@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,626 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n19@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,629 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n20@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,632 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n21@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,636 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n22@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,639 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n23@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,642 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n24@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,658 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n25@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,664 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n26@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,668 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n27@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,671 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n28@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,675 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n29@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,680 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n30@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,683 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n31@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,686 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n32@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,689 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n33@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,694 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n34@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,721 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n35@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,728 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n36@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,752 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n37@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,758 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n38@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,783 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n39@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,788 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n40@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,792 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n41@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,796 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n42@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,799 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n43@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,802 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n44@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,805 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n45@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,809 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n46@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,815 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n47@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,818 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n48@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:01,821 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n49@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-27 07:00:05,263 [INFO] helix.cli_backend: Starting new Claude session: ca881461-51f9-42ab-82a6-c2b199868c49 (student)
+2026-10-27 07:00:06,605 [INFO] helix.cli_backend: Starting new Claude session: 8269d7ba-2cda-4a58-9b87-5995c452e935 (student)
+2026-10-27 07:00:08,085 [INFO] helix.cli_backend: Starting new Claude session: c528d03d-08bd-4ce1-9769-c0f97541e3ad (student)
+2026-10-27 07:00:09,867 [INFO] helix.cli_backend: Starting new Claude session: 5a35bed6-dd78-421d-8398-a28197abedcc (student)
+2026-10-27 07:00:11,767 [INFO] helix.cli_backend: Starting new Claude session: 82b6cab1-d195-4d94-b169-6fcc1ee8d75f (student)
+2026-10-27 07:00:13,837 [INFO] helix.cli_backend: Starting new Claude session: 496ea84a-fd23-4187-b6a3-7118034e781d (student)
+2026-10-27 07:00:15,993 [INFO] helix.cli_backend: Starting new Claude session: 21c17982-f20a-4f17-981d-9c380be333ca (staff)
+2026-10-27 07:00:18,167 [INFO] helix.cli_backend: Starting new Claude session: eb43ca16-0654-4627-a689-dbf8a1775a12 (staff)
+2026-10-27 07:00:20,659 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=6822 api_ms=6635 in=10 cache_read=0 out=610
+2026-10-27 07:00:20,679 [INFO] helix.cli_backend: Starting new Claude session: 7ea3fc49-87a0-4b82-808f-0aae869f76e3 (student)
+2026-10-27 07:00:23,180 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7149 api_ms=6906 in=10 cache_read=0 out=406
+2026-10-27 07:00:23,202 [INFO] helix.cli_backend: Starting new Claude session: 780c5a0e-e278-4596-8d1f-69cd16517250 (student)
+2026-10-27 07:00:25,684 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=5769 api_ms=5531 in=10 cache_read=0 out=329
+2026-10-27 07:00:25,716 [INFO] helix.cli_backend: Starting new Claude session: 2bfc92c3-577b-485b-86aa-a8baf2b3ea08 (student)
+2026-10-27 07:00:27,656 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8093 api_ms=7851 in=10 cache_read=0 out=502
+2026-10-27 07:00:27,693 [INFO] helix.cli_backend: Starting new Claude session: 642c52b9-2402-4cd8-ab4f-f0b15bf067f4 (student)
+2026-10-27 07:00:30,177 [INFO] helix.cli_backend: Starting new Claude session: bd9367cd-efdb-4f26-927b-1fa74d7811ed (student)
+2026-10-27 07:00:32,485 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=9571 api_ms=9352 in=10 cache_read=0 out=288
+2026-10-27 07:00:32,563 [INFO] helix.cli_backend: Starting new Claude session: 05f67c69-ba34-442c-9aa8-6d07f08d92a0 (student)
+2026-10-27 07:00:35,144 [INFO] helix.cli_backend: Starting new Claude session: d46c109c-6cd0-4d8d-823c-c2a951e62492 (staff)
+2026-10-27 07:00:37,703 [INFO] helix.cli_backend: Starting new Claude session: 68dce6c6-a5c7-478d-8167-678c5d9ea56d (staff)
+2026-10-27 07:00:39,898 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=6782 api_ms=6598 in=3 cache_read=0 out=243
+2026-10-27 07:00:39,909 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4266 api_ms=4038 in=3 cache_read=2272 out=84
+2026-10-27 07:00:40,023 [INFO] helix.cli_backend: Starting new Claude session: aad76696-4644-4bc2-a166-fd32be9614d4 (student)
+2026-10-27 07:00:42,264 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11942 api_ms=7223 in=10 cache_read=0 out=423
+2026-10-27 07:00:42,275 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8407 api_ms=8200 in=10 cache_read=0 out=465
+2026-10-27 07:00:42,303 [INFO] helix.cli_backend: Starting new Claude session: 3d5df4fc-af9d-46f8-b14d-9c3355b3e05b (student)
+2026-10-27 07:00:44,465 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=12256 api_ms=12074 in=10 cache_read=0 out=527
+2026-10-27 07:00:44,537 [INFO] helix.cli_backend: Starting new Claude session: 14956977-9738-4c2b-9b6c-ee8628448012 (student)
+2026-10-27 07:00:47,050 [INFO] helix.cli_backend: Starting new Claude session: dafdbdff-fec8-4540-9e01-90b90d71a58a (student)
+2026-10-27 07:00:49,320 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=34866 api_ms=34740 in=10 cache_read=0 out=3542
+2026-10-27 07:00:49,330 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7919 api_ms=7683 in=10 cache_read=0 out=379
+2026-10-27 07:00:49,373 [INFO] helix.cli_backend: Starting new Claude session: 3b7c0231-b3cc-4f90-babb-40da69145145 (student)
+2026-10-27 07:00:51,852 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=14449 api_ms=6937 in=10 cache_read=0 out=348
+2026-10-27 07:00:51,910 [INFO] helix.cli_backend: Starting new Claude session: f54620af-6a49-4cdb-a440-3ab20f58207b (student)
+2026-10-27 07:00:54,218 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=14343 api_ms=7195 in=10 cache_read=0 out=479
+2026-10-27 07:00:54,258 [INFO] helix.cli_backend: Starting new Claude session: 88c4e245-7e2b-4d1a-86fb-dd6ff5ab59d8 (staff)
+2026-10-27 07:00:56,454 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4477 api_ms=4291 in=3 cache_read=2272 out=198
+2026-10-27 07:00:56,501 [INFO] helix.cli_backend: Starting new Claude session: 08e21379-f699-4e0b-b58a-af7becb65059 (staff)
+2026-10-27 07:00:58,971 [INFO] helix.cli_backend: Starting new Claude session: a50bd67b-30b0-43a6-b71a-cd396edd7970 (student)
+2026-10-27 07:01:01,065 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=5816 api_ms=5616 in=10 cache_read=0 out=362
+2026-10-27 07:01:01,153 [INFO] helix.cli_backend: Starting new Claude session: 6156e5b5-110e-4a01-b895-9e8ff297255c (student)
+2026-10-27 07:01:03,641 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7406 api_ms=4793 in=10 cache_read=0 out=388
+2026-10-27 07:01:03,648 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=9447 api_ms=9194 in=3 cache_read=2272 out=193
+2026-10-27 07:01:03,666 [INFO] helix.cli_backend: Starting new Claude session: b1a2d497-7be1-42a6-820d-4c032aa85c1f (student)
+2026-10-27 07:01:05,789 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=10109 api_ms=9910 in=10 cache_read=0 out=643
+2026-10-27 07:01:05,813 [INFO] helix.cli_backend: Starting new Claude session: 57f162c2-2813-4d6d-b157-8f88957e1168 (student)
+2026-10-27 07:01:08,326 [INFO] helix.cli_backend: Starting new Claude session: 5e5899af-3f59-4c37-a3ea-05f9a6d70b89 (student)
+2026-10-27 07:01:11,003 [INFO] helix.cli_backend: Starting new Claude session: cf08975c-fae4-4655-b8b6-1aad350f2d7b (student)
+2026-10-27 07:01:13,383 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=9661 api_ms=7341 in=10 cache_read=0 out=533
+2026-10-27 07:01:13,487 [INFO] helix.cli_backend: Starting new Claude session: 94a32f95-1c22-422d-a8e5-9e2aa7077db7 (staff)
+2026-10-27 07:01:16,082 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=10081 api_ms=7353 in=10 cache_read=0 out=411
+2026-10-27 07:01:16,089 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4914 api_ms=4706 in=3 cache_read=2272 out=195
+2026-10-27 07:01:16,134 [INFO] helix.cli_backend: Starting new Claude session: fc86c715-1a86-4822-8851-87b3772e2937 (staff)
+2026-10-27 07:01:18,209 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=26444 api_ms=26234 in=10 cache_read=0 out=2653
+2026-10-27 07:01:18,219 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4536 api_ms=4359 in=3 cache_read=2272 out=121
+2026-10-27 07:01:18,237 [INFO] helix.cli_backend: Starting new Claude session: 7177063b-6712-4b1b-ad4c-1c41c43d7e70 (student)
+2026-10-27 07:01:20,593 [INFO] helix.cli_backend: Starting new Claude session: 103545b0-f1ac-41cc-8129-558c24b35a28 (student)
+2026-10-27 07:01:23,002 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8445 api_ms=8227 in=10 cache_read=0 out=478
+2026-10-27 07:01:23,023 [INFO] helix.cli_backend: Starting new Claude session: 3b411b44-7783-4ea9-8324-d1dcd981ad20 (student)
+2026-10-27 07:01:25,224 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7359 api_ms=4373 in=10 cache_read=0 out=327
+2026-10-27 07:01:25,231 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8195 api_ms=7996 in=10 cache_read=0 out=488
+2026-10-27 07:01:25,236 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=14737 api_ms=6810 in=10 cache_read=0 out=545
+2026-10-27 07:01:25,258 [INFO] helix.cli_backend: Starting new Claude session: 61ad1c58-966e-4a1d-b19e-4fe478886865 (student)
+2026-10-27 07:01:27,523 [INFO] helix.cli_backend: Starting new Claude session: f8388605-62df-4f84-88ff-496f53158ed4 (student)
+2026-10-27 07:01:30,060 [INFO] helix.cli_backend: Starting new Claude session: f0c26858-50b2-40c0-8374-6be870d38ce2 (student)
+2026-10-27 07:01:32,674 [INFO] helix.cli_backend: Starting new Claude session: aa8af406-7917-4b23-903d-8930250a7fe9 (staff)
+2026-10-27 07:01:35,550 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=9966 api_ms=7201 in=10 cache_read=0 out=567
+2026-10-27 07:01:35,580 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=5104 api_ms=4914 in=3 cache_read=2272 out=181
+2026-10-27 07:01:35,640 [INFO] helix.cli_backend: Starting new Claude session: b33e849e-8dcf-406d-a6e2-1a827a8b4fd8 (staff)
+2026-10-27 07:01:38,059 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4481 api_ms=4265 in=3 cache_read=2272 out=120
+2026-10-27 07:01:38,204 [INFO] helix.cli_backend: Starting new Claude session: ad808846-a1f6-4d2e-b774-00188e9e4e77 (student)
+2026-10-27 07:01:40,819 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8927 api_ms=8730 in=10 cache_read=0 out=443
+2026-10-27 07:01:40,828 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=12600 api_ms=7851 in=10 cache_read=0 out=451
+2026-10-27 07:01:40,852 [INFO] helix.cli_backend: Starting new Claude session: 9e6c19b4-44c4-4e35-90d5-167e004d6a55 (student)
+2026-10-27 07:01:43,416 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=12940 api_ms=8024 in=10 cache_read=0 out=674
+2026-10-27 07:01:43,441 [INFO] helix.cli_backend: Starting new Claude session: 39b86603-f413-4890-995d-6eef3277487c (student)
+2026-10-27 07:01:45,753 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=9303 api_ms=9026 in=10 cache_read=0 out=610
+2026-10-27 07:01:45,781 [INFO] helix.cli_backend: Starting new Claude session: f994c1d7-f966-4f49-a81e-4cb2219edecb (student)
+2026-10-27 07:01:48,105 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8229 api_ms=5449 in=10 cache_read=0 out=322
+2026-10-27 07:01:48,130 [INFO] helix.cli_backend: Starting new Claude session: 75512e14-5d85-4ed5-92b0-f092d02bb895 (student)
+2026-10-27 07:01:50,791 [INFO] helix.cli_backend: Starting new Claude session: b8797cfd-005e-49cc-bfda-efbb1b512064 (student)
+2026-10-27 07:01:53,243 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8078 api_ms=5311 in=10 cache_read=0 out=428
+2026-10-27 07:01:53,400 [INFO] helix.cli_backend: Starting new Claude session: a7ad469d-16f3-43e2-b34c-54297865e463 (staff)
+2026-10-27 07:01:55,680 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4636 api_ms=4395 in=3 cache_read=2272 out=178
+2026-10-27 07:01:55,748 [INFO] helix.cli_backend: Starting new Claude session: dd53d3aa-f67e-4563-b34b-a4a306bec85c (staff)
+2026-10-27 07:01:57,898 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4327 api_ms=4115 in=3 cache_read=2272 out=116
+2026-10-27 07:01:57,948 [INFO] helix.cli_backend: Starting new Claude session: 94bc7bd9-7a52-4554-891f-f2a5db6f8127 (student)
+2026-10-27 07:02:00,166 [INFO] helix.cli_backend: Starting new Claude session: 006f06a8-b02d-48b9-b2e4-227757a4ae26 (student)
+2026-10-27 07:02:02,690 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=9818 api_ms=9596 in=10 cache_read=0 out=467
+2026-10-27 07:02:02,713 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=47679 api_ms=44689 in=10 cache_read=0 out=5397
+2026-10-27 07:02:02,744 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7945 api_ms=7785 in=10 cache_read=0 out=533
+2026-10-27 07:02:03,030 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=16971 api_ms=9158 in=10 cache_read=0 out=866
+2026-10-27 07:02:03,479 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n2@test.no: 'Sak LOAD-P03-02. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-27 07:02:03,764 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p06-n5@test.no: 'Sak LOAD-P06-05. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.'
+2026-10-27 07:02:03,775 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=12852 api_ms=5794 in=10 cache_read=0 out=426
+2026-10-27 07:02:04,074 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n10@test.no: 'Sak LOAD-P03-10. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-27 07:02:04,792 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n18@test.no: 'Sak LOAD-P03-18. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-27 07:02:05,773 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n26@test.no: 'Sak LOAD-P03-26. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-27 07:02:06,264 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n34@test.no: 'Sak LOAD-P03-34. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-27 07:02:06,770 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=6645 api_ms=3810 in=10 cache_read=0 out=256
+2026-10-27 07:02:06,833 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n42@test.no: 'Sak LOAD-P03-42. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-27 07:02:07,186 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p06-n45@test.no: 'Sak LOAD-P06-45. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.'
+2026-10-27 07:02:11,189 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=5116 api_ms=4971 in=3 cache_read=2272 out=221
+2026-10-27 07:02:11,711 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=3787 api_ms=3615 in=3 cache_read=2272 out=126
+2026-10-27 07:02:11,745 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7095 api_ms=6880 in=10 cache_read=0 out=588
+2026-10-27 07:02:13,893 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=6427 api_ms=4574 in=10 cache_read=0 out=380
+2026-10-27 07:02:19,420 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=35896 api_ms=28097 in=10 cache_read=0 out=3272
+2026-10-27 07:02:19,519 [INFO] helix.web: Cron [morning load] probe exit 0:     129.4s   610c  -
+ok   LOAD-S02-47     130.1s   346c  -
+ok   LOAD-P01-48     132.1s   197c  -
+ok   LOAD-P02-49     130.1s   308c  -
+
+cross-talk: none
+issue counts: none
+0/50 turns had issues
+2026-10-27 07:02:19,527 [INFO] apscheduler.executors.default: Job "_execute_cron (trigger: cron[month='*', day='*', day_of_week='*', hour='7', minute='0'], next run at: 2026-10-28 07:00:00 CET)" executed successfully
+2026-10-27 07:06:22,048 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 07:36:22 CET)" (scheduled at 2026-10-27 07:06:22.022615+01:00)
+2026-10-27 07:06:37,267 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=7180 api_ms=19435 in=38 cache_read=41385 out=1668
+2026-10-27 07:06:37,271 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 07:36:22 CET)" executed successfully
+2026-10-27 07:36:22,040 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 08:06:22 CET)" (scheduled at 2026-10-27 07:36:22.022615+01:00)
+2026-10-27 07:36:39,057 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=2 duration_ms=9446 api_ms=28673 in=56 cache_read=71455 out=2557
+2026-10-27 07:36:39,058 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 08:06:22 CET)" executed successfully
+2026-10-27 08:06:22,030 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 08:36:22 CET)" (scheduled at 2026-10-27 08:06:22.022615+01:00)
+2026-10-27 08:06:34,806 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2575 api_ms=30455 in=66 cache_read=87821 out=2644
+2026-10-27 08:06:34,810 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 08:36:22 CET)" executed successfully
+2026-10-27 08:36:22,036 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 09:06:22 CET)" (scheduled at 2026-10-27 08:36:22.022615+01:00)
+2026-10-27 08:36:40,025 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2024 api_ms=31960 in=76 cache_read=104300 out=2714
+2026-10-27 08:36:40,029 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 09:06:22 CET)" executed successfully
+2026-10-27 09:06:22,027 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 09:36:22 CET)" (scheduled at 2026-10-27 09:06:22.022615+01:00)
+2026-10-27 09:06:31,318 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1596 api_ms=33107 in=86 cache_read=120939 out=2749
+2026-10-27 09:06:31,323 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 09:36:22 CET)" executed successfully
+2026-10-27 09:36:22,030 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 10:06:22 CET)" (scheduled at 2026-10-27 09:36:22.022615+01:00)
+2026-10-27 09:36:42,584 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1947 api_ms=34546 in=96 cache_read=137721 out=2784
+2026-10-27 09:36:42,593 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 10:06:22 CET)" executed successfully
+2026-10-27 10:06:22,031 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 10:36:22 CET)" (scheduled at 2026-10-27 10:06:22.022615+01:00)
+2026-10-27 10:06:33,689 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2516 api_ms=36403 in=106 cache_read=154611 out=2816
+2026-10-27 10:06:33,692 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 10:36:22 CET)" executed successfully
+2026-10-27 10:36:22,028 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 11:06:22 CET)" (scheduled at 2026-10-27 10:36:22.022615+01:00)
+2026-10-27 10:36:31,503 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1692 api_ms=37490 in=116 cache_read=171609 out=2851
+2026-10-27 10:36:31,507 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 11:06:22 CET)" executed successfully
+2026-10-27 11:06:22,033 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 11:36:22 CET)" (scheduled at 2026-10-27 11:06:22.022615+01:00)
+2026-10-27 11:06:33,131 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2128 api_ms=39144 in=126 cache_read=188712 out=2883
+2026-10-27 11:06:33,134 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 11:36:22 CET)" executed successfully
+2026-10-27 11:36:22,031 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 12:06:22 CET)" (scheduled at 2026-10-27 11:36:22.022615+01:00)
+2026-10-27 11:36:36,212 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1356 api_ms=40293 in=136 cache_read=205923 out=2915
+2026-10-27 11:36:36,218 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 12:06:22 CET)" executed successfully
+2026-10-27 12:06:22,042 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 12:36:22 CET)" (scheduled at 2026-10-27 12:06:22.022615+01:00)
+2026-10-27 12:06:44,155 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2134 api_ms=41665 in=146 cache_read=223239 out=2947
+2026-10-27 12:06:44,161 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 12:36:22 CET)" executed successfully
+2026-10-27 12:36:22,045 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 13:06:22 CET)" (scheduled at 2026-10-27 12:36:22.022615+01:00)
+2026-10-27 12:36:36,782 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1971 api_ms=42920 in=156 cache_read=240660 out=2979
+2026-10-27 12:36:36,785 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 13:06:22 CET)" executed successfully
+2026-10-27 13:06:22,051 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 13:36:22 CET)" (scheduled at 2026-10-27 13:06:22.022615+01:00)
+2026-10-27 13:06:41,945 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1691 api_ms=44267 in=166 cache_read=258186 out=3011
+2026-10-27 13:06:41,953 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 13:36:22 CET)" executed successfully
+2026-10-27 13:36:22,055 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 14:06:22 CET)" (scheduled at 2026-10-27 13:36:22.022615+01:00)
+2026-10-27 13:36:40,845 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1706 api_ms=45599 in=176 cache_read=275817 out=3043
+2026-10-27 13:36:40,854 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 14:06:22 CET)" executed successfully
+2026-10-27 14:06:22,131 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 14:36:22 CET)" (scheduled at 2026-10-27 14:06:22.022615+01:00)
+2026-10-27 14:06:51,507 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1929 api_ms=46916 in=186 cache_read=293553 out=3075
+2026-10-27 14:06:51,519 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 14:36:22 CET)" executed successfully
+2026-10-27 14:36:22,043 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 15:06:22 CET)" (scheduled at 2026-10-27 14:36:22.022615+01:00)
+2026-10-27 14:36:37,187 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2354 api_ms=48809 in=196 cache_read=311394 out=3107
+2026-10-27 14:36:37,193 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 15:06:22 CET)" executed successfully
+2026-10-27 15:06:22,036 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 15:36:22 CET)" (scheduled at 2026-10-27 15:06:22.022615+01:00)
+2026-10-27 15:06:32,226 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1313 api_ms=49960 in=206 cache_read=329340 out=3139
+2026-10-27 15:06:32,229 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 15:36:22 CET)" executed successfully
+2026-10-27 15:36:22,029 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 16:06:22 CET)" (scheduled at 2026-10-27 15:36:22.022615+01:00)
+2026-10-27 15:36:30,689 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1130 api_ms=50991 in=216 cache_read=347391 out=3171
+2026-10-27 15:36:30,693 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 16:06:22 CET)" executed successfully
+2026-10-27 16:06:23,178 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 16:36:22 CET)" (scheduled at 2026-10-27 16:06:22.022615+01:00)
+2026-10-27 16:06:30,884 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1137 api_ms=52015 in=226 cache_read=365547 out=3203
+2026-10-27 16:06:30,888 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 16:36:22 CET)" executed successfully
+2026-10-27 16:36:22,044 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 17:06:22 CET)" (scheduled at 2026-10-27 16:36:22.022615+01:00)
+2026-10-27 16:36:31,158 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1749 api_ms=53670 in=236 cache_read=383808 out=3235
+2026-10-27 16:36:31,160 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 17:06:22 CET)" executed successfully
+2026-10-27 17:06:22,053 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 17:36:22 CET)" (scheduled at 2026-10-27 17:06:22.022615+01:00)
+2026-10-27 17:06:30,693 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1196 api_ms=54716 in=246 cache_read=402174 out=3267
+2026-10-27 17:06:30,698 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 17:36:22 CET)" executed successfully
+2026-10-27 17:36:22,035 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 18:06:22 CET)" (scheduled at 2026-10-27 17:36:22.022615+01:00)
+2026-10-27 17:36:31,419 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1770 api_ms=56345 in=256 cache_read=420645 out=3299
+2026-10-27 17:36:31,420 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 18:06:22 CET)" executed successfully
+2026-10-27 18:06:22,034 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 18:36:22 CET)" (scheduled at 2026-10-27 18:06:22.022615+01:00)
+2026-10-27 18:06:31,537 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1197 api_ms=57348 in=266 cache_read=439221 out=3331
+2026-10-27 18:06:31,540 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 18:36:22 CET)" executed successfully
+2026-10-27 18:36:22,037 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 19:06:22 CET)" (scheduled at 2026-10-27 18:36:22.022615+01:00)
+2026-10-27 18:36:30,795 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1238 api_ms=58385 in=276 cache_read=457902 out=3363
+2026-10-27 18:36:30,796 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 19:06:22 CET)" executed successfully
+2026-10-27 19:06:22,038 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 19:36:22 CET)" (scheduled at 2026-10-27 19:06:22.022615+01:00)
+2026-10-27 19:06:31,150 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1200 api_ms=59451 in=286 cache_read=476688 out=3395
+2026-10-27 19:06:31,155 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 19:36:22 CET)" executed successfully
+2026-10-27 21:32:30,134 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 21:36:22 CET)" (scheduled at 2026-10-27 21:06:22.022615+01:00)
+2026-10-28 05:59:40,720 [WARNING] apscheduler.scheduler: Execution of job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-27 21:36:22 CET)" skipped: maximum number of running instances reached (1)
+2026-10-28 05:59:40,801 [INFO] apscheduler.executors.default: Running job "_run_retention_job (trigger: cron[hour='3', minute='30'], next run at: 2026-10-29 03:30:00 CET)" (scheduled at 2026-10-28 03:30:00+01:00)
+2026-10-28 05:59:41,402 [INFO] helix.session: Retention: purged 50 session(s) — 12 other, 38 pupil
+2026-10-28 05:59:41,405 [INFO] helix.main: Retention job removed 50 session(s)
+2026-10-28 05:59:42,886 [INFO] apscheduler.executors.default: Job "_run_retention_job (trigger: cron[hour='3', minute='30'], next run at: 2026-10-29 03:30:00 CET)" executed successfully
+2026-10-28 06:00:00,535 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2318 api_ms=61336 in=296 cache_read=476688 out=3450
+2026-10-28 06:00:00,536 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 06:06:22 CET)" executed successfully
+2026-10-28 06:06:22,025 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 06:36:22 CET)" (scheduled at 2026-10-28 06:06:22.022615+01:00)
+2026-10-28 06:06:22,445 [INFO] helix.cli_backend: Starting new Claude session: ae633c64-f5ed-403a-ac59-a96b8a02a12a (staff)
+2026-10-28 06:06:43,474 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=2 duration_ms=12636 api_ms=12290 in=18 cache_read=13294 out=1017
+2026-10-28 06:06:43,484 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 06:36:22 CET)" executed successfully
+2026-10-28 06:36:22,044 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 07:06:22 CET)" (scheduled at 2026-10-28 06:36:22.022615+01:00)
+2026-10-28 06:36:31,757 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2053 api_ms=14238 in=28 cache_read=27342 out=1181
+2026-10-28 06:36:31,758 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 07:06:22 CET)" executed successfully
+2026-10-28 07:00:00,097 [INFO] apscheduler.executors.default: Running job "_execute_cron (trigger: cron[month='*', day='*', day_of_week='*', hour='7', minute='0'], next run at: 2026-10-29 07:00:00 CET)" (scheduled at 2026-10-28 07:00:00+01:00)
+2026-10-28 07:00:00,235 [INFO] helix.web: Running cron job: morning load (e5700f84)
+2026-10-28 07:00:00,257 [INFO] helix.web: Cron [morning load] is a load probe (50 users)
+2026-10-28 07:00:05,971 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n0@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,155 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n1@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,160 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n2@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,175 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n3@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,190 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n4@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,206 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n5@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,210 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n6@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,213 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n7@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,218 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n8@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,223 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n9@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,227 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n10@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,231 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n11@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,235 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n12@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,240 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n13@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,244 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n14@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,268 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n15@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,275 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n16@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,300 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n17@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,330 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n18@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,359 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n19@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,389 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n20@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,395 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n21@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,400 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n22@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,420 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n23@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,435 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n24@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,438 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n25@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,465 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n26@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,471 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n27@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,474 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n28@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,477 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n29@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,481 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n30@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,537 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n31@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,540 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n32@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,543 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n33@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,547 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n34@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,550 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n35@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,553 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n36@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,558 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n37@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,574 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n38@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,578 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n39@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,581 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n40@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,584 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n41@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,587 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n42@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,591 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n43@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,594 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n44@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,599 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n45@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,603 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n46@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,607 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n47@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,611 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n48@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:06,615 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n49@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-28 07:00:07,855 [INFO] helix.cli_backend: Starting new Claude session: e8f2c640-d559-4ef9-80c3-92d30155908d (student)
+2026-10-28 07:00:09,344 [INFO] helix.cli_backend: Starting new Claude session: 18869017-1f46-4f37-8391-775aac038094 (student)
+2026-10-28 07:00:11,290 [INFO] helix.cli_backend: Starting new Claude session: dc3c3580-576d-4fcd-9177-ffbdc0fe1b15 (student)
+2026-10-28 07:00:13,464 [INFO] helix.cli_backend: Starting new Claude session: 6c7911ac-4952-41cf-9e90-65e90da6057d (student)
+2026-10-28 07:00:15,778 [INFO] helix.cli_backend: Starting new Claude session: 3c44f585-d667-4623-804d-c1a43aee06dd (student)
+2026-10-28 07:00:19,342 [INFO] helix.cli_backend: Starting new Claude session: 896cd7be-fa78-479e-b631-79aa3ac97a31 (student)
+2026-10-28 07:00:24,004 [INFO] helix.cli_backend: Starting new Claude session: add172f8-411f-4f73-b0f7-e65c0856cc46 (staff)
+2026-10-28 07:00:30,669 [INFO] helix.cli_backend: Starting new Claude session: 24810868-69a1-4ba9-bbc5-e9389d5da162 (staff)
+2026-10-28 07:00:35,470 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=12215 api_ms=11924 in=10 cache_read=0 out=862
+2026-10-28 07:00:35,501 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=10762 api_ms=10601 in=10 cache_read=0 out=663
+2026-10-28 07:00:35,526 [INFO] helix.cli_backend: Starting new Claude session: 12dd1a59-a5c8-42e6-8632-d61e1ccb283d (student)
+2026-10-28 07:00:38,341 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8924 api_ms=8684 in=10 cache_read=0 out=404
+2026-10-28 07:00:38,386 [INFO] helix.cli_backend: Starting new Claude session: 2f29c8cf-6a53-4760-bf93-f59fc18dac55 (student)
+2026-10-28 07:00:41,213 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=12464 api_ms=12186 in=10 cache_read=0 out=489
+2026-10-28 07:00:41,238 [INFO] helix.cli_backend: Starting new Claude session: db490350-22f6-4f62-a735-3b712a16c1ba (student)
+2026-10-28 07:00:43,763 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=14143 api_ms=13665 in=10 cache_read=0 out=561
+2026-10-28 07:00:43,793 [INFO] helix.cli_backend: Starting new Claude session: 226b99e2-b75d-47b4-a515-11e4fa42fa3d (student)
+2026-10-28 07:00:46,883 [INFO] helix.cli_backend: Starting new Claude session: cd757169-a14b-4008-ba52-898350aabbcf (student)
+2026-10-28 07:00:49,633 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=13434 api_ms=12348 in=10 cache_read=0 out=608
+2026-10-28 07:00:49,707 [INFO] helix.cli_backend: Starting new Claude session: 68366798-88fd-4935-a6e3-087b763e1a8d (student)
+2026-10-28 07:00:52,914 [INFO] helix.cli_backend: Starting new Claude session: 0b34302d-0901-4b53-889c-1c0635c91b84 (staff)
+2026-10-28 07:00:56,126 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=5580 api_ms=5308 in=3 cache_read=0 out=232
+2026-10-28 07:00:56,232 [INFO] helix.cli_backend: Starting new Claude session: e61610d6-5e2c-42d1-bd3d-e58a9e1101cf (staff)
+2026-10-28 07:00:59,350 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=5598 api_ms=5411 in=3 cache_read=2272 out=210
+2026-10-28 07:00:59,385 [INFO] helix.cli_backend: Starting new Claude session: 87d2571f-41cc-47d9-bec0-9acb0847d9cf (student)
+2026-10-28 07:01:02,434 [INFO] helix.cli_backend: Starting new Claude session: e5484bc3-da57-44ac-9b92-3521b7627044 (student)
+2026-10-28 07:01:05,088 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7676 api_ms=7470 in=10 cache_read=0 out=263
+2026-10-28 07:01:05,127 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=10219 api_ms=6761 in=10 cache_read=0 out=564
+2026-10-28 07:01:05,148 [INFO] helix.cli_backend: Starting new Claude session: dd7abd35-0203-471a-bb38-cefc4af45f6e (student)
+2026-10-28 07:01:07,894 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7707 api_ms=7317 in=10 cache_read=0 out=455
+2026-10-28 07:01:07,922 [INFO] helix.cli_backend: Starting new Claude session: 3ab47969-f07b-4918-b6cc-da97786ca37a (student)
+2026-10-28 07:01:10,462 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=12615 api_ms=8977 in=10 cache_read=0 out=471
+2026-10-28 07:01:10,497 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7872 api_ms=7457 in=10 cache_read=0 out=390
+2026-10-28 07:01:10,531 [INFO] helix.cli_backend: Starting new Claude session: d77af50a-252f-4d85-913d-3a72a2a31409 (student)
+2026-10-28 07:01:13,301 [INFO] helix.cli_backend: Starting new Claude session: e3eed150-8c9e-4517-9052-d7b58ac65acf (student)
+2026-10-28 07:01:16,480 [INFO] helix.cli_backend: Starting new Claude session: 76cce701-72c5-415f-a849-a17dd902cf44 (staff)
+2026-10-28 07:01:19,120 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=5144 api_ms=4944 in=3 cache_read=2272 out=199
+2026-10-28 07:01:19,207 [INFO] helix.cli_backend: Starting new Claude session: bfdc2db9-1202-4ddc-a674-ad30ab2c2ae8 (staff)
+2026-10-28 07:01:21,400 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=5371 api_ms=5162 in=3 cache_read=2272 out=117
+2026-10-28 07:01:21,437 [INFO] helix.cli_backend: Starting new Claude session: 8dca6ab1-74ae-4739-a3a9-5815fe8990db (student)
+2026-10-28 07:01:24,112 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=14040 api_ms=5892 in=10 cache_read=0 out=428
+2026-10-28 07:01:24,160 [INFO] helix.cli_backend: Starting new Claude session: b919bf21-db62-416d-9eeb-65c8614205ac (student)
+2026-10-28 07:01:26,633 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=38888 api_ms=38587 in=10 cache_read=0 out=4141
+2026-10-28 07:01:26,651 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11180 api_ms=5250 in=10 cache_read=0 out=380
+2026-10-28 07:01:26,654 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7084 api_ms=6843 in=10 cache_read=0 out=269
+2026-10-28 07:01:26,688 [INFO] helix.cli_backend: Starting new Claude session: fae464e1-9674-4760-9b1e-c295c2ff8b97 (student)
+2026-10-28 07:01:29,580 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11196 api_ms=7650 in=10 cache_read=0 out=440
+2026-10-28 07:01:29,602 [INFO] helix.cli_backend: Starting new Claude session: f5cab54b-2da7-4b94-b3b6-cc3ca28b3f99 (student)
+2026-10-28 07:01:32,114 [INFO] helix.cli_backend: Starting new Claude session: 2003b25c-9b88-41c6-8e18-588cefd4b62b (student)
+2026-10-28 07:01:34,914 [INFO] helix.cli_backend: Starting new Claude session: f9694080-e64f-4263-9c8e-c2dffcd8dc85 (student)
+2026-10-28 07:01:37,722 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11474 api_ms=8608 in=10 cache_read=0 out=538
+2026-10-28 07:01:37,925 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8337 api_ms=5524 in=10 cache_read=0 out=383
+2026-10-28 07:01:37,944 [INFO] helix.cli_backend: Starting new Claude session: b160090f-a3b3-47e0-82e8-b3f700beda3f (staff)
+2026-10-28 07:01:41,682 [INFO] helix.cli_backend: Starting new Claude session: 78cb1d0c-d7bb-4e20-b8c2-de4ea837e758 (staff)
+2026-10-28 07:01:44,230 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4938 api_ms=4715 in=3 cache_read=2272 out=133
+2026-10-28 07:01:44,290 [INFO] helix.cli_backend: Starting new Claude session: c6b107ce-3532-4295-9c3d-30de2af68daf (student)
+2026-10-28 07:01:46,791 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=11391 api_ms=11189 in=3 cache_read=2272 out=575
+2026-10-28 07:01:46,830 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=12024 api_ms=11846 in=10 cache_read=0 out=1316
+2026-10-28 07:01:46,860 [INFO] helix.cli_backend: Starting new Claude session: 40be1e80-dcd7-4e43-abfe-ae1c245589c7 (student)
+2026-10-28 07:01:48,974 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=10447 api_ms=10246 in=10 cache_read=0 out=635
+2026-10-28 07:01:49,029 [INFO] helix.cli_backend: Starting new Claude session: 5b24328a-bf80-4a4b-93d4-810c3905fb26 (student)
+2026-10-28 07:01:51,743 [INFO] helix.cli_backend: Starting new Claude session: f473f225-0029-4da7-ae18-343cf5f6713b (student)
+2026-10-28 07:01:54,927 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11461 api_ms=7418 in=10 cache_read=0 out=481
+2026-10-28 07:01:54,985 [INFO] helix.cli_backend: Starting new Claude session: 59fcc46c-c549-4809-81b0-2f3fe6f5aca5 (student)
+2026-10-28 07:01:58,103 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8911 api_ms=8591 in=10 cache_read=0 out=463
+2026-10-28 07:01:58,177 [INFO] helix.cli_backend: Starting new Claude session: feef44a9-2980-476f-bec6-73bcc681c8a9 (student)
+2026-10-28 07:02:00,677 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=10955 api_ms=8119 in=10 cache_read=0 out=452
+2026-10-28 07:02:00,829 [INFO] helix.cli_backend: Starting new Claude session: d010e933-b7e4-46b3-bc29-0a5a0ea0b3b7 (staff)
+2026-10-28 07:02:03,523 [INFO] helix.cli_backend: Starting new Claude session: 1be933dc-6b0b-4eb4-8cb5-e50ba6dbe68c (staff)
+2026-10-28 07:02:05,888 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=6260 api_ms=6027 in=3 cache_read=2272 out=543
+2026-10-28 07:02:05,918 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=5048 api_ms=4767 in=3 cache_read=2272 out=189
+2026-10-28 07:02:05,941 [INFO] helix.cli_backend: Starting new Claude session: ddd7dce3-26eb-4d40-8547-4447c189e0ee (student)
+2026-10-28 07:02:08,349 [INFO] helix.cli_backend: Starting new Claude session: dc17a3b1-8b42-41ed-a4ad-8d8da5dd54d3 (student)
+2026-10-28 07:02:11,629 [INFO] helix.cli_backend: Starting new Claude session: 5b184fdd-967e-421a-b1a4-382d43fcc6bd (student)
+2026-10-28 07:02:14,141 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=10346 api_ms=7431 in=10 cache_read=0 out=517
+2026-10-28 07:02:14,182 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8841 api_ms=8675 in=10 cache_read=0 out=509
+2026-10-28 07:02:14,189 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=40366 api_ms=40174 in=10 cache_read=0 out=5098
+2026-10-28 07:02:14,214 [INFO] helix.cli_backend: Starting new Claude session: 7e0e9bc9-7126-4953-94e2-8c47b54203c8 (student)
+2026-10-28 07:02:16,700 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8500 api_ms=5812 in=10 cache_read=0 out=350
+2026-10-28 07:02:16,713 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11357 api_ms=8089 in=10 cache_read=0 out=420
+2026-10-28 07:02:16,766 [INFO] helix.cli_backend: Starting new Claude session: a31ddcd6-860b-47a3-815c-5316e670af7f (student)
+2026-10-28 07:02:19,363 [INFO] helix.cli_backend: Starting new Claude session: 92b49465-ade0-4c00-85e7-b9f8f00284b5 (student)
+2026-10-28 07:02:22,721 [INFO] helix.cli_backend: Starting new Claude session: 0593dde6-b5ee-4393-994f-4c57882a36ba (staff)
+2026-10-28 07:02:25,513 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=6655 api_ms=6420 in=10 cache_read=0 out=493
+2026-10-28 07:02:25,521 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4809 api_ms=4596 in=3 cache_read=2272 out=192
+2026-10-28 07:02:25,528 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11428 api_ms=8084 in=10 cache_read=0 out=543
+2026-10-28 07:02:25,565 [INFO] helix.cli_backend: Starting new Claude session: 06bc5f2d-fd18-4b77-90f0-e4a9a7185cd6 (staff)
+2026-10-28 07:02:28,013 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=5117 api_ms=4901 in=3 cache_read=2272 out=126
+2026-10-28 07:02:28,027 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=9290 api_ms=9068 in=10 cache_read=0 out=540
+2026-10-28 07:02:28,060 [INFO] helix.cli_backend: Starting new Claude session: 4fe637fd-1b5b-4c83-949b-05c7b19b2adc (student)
+2026-10-28 07:02:30,776 [INFO] helix.cli_backend: Starting new Claude session: 914b1067-361e-4359-a0b5-de26d2b093f6 (student)
+2026-10-28 07:02:33,698 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7216 api_ms=6979 in=10 cache_read=0 out=398
+2026-10-28 07:02:33,715 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7081 api_ms=6823 in=10 cache_read=0 out=495
+2026-10-28 07:02:33,721 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8743 api_ms=5143 in=10 cache_read=0 out=364
+2026-10-28 07:02:34,549 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n2@test.no: 'Sak LOAD-P03-02. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-28 07:02:34,636 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p04-n3@test.no: 'Sak LOAD-P04-03. Authenticator-appen min funker ikke etter at jeg byttet telefon. Hva gjor jeg? Svar kort.'
+2026-10-28 07:02:34,811 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p06-n5@test.no: 'Sak LOAD-P06-05. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.'
+2026-10-28 07:02:35,745 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n10@test.no: 'Sak LOAD-P03-10. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-28 07:02:36,322 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n18@test.no: 'Sak LOAD-P03-18. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-28 07:02:37,098 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n26@test.no: 'Sak LOAD-P03-26. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-28 07:02:37,161 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p06-n29@test.no: 'Sak LOAD-P06-29. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.'
+2026-10-28 07:02:37,783 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n34@test.no: 'Sak LOAD-P03-34. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-28 07:02:38,017 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p06-n37@test.no: 'Sak LOAD-P06-37. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.'
+2026-10-28 07:02:38,510 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n42@test.no: 'Sak LOAD-P03-42. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-28 07:02:41,519 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4517 api_ms=4333 in=3 cache_read=2272 out=180
+2026-10-28 07:02:41,822 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=6259 api_ms=6035 in=10 cache_read=0 out=495
+2026-10-28 07:02:42,320 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11737 api_ms=8569 in=10 cache_read=0 out=663
+2026-10-28 07:02:42,381 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p06-n45@test.no: 'Sak LOAD-P06-45. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.'
+2026-10-28 07:02:43,345 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4140 api_ms=4000 in=3 cache_read=2272 out=145
+2026-10-28 07:02:46,141 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7608 api_ms=5723 in=10 cache_read=0 out=418
+2026-10-28 07:02:52,656 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=64475 api_ms=64319 in=10 cache_read=0 out=7324
+2026-10-28 07:02:52,753 [INFO] helix.web: Cron [morning load] probe exit 0:     155.0s   478c  -
+ok   LOAD-S02-47     156.8s   372c  -
+ok   LOAD-P01-48     159.6s   219c  -
+ok   LOAD-P02-49     155.3s   152c  -
+
+cross-talk: none
+issue counts: none
+0/50 turns had issues
+2026-10-28 07:02:52,759 [INFO] apscheduler.executors.default: Job "_execute_cron (trigger: cron[month='*', day='*', day_of_week='*', hour='7', minute='0'], next run at: 2026-10-29 07:00:00 CET)" executed successfully
+2026-10-28 07:06:22,034 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 07:36:22 CET)" (scheduled at 2026-10-28 07:06:22.022615+01:00)
+2026-10-28 07:06:32,332 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1973 api_ms=16112 in=38 cache_read=41911 out=1323
+2026-10-28 07:06:32,334 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 07:36:22 CET)" executed successfully
+2026-10-28 07:36:22,022 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 08:06:22 CET)" (scheduled at 2026-10-28 07:36:22.022615+01:00)
+2026-10-28 07:36:31,737 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1938 api_ms=17933 in=48 cache_read=56736 out=1407
+2026-10-28 07:36:31,742 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 08:06:22 CET)" executed successfully
+2026-10-28 08:06:22,036 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 08:36:22 CET)" (scheduled at 2026-10-28 08:06:22.022615+01:00)
+2026-10-28 08:06:31,664 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1902 api_ms=19747 in=58 cache_read=71795 out=1555
+2026-10-28 08:06:31,668 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 08:36:22 CET)" executed successfully
+2026-10-28 08:36:22,037 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 09:06:22 CET)" (scheduled at 2026-10-28 08:36:22.022615+01:00)
+2026-10-28 08:36:31,130 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1293 api_ms=20922 in=68 cache_read=87011 out=1598
+2026-10-28 08:36:31,133 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 09:06:22 CET)" executed successfully
+2026-10-28 09:06:22,030 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 09:36:22 CET)" (scheduled at 2026-10-28 09:06:22.022615+01:00)
+2026-10-28 09:06:30,973 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1152 api_ms=21961 in=78 cache_read=102448 out=1636
+2026-10-28 09:06:30,980 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 09:36:22 CET)" executed successfully
+2026-10-28 09:36:22,048 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 10:06:22 CET)" (scheduled at 2026-10-28 09:36:22.022615+01:00)
+2026-10-28 09:37:08,815 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2601 api_ms=23473 in=88 cache_read=118001 out=1676
+2026-10-28 09:37:08,831 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 10:06:22 CET)" executed successfully
+2026-10-28 10:06:22,033 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 10:36:22 CET)" (scheduled at 2026-10-28 10:06:22.022615+01:00)
+2026-10-28 10:06:52,286 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=3048 api_ms=25631 in=98 cache_read=133665 out=1713
+2026-10-28 10:06:52,293 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 10:36:22 CET)" executed successfully
+2026-10-28 10:36:22,037 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 11:06:22 CET)" (scheduled at 2026-10-28 10:36:22.022615+01:00)
+2026-10-28 10:36:37,109 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1421 api_ms=26763 in=108 cache_read=149442 out=1751
+2026-10-28 10:36:37,114 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 11:06:22 CET)" executed successfully
+2026-10-28 11:06:22,034 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 11:36:22 CET)" (scheduled at 2026-10-28 11:06:22.022615+01:00)
+2026-10-28 11:06:38,105 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1459 api_ms=27858 in=118 cache_read=165329 out=1792
+2026-10-28 11:06:38,114 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 11:36:22 CET)" executed successfully
+2026-10-28 11:36:22,025 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 12:06:22 CET)" (scheduled at 2026-10-28 11:36:22.022615+01:00)
+2026-10-28 11:36:35,109 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1387 api_ms=29010 in=128 cache_read=181327 out=1829
+2026-10-28 11:36:35,118 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 12:06:22 CET)" executed successfully
+2026-10-28 12:06:22,031 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 12:36:22 CET)" (scheduled at 2026-10-28 12:06:22.022615+01:00)
+2026-10-28 12:06:31,032 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1213 api_ms=30057 in=138 cache_read=197439 out=1862
+2026-10-28 12:06:31,035 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 12:36:22 CET)" executed successfully
+2026-10-28 12:36:22,027 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 13:06:22 CET)" (scheduled at 2026-10-28 12:36:22.022615+01:00)
+2026-10-28 12:36:31,469 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1234 api_ms=31148 in=148 cache_read=213661 out=1899
+2026-10-28 12:36:31,472 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 13:06:22 CET)" executed successfully
+2026-10-28 13:06:22,035 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 13:36:22 CET)" (scheduled at 2026-10-28 13:06:22.022615+01:00)
+2026-10-28 13:06:31,147 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1082 api_ms=32133 in=158 cache_read=229989 out=1938
+2026-10-28 13:06:31,150 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 13:36:22 CET)" executed successfully
+2026-10-28 13:36:22,042 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 14:06:22 CET)" (scheduled at 2026-10-28 13:36:22.022615+01:00)
+2026-10-28 13:36:30,526 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1280 api_ms=33300 in=168 cache_read=246427 out=1976
+2026-10-28 13:36:30,531 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 14:06:22 CET)" executed successfully
+2026-10-28 14:06:22,032 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 14:36:22 CET)" (scheduled at 2026-10-28 14:06:22.022615+01:00)
+2026-10-28 14:06:25,395 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=828 api_ms=34024 in=178 cache_read=262977 out=2009
+2026-10-28 14:06:25,400 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 14:36:22 CET)" executed successfully
+2026-10-28 14:36:22,034 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 15:06:22 CET)" (scheduled at 2026-10-28 14:36:22.022615+01:00)
+2026-10-28 14:36:25,774 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1255 api_ms=35182 in=188 cache_read=279638 out=2046
+2026-10-28 14:36:25,781 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 15:06:22 CET)" executed successfully
+2026-10-28 15:06:22,034 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 15:36:22 CET)" (scheduled at 2026-10-28 15:06:22.022615+01:00)
+2026-10-28 15:06:53,572 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=29574 api_ms=64669 in=198 cache_read=296405 out=2084
+2026-10-28 15:06:53,574 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 15:36:22 CET)" executed successfully
+2026-10-28 15:36:22,039 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 16:06:22 CET)" (scheduled at 2026-10-28 15:36:22.022615+01:00)
+2026-10-28 15:36:25,760 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1763 api_ms=66354 in=208 cache_read=313282 out=2124
+2026-10-28 15:36:25,762 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 16:06:22 CET)" executed successfully
+2026-10-28 16:06:22,022 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 16:36:22 CET)" (scheduled at 2026-10-28 16:06:22.022615+01:00)
+2026-10-28 16:06:24,925 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1104 api_ms=67378 in=218 cache_read=330270 out=2158
+2026-10-28 16:06:24,931 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 16:36:22 CET)" executed successfully
+2026-10-28 16:36:22,035 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 17:06:22 CET)" (scheduled at 2026-10-28 16:36:22.022615+01:00)
+2026-10-28 16:36:25,143 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1266 api_ms=68564 in=228 cache_read=347371 out=2195
+2026-10-28 16:36:25,149 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 17:06:22 CET)" executed successfully
+2026-10-28 17:06:22,030 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 17:36:22 CET)" (scheduled at 2026-10-28 17:06:22.022615+01:00)
+2026-10-28 17:06:24,235 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1093 api_ms=69579 in=238 cache_read=364579 out=2233
+2026-10-28 17:06:24,235 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 17:36:22 CET)" executed successfully
+2026-10-28 17:36:22,042 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 18:06:22 CET)" (scheduled at 2026-10-28 17:36:22.022615+01:00)
+2026-10-28 17:36:25,060 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1115 api_ms=70619 in=248 cache_read=381897 out=2273
+2026-10-28 17:36:25,060 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 18:06:22 CET)" executed successfully
+2026-10-28 18:06:22,038 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 18:36:22 CET)" (scheduled at 2026-10-28 18:06:22.022615+01:00)
+2026-10-28 18:06:25,068 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1089 api_ms=71622 in=258 cache_read=399326 out=2306
+2026-10-28 18:06:25,072 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 18:36:22 CET)" executed successfully
+2026-10-28 18:36:22,029 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 19:06:22 CET)" (scheduled at 2026-10-28 18:36:22.022615+01:00)
+2026-10-28 18:36:24,955 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1101 api_ms=72643 in=268 cache_read=416868 out=2343
+2026-10-28 18:36:24,973 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 19:06:22 CET)" executed successfully
+2026-10-28 19:06:22,029 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 19:36:22 CET)" (scheduled at 2026-10-28 19:06:22.022615+01:00)
+2026-10-28 19:06:25,179 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1151 api_ms=73702 in=278 cache_read=434516 out=2382
+2026-10-28 19:06:25,196 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 19:36:22 CET)" executed successfully
+2026-10-28 21:18:59,943 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 21:36:22 CET)" (scheduled at 2026-10-28 21:06:22.022615+01:00)
+2026-10-29 05:59:13,270 [WARNING] apscheduler.scheduler: Execution of job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-28 21:36:22 CET)" skipped: maximum number of running instances reached (1)
+2026-10-29 05:59:13,499 [INFO] apscheduler.executors.default: Running job "_run_retention_job (trigger: cron[hour='3', minute='30'], next run at: 2026-10-30 03:30:00 CET)" (scheduled at 2026-10-29 03:30:00+01:00)
+2026-10-29 05:59:13,557 [WARNING] helix.cli_backend: Resume failed for session ae633c64-f5ed-403a-ac59-a96b8a02a12a, falling back to new session: 
+2026-10-29 05:59:17,229 [INFO] helix.session: Retention: purged 12 session(s) — 12 other
+2026-10-29 05:59:17,261 [INFO] helix.main: Retention job removed 12 session(s)
+2026-10-29 05:59:19,919 [INFO] apscheduler.executors.default: Job "_run_retention_job (trigger: cron[hour='3', minute='30'], next run at: 2026-10-30 03:30:00 CET)" executed successfully
+2026-10-29 05:59:33,949 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2076 api_ms=1732 in=10 cache_read=0 out=112
+2026-10-29 05:59:33,968 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 06:06:22 CET)" executed successfully
+2026-10-29 06:06:22,033 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 06:36:22 CET)" (scheduled at 2026-10-29 06:06:22.022615+01:00)
+2026-10-29 06:06:22,849 [INFO] helix.cli_backend: Starting new Claude session: d79ec870-8147-4393-8221-e391c2e8a144 (staff)
+2026-10-29 06:06:46,218 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=6 duration_ms=20973 api_ms=20514 in=50 cache_read=71972 out=1552
+2026-10-29 06:06:46,231 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 06:36:22 CET)" executed successfully
+2026-10-29 06:36:22,029 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 07:06:22 CET)" (scheduled at 2026-10-29 06:36:22.022615+01:00)
+2026-10-29 06:36:28,633 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=5504 api_ms=25943 in=60 cache_read=87244 out=2077
+2026-10-29 06:36:28,637 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 07:06:22 CET)" executed successfully
+2026-10-29 07:00:00,091 [INFO] apscheduler.executors.default: Running job "_execute_cron (trigger: cron[month='*', day='*', day_of_week='*', hour='7', minute='0'], next run at: 2026-10-30 07:00:00 CET)" (scheduled at 2026-10-29 07:00:00+01:00)
+2026-10-29 07:00:00,119 [INFO] helix.web: Running cron job: morning load (e5700f84)
+2026-10-29 07:00:00,148 [INFO] helix.web: Cron [morning load] is a load probe (50 users)
+2026-10-29 07:00:01,584 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n0@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,697 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n1@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,703 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n2@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,705 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n3@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,712 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n4@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,726 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n5@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,726 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n6@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,726 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n7@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,726 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n8@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,742 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n9@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,742 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n10@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,742 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n11@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,757 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n12@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,774 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n13@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,774 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n14@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,779 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n15@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,785 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n16@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,789 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n17@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,791 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n18@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,791 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n19@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,805 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n20@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,823 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n21@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,823 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n22@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,837 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n23@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,837 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n24@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,837 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n25@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,853 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n26@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,853 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n27@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,853 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n28@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,853 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n29@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,853 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n30@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,869 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n31@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,874 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n32@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,900 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n33@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,920 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n34@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,932 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n35@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,932 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n36@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,932 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n37@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,932 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n38@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,950 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n39@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,950 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n40@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,950 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n41@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,950 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p03-n42@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,950 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p04-n43@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,964 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p05-n44@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,964 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p06-n45@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,964 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s01-n46@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,974 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-s02-n47@test.no (staff) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,974 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p01-n48@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:01,980 [WARNING] helix.web: TEST SIGN-IN (unverified) as loadtest-p02-n49@test.no (student) from 127.0.0.1 — web.dev_login is enabled
+2026-10-29 07:00:02,955 [INFO] helix.cli_backend: Starting new Claude session: e79c35b3-34c2-4bfb-ab46-06fc0cd08030 (student)
+2026-10-29 07:00:03,352 [INFO] helix.cli_backend: Starting new Claude session: ff6fe4e1-979e-401e-9f2c-b5b5836d28ca (student)
+2026-10-29 07:00:03,762 [INFO] helix.cli_backend: Starting new Claude session: cdda7478-ba6a-443a-910c-bf546622f04e (student)
+2026-10-29 07:00:04,172 [INFO] helix.cli_backend: Starting new Claude session: 2e4ad35c-d532-4b4a-81d3-d59097669098 (student)
+2026-10-29 07:00:04,581 [INFO] helix.cli_backend: Starting new Claude session: 596ff188-8410-4a78-ba18-5a51b851f5b5 (student)
+2026-10-29 07:00:04,994 [INFO] helix.cli_backend: Starting new Claude session: 2da15e66-071c-4f15-ba5d-54a3d22ea0fb (staff)
+2026-10-29 07:00:05,417 [INFO] helix.cli_backend: Starting new Claude session: d8252988-e1da-4f31-9994-7a447d4b0891 (student)
+2026-10-29 07:00:05,806 [INFO] helix.cli_backend: Starting new Claude session: b76be119-2da5-42b4-ba48-cfd13e249aa1 (student)
+2026-10-29 07:00:06,227 [INFO] helix.cli_backend: Starting new Claude session: 93bf3617-fcc2-4a70-9d72-c72fa9617629 (student)
+2026-10-29 07:00:06,635 [INFO] helix.cli_backend: Starting new Claude session: ef25219c-c04e-4b61-a725-09c11162e03e (staff)
+2026-10-29 07:00:07,039 [INFO] helix.cli_backend: Starting new Claude session: 8865791e-9517-4c71-baa1-e24bdbe5be3b (student)
+2026-10-29 07:00:07,453 [INFO] helix.cli_backend: Starting new Claude session: 5b5ca96d-4ab6-44e6-b57e-5fec184ffb66 (student)
+2026-10-29 07:00:07,854 [INFO] helix.cli_backend: Starting new Claude session: f53462f5-6d4c-474f-9589-446d1f694fd1 (student)
+2026-10-29 07:00:08,266 [INFO] helix.cli_backend: Starting new Claude session: 5a2d74cb-d597-46c9-b663-9d895be53998 (student)
+2026-10-29 07:00:08,675 [INFO] helix.cli_backend: Starting new Claude session: 7e93d3b6-e2df-46f1-b495-5541f430ae70 (staff)
+2026-10-29 07:00:09,083 [INFO] helix.cli_backend: Starting new Claude session: 6d4d78fb-ebed-45ce-87b6-20628ffa2bce (student)
+2026-10-29 07:00:09,487 [INFO] helix.cli_backend: Starting new Claude session: b9a39e1a-675d-4e10-b42d-9fdbcec96f95 (student)
+2026-10-29 07:00:09,885 [INFO] helix.cli_backend: Starting new Claude session: 7bc2f99a-0971-4ac7-9144-04d49d09e2f5 (student)
+2026-10-29 07:00:10,318 [INFO] helix.cli_backend: Starting new Claude session: 230d0bd6-51b0-4b58-9ead-e8ded5404cd7 (staff)
+2026-10-29 07:00:10,715 [INFO] helix.cli_backend: Starting new Claude session: 89d7ca9e-c33e-49e0-8143-910738a3e734 (student)
+2026-10-29 07:00:12,007 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=6947 api_ms=6701 in=10 cache_read=0 out=467
+2026-10-29 07:00:12,016 [INFO] helix.cli_backend: Starting new Claude session: 2e1003e5-270e-475e-b937-8d441d6a967c (student)
+2026-10-29 07:00:12,995 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p06-n5@test.no: 'Sak LOAD-P06-05. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.'
+2026-10-29 07:00:13,803 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4796 api_ms=3834 in=3 cache_read=0 out=103
+2026-10-29 07:00:13,805 [INFO] helix.cli_backend: Starting new Claude session: 2392791d-c4de-4b13-96de-5f2e74c5dd0f (student)
+2026-10-29 07:00:14,792 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7514 api_ms=7088 in=10 cache_read=0 out=614
+2026-10-29 07:00:14,798 [INFO] helix.cli_backend: Starting new Claude session: fbaf0741-2f72-4485-8a47-ff29075c0469 (staff)
+2026-10-29 07:00:17,261 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11240 api_ms=11067 in=10 cache_read=0 out=742
+2026-10-29 07:00:17,273 [INFO] helix.cli_backend: Starting new Claude session: 1faa742b-cd19-4287-a65b-600b6f59ee89 (staff)
+2026-10-29 07:00:18,224 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8985 api_ms=8508 in=10 cache_read=0 out=508
+2026-10-29 07:00:18,248 [INFO] helix.cli_backend: Starting new Claude session: 5fc317fd-66f4-4744-a597-fe756ae92527 (student)
+2026-10-29 07:00:19,746 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8367 api_ms=7369 in=10 cache_read=0 out=388
+2026-10-29 07:00:19,909 [INFO] helix.cli_backend: Starting new Claude session: 9e498c3f-3a66-4258-9a82-354b2013acea (student)
+2026-10-29 07:00:20,409 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=6233 api_ms=5024 in=10 cache_read=0 out=339
+2026-10-29 07:00:20,417 [INFO] helix.cli_backend: Starting new Claude session: c3e3fb8e-22fd-4eb1-b1ea-7aeba6928705 (student)
+2026-10-29 07:00:21,222 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n2@test.no: 'Sak LOAD-P03-02. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-29 07:00:21,425 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=9818 api_ms=8930 in=10 cache_read=0 out=600
+2026-10-29 07:00:21,439 [INFO] helix.cli_backend: Starting new Claude session: 35aeb339-19a0-48ef-838d-ab139c71cafe (student)
+2026-10-29 07:00:21,560 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7394 api_ms=6387 in=10 cache_read=0 out=369
+2026-10-29 07:00:21,612 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11510 api_ms=11071 in=10 cache_read=0 out=329
+2026-10-29 07:00:22,457 [INFO] helix.cli_backend: Starting new Claude session: 0ec67b33-07f8-4106-a34f-d579e101f8f0 (student)
+2026-10-29 07:00:22,558 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=9058 api_ms=6408 in=3 cache_read=2272 out=570
+2026-10-29 07:00:22,684 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8017 api_ms=7336 in=10 cache_read=0 out=516
+2026-10-29 07:00:23,260 [INFO] helix.cli_backend: Starting new Claude session: e876b5e0-73df-498f-b1e1-63d150fae076 (student)
+2026-10-29 07:00:23,484 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8655 api_ms=6993 in=10 cache_read=0 out=378
+2026-10-29 07:00:23,686 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n10@test.no: 'Sak LOAD-P03-10. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-29 07:00:23,710 [INFO] helix.cli_backend: Starting new Claude session: 984a0420-4166-421d-aedd-5243b054a585 (staff)
+2026-10-29 07:00:25,048 [INFO] helix.cli_backend: Starting new Claude session: caeee728-cda8-4443-a396-fdbb3dff7e0b (student)
+2026-10-29 07:00:25,419 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=8365 api_ms=7385 in=3 cache_read=2272 out=568
+2026-10-29 07:00:25,476 [INFO] helix.cli_backend: Starting new Claude session: c677b372-6360-484e-8bc3-55848c4e18c5 (student)
+2026-10-29 07:00:26,108 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8141 api_ms=6636 in=10 cache_read=0 out=509
+2026-10-29 07:00:26,130 [INFO] helix.cli_backend: Starting new Claude session: 6517400e-d029-493c-802b-d60ff77b2149 (student)
+2026-10-29 07:00:26,204 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8382 api_ms=6903 in=10 cache_read=0 out=455
+2026-10-29 07:00:26,213 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=9637 api_ms=8241 in=10 cache_read=0 out=751
+2026-10-29 07:00:27,183 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=6893 api_ms=3925 in=3 cache_read=2272 out=127
+2026-10-29 07:00:27,195 [INFO] helix.cli_backend: Starting new Claude session: 6e3d4075-a6d6-478d-b82b-c39a5c4b1ad3 (student)
+2026-10-29 07:00:27,561 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7572 api_ms=5541 in=10 cache_read=0 out=370
+2026-10-29 07:00:27,574 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7860 api_ms=6459 in=10 cache_read=0 out=494
+2026-10-29 07:00:27,629 [INFO] helix.cli_backend: Starting new Claude session: 89bbe500-a7d7-4013-9947-1d38b1e81944 (staff)
+2026-10-29 07:00:28,040 [INFO] helix.cli_backend: Starting new Claude session: 4939cbc2-666c-4939-bfec-ff3d02891f11 (student)
+2026-10-29 07:00:28,943 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n18@test.no: 'Sak LOAD-P03-18. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-29 07:00:28,953 [INFO] helix.cli_backend: Starting new Claude session: 76eb9f2d-b37b-45e1-bd94-0cb4fa66c760 (student)
+2026-10-29 07:00:29,059 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7420 api_ms=6736 in=10 cache_read=0 out=414
+2026-10-29 07:00:29,063 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4477 api_ms=2916 in=3 cache_read=2272 out=106
+2026-10-29 07:00:29,392 [INFO] helix.cli_backend: Starting new Claude session: ef123f82-83ac-41e9-a947-cb8d1735fdd8 (staff)
+2026-10-29 07:00:29,827 [INFO] helix.cli_backend: Starting new Claude session: 64b181e2-ec1d-4010-b972-439c136d56a7 (student)
+2026-10-29 07:00:30,628 [INFO] helix.cli_backend: Starting new Claude session: c234cce2-1baa-4271-8b56-a552a666937b (student)
+2026-10-29 07:00:31,361 [INFO] helix.cli_backend: Starting new Claude session: 606f5ef6-2c1f-4c25-b249-a61e01b7ec55 (staff)
+2026-10-29 07:00:32,387 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=4964 api_ms=3872 in=10 cache_read=0 out=276
+2026-10-29 07:00:32,392 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=10307 api_ms=8774 in=3 cache_read=2272 out=509
+2026-10-29 07:00:32,402 [INFO] helix.cli_backend: Starting new Claude session: 1d069fb2-4892-4615-9c20-743da7ccb1f9 (student)
+2026-10-29 07:00:33,311 [INFO] helix.cli_backend: Starting new Claude session: 443afc32-d710-4761-b443-697a7f7bc69d (student)
+2026-10-29 07:00:33,657 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=5603 api_ms=4305 in=10 cache_read=0 out=288
+2026-10-29 07:00:33,712 [INFO] helix.cli_backend: Starting new Claude session: 3f1286be-e644-4e6e-819c-737baf5885ab (student)
+2026-10-29 07:00:35,318 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=10049 api_ms=8926 in=10 cache_read=0 out=502
+2026-10-29 07:00:35,320 [INFO] helix.cli_backend: Starting new Claude session: d5c9d3e2-dd55-455b-befe-20c6889406e1 (student)
+2026-10-29 07:00:35,931 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p06-n21@test.no: 'Sak LOAD-P06-21. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.'
+2026-10-29 07:00:37,980 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8660 api_ms=7407 in=10 cache_read=0 out=486
+2026-10-29 07:00:38,002 [INFO] helix.cli_backend: Starting new Claude session: c3f4f479-84c3-43d4-a615-c9e4048380db (staff)
+2026-10-29 07:00:38,144 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n26@test.no: 'Sak LOAD-P03-26. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-29 07:00:39,508 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7568 api_ms=6482 in=10 cache_read=0 out=295
+2026-10-29 07:00:39,514 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=9728 api_ms=8664 in=10 cache_read=0 out=575
+2026-10-29 07:00:39,518 [INFO] helix.cli_backend: Starting new Claude session: 11aa8a1b-b3ee-4a3b-b589-a9b55d3e7516 (staff)
+2026-10-29 07:00:40,132 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=6523 api_ms=5707 in=3 cache_read=2272 out=190
+2026-10-29 07:00:40,136 [INFO] helix.cli_backend: Starting new Claude session: dbbcca4d-c151-4b0a-a6cc-a644d88ab91e (student)
+2026-10-29 07:00:40,711 [INFO] helix.cli_backend: Starting new Claude session: 5f729785-df51-4119-89cc-536c5135aa13 (student)
+2026-10-29 07:00:41,952 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=5609 api_ms=4861 in=3 cache_read=2272 out=139
+2026-10-29 07:00:42,383 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p06-n29@test.no: 'Sak LOAD-P06-29. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.'
+2026-10-29 07:00:42,411 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=6565 api_ms=5774 in=10 cache_read=0 out=328
+2026-10-29 07:00:42,418 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8814 api_ms=8428 in=10 cache_read=0 out=615
+2026-10-29 07:00:42,563 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4006 api_ms=3264 in=3 cache_read=2272 out=102
+2026-10-29 07:00:42,586 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=33467 api_ms=33276 in=10 cache_read=0 out=3473
+2026-10-29 07:00:42,807 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=11123 api_ms=9554 in=10 cache_read=0 out=571
+2026-10-29 07:00:44,105 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n34@test.no: 'Sak LOAD-P03-34. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-29 07:00:44,138 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=5653 api_ms=5043 in=10 cache_read=0 out=315
+2026-10-29 07:00:44,849 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=10304 api_ms=9197 in=10 cache_read=0 out=874
+2026-10-29 07:00:45,601 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=5621 api_ms=4506 in=3 cache_read=2272 out=171
+2026-10-29 07:00:46,662 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=10490 api_ms=9328 in=10 cache_read=0 out=543
+2026-10-29 07:00:47,193 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8375 api_ms=7010 in=10 cache_read=0 out=427
+2026-10-29 07:00:47,256 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p03-n42@test.no: 'Sak LOAD-P03-42. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.'
+2026-10-29 07:00:48,246 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=5667 api_ms=5015 in=10 cache_read=0 out=330
+2026-10-29 07:00:48,580 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=6719 api_ms=6211 in=10 cache_read=0 out=378
+2026-10-29 07:00:48,666 [INFO] helix.web: [SCOPE] refused for dev:loadtest-p06-n45@test.no: 'Sak LOAD-P06-45. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.'
+2026-10-29 07:00:49,129 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=4853 api_ms=3926 in=3 cache_read=2272 out=133
+2026-10-29 07:00:49,814 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=8387 api_ms=7903 in=10 cache_read=0 out=593
+2026-10-29 07:00:50,428 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=12491 api_ms=11513 in=10 cache_read=0 out=1087
+2026-10-29 07:00:50,550 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=13594 api_ms=12625 in=10 cache_read=0 out=1093
+2026-10-29 07:00:51,105 [INFO] helix.cli_backend: CLI done: model=claude-sonnet-4-6 tier=staff channel=web turns=1 duration_ms=6860 api_ms=5894 in=3 cache_read=2272 out=529
+2026-10-29 07:00:52,796 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7576 api_ms=6984 in=10 cache_read=0 out=514
+2026-10-29 07:00:52,923 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=student channel=web turns=1 duration_ms=7665 api_ms=7156 in=10 cache_read=0 out=557
+2026-10-29 07:00:53,052 [INFO] helix.web: Cron [morning load] probe exit 0:      49.2s  1403c  -
+ok   LOAD-S02-47      47.2s   353c  -
+ok   LOAD-P01-48      51.0s   269c  -
+ok   LOAD-P02-49      51.0s   323c  -
+
+cross-talk: none
+issue counts: none
+0/50 turns had issues
+2026-10-29 07:00:53,056 [INFO] apscheduler.executors.default: Job "_execute_cron (trigger: cron[month='*', day='*', day_of_week='*', hour='7', minute='0'], next run at: 2026-10-30 07:00:00 CET)" executed successfully
+2026-10-29 07:06:22,028 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 07:36:22 CET)" (scheduled at 2026-10-29 07:06:22.022615+01:00)
+2026-10-29 07:06:28,441 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=2 duration_ms=5313 api_ms=31061 in=78 cache_read=119215 out=2662
+2026-10-29 07:06:28,441 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 07:36:22 CET)" executed successfully
+2026-10-29 07:36:22,033 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 08:06:22 CET)" (scheduled at 2026-10-29 07:36:22.022615+01:00)
+2026-10-29 07:36:26,208 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2213 api_ms=33189 in=88 cache_read=136143 out=2875
+2026-10-29 07:36:26,208 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 08:06:22 CET)" executed successfully
+2026-10-29 08:06:22,029 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 08:36:22 CET)" (scheduled at 2026-10-29 08:06:22.022615+01:00)
+2026-10-29 08:06:26,423 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2441 api_ms=35539 in=98 cache_read=153227 out=3047
+2026-10-29 08:06:26,430 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 08:36:22 CET)" executed successfully
+2026-10-29 08:36:22,024 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 09:06:22 CET)" (scheduled at 2026-10-29 08:36:22.022615+01:00)
+2026-10-29 08:36:25,493 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1477 api_ms=36933 in=108 cache_read=170597 out=3129
+2026-10-29 08:36:25,495 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 09:06:22 CET)" executed successfully
+2026-10-29 09:06:22,032 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 09:36:22 CET)" (scheduled at 2026-10-29 09:06:22.022615+01:00)
+2026-10-29 09:06:25,270 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1269 api_ms=38111 in=118 cache_read=188212 out=3178
+2026-10-29 09:06:25,274 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 09:36:22 CET)" executed successfully
+2026-10-29 10:04:56,517 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 10:06:22 CET)" (scheduled at 2026-10-29 09:36:22.022615+01:00)
+2026-10-29 10:05:31,467 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=2152 api_ms=39514 in=128 cache_read=205982 out=3218
+2026-10-29 10:05:31,497 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 10:06:22 CET)" executed successfully
+2026-10-29 10:06:22,037 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 10:36:22 CET)" (scheduled at 2026-10-29 10:06:22.022615+01:00)
+2026-10-29 10:06:23,866 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=989 api_ms=40427 in=138 cache_read=223874 out=3252
+2026-10-29 10:06:23,866 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 10:36:22 CET)" executed successfully
+2026-10-29 10:36:22,033 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 11:06:22 CET)" (scheduled at 2026-10-29 10:36:22.022615+01:00)
+2026-10-29 10:36:25,484 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1398 api_ms=41741 in=148 cache_read=241879 out=3283
+2026-10-29 10:36:25,488 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 11:06:22 CET)" executed successfully
+2026-10-29 11:06:22,033 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 11:36:22 CET)" (scheduled at 2026-10-29 11:06:22.022615+01:00)
+2026-10-29 11:06:24,420 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1259 api_ms=42891 in=158 cache_read=259991 out=3315
+2026-10-29 11:06:24,424 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 11:36:22 CET)" executed successfully
+2026-10-29 11:36:22,026 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 12:06:22 CET)" (scheduled at 2026-10-29 11:36:22.022615+01:00)
+2026-10-29 11:36:32,223 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1248 api_ms=43960 in=168 cache_read=278207 out=3345
+2026-10-29 11:36:32,229 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 12:06:22 CET)" executed successfully
+2026-10-29 12:06:22,036 [INFO] apscheduler.executors.default: Running job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 12:36:22 CET)" (scheduled at 2026-10-29 12:06:22.022615+01:00)
+2026-10-29 12:06:32,988 [INFO] helix.cli_backend: CLI done: model=claude-haiku-4-5 tier=staff channel=heartbeat turns=1 duration_ms=1313 api_ms=45077 in=178 cache_read=296528 out=3376
+2026-10-29 12:06:33,002 [INFO] apscheduler.executors.default: Job "_run_heartbeat_job (trigger: interval[0:30:00], next run at: 2026-10-29 12:36:22 CET)" executed successfully

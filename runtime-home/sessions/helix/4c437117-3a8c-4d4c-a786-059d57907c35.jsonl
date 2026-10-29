@@ -1,0 +1,2 @@
+{"ts": 1791176412.694712, "role": "user", "content": "Sak LOAD-S02-07. Elev far ikke pa FRID-wifi, telefonen spor om passord. Hva er den vanlige arsaken? Svar kort."}
+{"ts": 1791176412.696877, "role": "assistant", "content": "Telefonen har ikke sertifikatet installert. FRID krever sertifikat, ikke bare brukernavn/passord.\n\nEleven m\u00e5 koble til **FRID-iot** (passord: `friddeploy`) og g\u00e5 til [onboard.frid-iks.no](https://onboard.frid-iks.no/) for \u00e5 laste ned sertifikatet. Deretter f\u00f8lger de videoen for iOS eller Android."}

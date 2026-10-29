@@ -1,0 +1,34 @@
+{
+  "apps": [
+    {
+      "id": "frid-nett",
+      "name": "FRID-nett",
+      "description": "Installerer FRID-wifi pa Windows (ClearPass QuickConnect).",
+      "platforms": [
+        "windows"
+      ],
+      "filename": "ArubaQuickConnect.exe",
+      "size": 3958928,
+      "uploaded_at": 1789043185.1169956,
+      "uploaded_by": "seed",
+      "run_hint": "Koble til FRID-iot forst. I Zorken: trykk FRID-nett."
+    },
+    {
+      "id": "printer",
+      "name": "printer",
+      "description": "Viken Print / YSoft SafeQ FlexiSpooler for the school printers.",
+      "platforms": [
+        "windows"
+      ],
+      "filename": "VikenPrint.msi",
+      "size": 136044544,
+      "uploaded_at": 1789393663.8428583,
+      "uploaded_by": "local-copy",
+      "run_hint": "I Zorken: trykk Run. Godkjenn i Windows. Installerer Viken Print (SafeQ) mot skoleskriverne."
+    }
+  ],
+  "seeded": [
+    "frid-nett",
+    "printer"
+  ]
+}

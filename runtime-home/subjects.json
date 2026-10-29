@@ -1,0 +1,242 @@
+{
+  "subjects": [
+    {
+      "label": "/status",
+      "skill": "",
+      "examples": [
+        "/status"
+      ]
+    },
+    {
+      "label": "/nettside https://example.com",
+      "skill": "",
+      "examples": [
+        "/nettside https://example.com"
+      ]
+    },
+    {
+      "label": "Jeg får ikke koblet meg til wifi på skolen",
+      "skill": "frid-nettverk",
+      "examples": [
+        "Sak LOAD-S02-23. Elev far ikke pa FRID-wifi, telefonen spor om passord. Hva er den vanlige arsaken? Svar kort.",
+        "Sak LOAD-P02-25. Mobilen spor om wifi-passord pa skolen og vil ikke koble til. Hva gjor jeg? Svar kort.",
+        "Sak LOAD-S02-39. Elev far ikke pa FRID-wifi, telefonen spor om passord. Hva er den vanlige arsaken? Svar kort.",
+        "Sak LOAD-P02-33. Mobilen spor om wifi-passord pa skolen og vil ikke koble til. Hva gjor jeg? Svar kort.",
+        "Sak LOAD-S02-31. Elev far ikke pa FRID-wifi, telefonen spor om passord. Hva er den vanlige arsaken? Svar kort.",
+        "Sak LOAD-S02-47. Elev far ikke pa FRID-wifi, telefonen spor om passord. Hva er den vanlige arsaken? Svar kort.",
+        "Sak LOAD-P02-41. Mobilen spor om wifi-passord pa skolen og vil ikke koble til. Hva gjor jeg? Svar kort.",
+        "Sak LOAD-P02-49. Mobilen spor om wifi-passord pa skolen og vil ikke koble til. Hva gjor jeg? Svar kort."
+      ]
+    },
+    {
+      "label": "Kan du løse denne mattoppgaven for meg?",
+      "skill": "",
+      "examples": [
+        "Kan du løse denne mattoppgaven for meg?"
+      ]
+    },
+    {
+      "label": "Hva svarer agenten elevene?",
+      "skill": "",
+      "examples": [
+        "Hva svarer agenten elevene?"
+      ]
+    },
+    {
+      "label": "[Attached image…",
+      "skill": "frid-nettverk",
+      "examples": [
+        "[Attached image: C:\\Users\\jorgenthin_f\\AppData\\Local\\Temp\\pytest-of-jorgenthin_f\\pytest-225\\test_staff_screenshot_is_not",
+        "[Attached image: C:\\Users\\jorgenthin_f\\AppData\\Local\\Temp\\pytest-of-jorgenthin_f\\pytest-225\\test_admin_screenshot_is_per",
+        "[Attached image: C:\\Users\\jorgenthin_f\\AppData\\Local\\Temp\\pytest-of-jorgenthin_f\\pytest-225\\test_operator_screenshot_is_",
+        "[Attached image: C:\\Users\\jorgenthin_f\\AppData\\Local\\Temp\\pytest-of-jorgenthin_f\\pytest-226\\test_pupil_screenshot_never_",
+        "[Attached image: C:\\Users\\jorgenthin_f\\AppData\\Local\\Temp\\pytest-of-jorgenthin_f\\pytest-226\\test_pupil_agent_is_not_told",
+        "[Attached image: C:\\Users\\jorgenthin_f\\AppData\\Local\\Temp\\pytest-of-jorgenthin_f\\pytest-226\\test_staff_screenshot_is_not",
+        "[Attached image: C:\\Users\\jorgenthin_f\\AppData\\Local\\Temp\\pytest-of-jorgenthin_f\\pytest-226\\test_admin_screenshot_is_per",
+        "[Attached image: C:\\Users\\jorgenthin_f\\AppData\\Local\\Temp\\pytest-of-jorgenthin_f\\pytest-226\\test_operator_screenshot_is_"
+      ]
+    },
+    {
+      "label": "Sak LOAD-P03. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort",
+      "skill": "",
+      "examples": [
+        "Sak LOAD-P03-74. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.",
+        "Sak LOAD-P03-82. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.",
+        "Sak LOAD-P03-02. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.",
+        "Sak LOAD-P03-10. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.",
+        "Sak LOAD-P03-18. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.",
+        "Sak LOAD-P03-26. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.",
+        "Sak LOAD-P03-34. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort.",
+        "Sak LOAD-P03-42. Kan du skrive et sammendrag av Ibsens Et dukkehjem til norsktimen? Svar kort."
+      ]
+    },
+    {
+      "label": "Sak LOAD-P01. Jeg er ny elev og skal aktivere kontoen min pa brukerkonto.afk.no. Hva er…",
+      "skill": "entra-azure",
+      "examples": [
+        "Sak LOAD-P04-27. Authenticator-appen min funker ikke etter at jeg byttet telefon. Hva gjor jeg? Svar kort.",
+        "Sak LOAD-P01-24. Jeg er ny elev og skal aktivere kontoen min pa brukerkonto.afk.no. Hva er det forste jeg gjor? Svar kor",
+        "Sak LOAD-P01-16. Jeg er ny elev og skal aktivere kontoen min pa brukerkonto.afk.no. Hva er det forste jeg gjor? Svar kor",
+        "Sak LOAD-P01-32. Jeg er ny elev og skal aktivere kontoen min pa brukerkonto.afk.no. Hva er det forste jeg gjor? Svar kor",
+        "Sak LOAD-P04-35. Authenticator-appen min funker ikke etter at jeg byttet telefon. Hva gjor jeg? Svar kort.",
+        "Sak LOAD-P04-43. Authenticator-appen min funker ikke etter at jeg byttet telefon. Hva gjor jeg? Svar kort.",
+        "Sak LOAD-P01-40. Jeg er ny elev og skal aktivere kontoen min pa brukerkonto.afk.no. Hva er det forste jeg gjor? Svar kor",
+        "Sak LOAD-P01-48. Jeg er ny elev og skal aktivere kontoen min pa brukerkonto.afk.no. Hva er det forste jeg gjor? Svar kor"
+      ]
+    },
+    {
+      "label": "Sak LOAD-P05. Jeg har kommet til skjermen som sier kontoen er klar, men jeg tror jeg ikke…",
+      "skill": "entra-azure",
+      "examples": [
+        "Sak LOAD-P05-68. Jeg har kommet til skjermen som sier kontoen er klar, men jeg tror jeg ikke er ferdig. Stemmer det? Sva",
+        "Sak LOAD-P05-76. Jeg har kommet til skjermen som sier kontoen er klar, men jeg tror jeg ikke er ferdig. Stemmer det? Sva",
+        "Sak LOAD-P05-04. Jeg har kommet til skjermen som sier kontoen er klar, men jeg tror jeg ikke er ferdig. Stemmer det? Sva",
+        "Sak LOAD-P05-12. Jeg har kommet til skjermen som sier kontoen er klar, men jeg tror jeg ikke er ferdig. Stemmer det? Sva",
+        "Sak LOAD-P05-20. Jeg har kommet til skjermen som sier kontoen er klar, men jeg tror jeg ikke er ferdig. Stemmer det? Sva",
+        "Sak LOAD-P05-28. Jeg har kommet til skjermen som sier kontoen er klar, men jeg tror jeg ikke er ferdig. Stemmer det? Sva",
+        "Sak LOAD-P05-36. Jeg har kommet til skjermen som sier kontoen er klar, men jeg tror jeg ikke er ferdig. Stemmer det? Sva",
+        "Sak LOAD-P05-44. Jeg har kommet til skjermen som sier kontoen er klar, men jeg tror jeg ikke er ferdig. Stemmer det? Sva"
+      ]
+    },
+    {
+      "label": "Sak LOAD-P06. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer…",
+      "skill": "entra-azure",
+      "examples": [
+        "Sak LOAD-P06-61. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.",
+        "Sak LOAD-P06-77. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.",
+        "Sak LOAD-P06-05. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.",
+        "Sak LOAD-P06-13. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.",
+        "Sak LOAD-P06-21. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.",
+        "Sak LOAD-P06-29. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.",
+        "Sak LOAD-P06-37. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort.",
+        "Sak LOAD-P06-45. Hvordan resetter IT MFA i Azure? Hvilken portal og hvilke admin-kontoer bruker de? Svar kort."
+      ]
+    },
+    {
+      "label": "Sak LOAD-S01. En larer far ikke logget inn, Authenticator er ost. Hva sjekker jeg forst…",
+      "skill": "entra-azure",
+      "examples": [
+        "Sak LOAD-S01-70. En larer far ikke logget inn, Authenticator er ost. Hva sjekker jeg forst som IT? Svar kort.",
+        "Sak LOAD-S01-78. En larer far ikke logget inn, Authenticator er ost. Hva sjekker jeg forst som IT? Svar kort.",
+        "Sak LOAD-S01-06. En larer far ikke logget inn, Authenticator er ost. Hva sjekker jeg forst som IT? Svar kort.",
+        "Sak LOAD-S01-14. En larer far ikke logget inn, Authenticator er ost. Hva sjekker jeg forst som IT? Svar kort.",
+        "Sak LOAD-S01-22. En larer far ikke logget inn, Authenticator er ost. Hva sjekker jeg forst som IT? Svar kort.",
+        "Sak LOAD-S01-30. En larer far ikke logget inn, Authenticator er ost. Hva sjekker jeg forst som IT? Svar kort.",
+        "Sak LOAD-S01-38. En larer far ikke logget inn, Authenticator er ost. Hva sjekker jeg forst som IT? Svar kort.",
+        "Sak LOAD-S01-46. En larer far ikke logget inn, Authenticator er ost. Hva sjekker jeg forst som IT? Svar kort."
+      ]
+    },
+    {
+      "label": "Noen trenger MFA-reset",
+      "skill": "entra-azure",
+      "examples": [
+        "Noen trenger MFA-reset",
+        "jeg trenger skolenett",
+        "jeg har ikke skolenett"
+      ]
+    },
+    {
+      "label": "Test",
+      "skill": "",
+      "examples": [
+        "test"
+      ]
+    },
+    {
+      "label": "Test",
+      "skill": "",
+      "examples": [
+        "test"
+      ]
+    },
+    {
+      "label": "Test",
+      "skill": "",
+      "examples": [
+        "test"
+      ]
+    },
+    {
+      "label": "Test",
+      "skill": "",
+      "examples": [
+        "test"
+      ]
+    },
+    {
+      "label": "Test",
+      "skill": "",
+      "examples": [
+        "test"
+      ]
+    },
+    {
+      "label": "Hie",
+      "skill": "",
+      "examples": [
+        "hie"
+      ]
+    },
+    {
+      "label": "Vilket operativ system er jeg på?",
+      "skill": "",
+      "examples": [
+        "vilket operativ system er jeg på?",
+        "hvilket operativ system er jeg på?"
+      ]
+    },
+    {
+      "label": "Skriveren virker ikke",
+      "skill": "windows-endpoint",
+      "examples": [
+        "Skriveren virker ikke"
+      ]
+    },
+    {
+      "label": "Passordet er friddeploy, nettsiden har ikke blitt oppdatert enda",
+      "skill": "entra-azure",
+      "examples": [
+        "passordet er friddeploy, nettsiden har ikke blitt oppdatert enda."
+      ]
+    },
+    {
+      "label": "Supert. nå må vi separere de neste stegene basert på om de bruker windows eller mac…",
+      "skill": "windows-endpoint",
+      "examples": [
+        "supert. nå må vi separere de neste stegene basert på om de bruker windows eller mac. instruksene jeg skal gi deg nå er f"
+      ]
+    },
+    {
+      "label": "Tester ny feature",
+      "skill": "",
+      "examples": [
+        "tester ny feature",
+        "skal teste ny feature. prøv å skriv noe til memory, og si hva slags error kode du får, og om den error koden lar deg se "
+      ]
+    },
+    {
+      "label": "Vent litt nå. hvem som helst kan påstå at de har vilken som helst rolle, uten at du ser…",
+      "skill": "windows-endpoint",
+      "examples": [
+        "vent litt nå. hvem som helst kan påstå at de har vilken som helst rolle, uten at du ser at de lyver om de skriver [ROLE:"
+      ]
+    },
+    {
+      "label": "Jeg har kjørt sjekken på denne Windows-PCen. Gå gjennom listen. Si konkret hva som er i…",
+      "skill": "m365-office",
+      "examples": [
+        "Jeg har kjørt sjekken på denne Windows-PCen. Gå gjennom listen. Si konkret hva som er i orden, hva som må installeres, o",
+        "Jeg har kjørt sjekken på denne Windows-PCen. Brukeren ser bare en kort OK-liste, ikke denne teksten. Ikke gi winget, Pow",
+        "Jeg har kjørt sjekken på denne Windows-PCen. Brukeren ser bare en kort OK-liste, ikke denne teksten. Ikke gi winget, Ter"
+      ]
+    },
+    {
+      "label": "Brukeren har trykket FRID-nett. Si at de må være på skolen og godkjenne i Windows hvis de…",
+      "skill": "frid-nettverk",
+      "examples": [
+        "Brukeren har trykket FRID-nett. Si at de må være på skolen og godkjenne i Windows hvis de blir spurt. Zork Helper kobler",
+        "Brukeren har trykket FRID-nett. Si at de må være på skolen og godkjenne i Windows hvis de blir spurt. Zork Helper sjekke"
+      ]
+    }
+  ]
+}

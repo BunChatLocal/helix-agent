@@ -13,6 +13,7 @@ __pycache__
 !deploy/helix-home/logs/
 !deploy/helix-home/logs/**
 helix-agent
+runtime-home
 # Packed Helix home must not land in the image except a one-shot secrets
 # re-import. A leftover .restore-local + full config.json would overwrite
 # production users on the volume.

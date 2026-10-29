@@ -1,0 +1,2 @@
+{"ts": 1793167361.838761, "role": "user", "content": "Sak LOAD-P02-49. Mobilen spor om wifi-passord pa skolen og vil ikke koble til. Hva gjor jeg? Svar kort."}
+{"ts": 1793167361.84076, "role": "assistant", "content": "Koble f\u00f8rst til nettverket **FRID-iot** med passordet **friddeploy**. N\u00e5r du er koblet til det, \u00e5pne https://onboard.frid-iks.no/ og trykk **Last ned**."}

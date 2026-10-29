@@ -1,0 +1,2 @@
+{"ts": 1792040644.93786, "role": "user", "content": "Sak LOAD-S02-15. Elev far ikke pa FRID-wifi, telefonen spor om passord. Hva er den vanlige arsaken? Svar kort."}
+{"ts": 1792040644.943943, "role": "assistant", "content": "Telefonen har ikke sertifikat installert. FRID krever sertifikat \u2014 ikke bare passord \u2014 og det m\u00e5 lastes ned mens man er p\u00e5 **FRID-iot** f\u00f8rst."}

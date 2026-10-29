@@ -1,0 +1,2 @@
+{"ts": 1787635670.913871, "role": "user", "content": "Nightly heartbeat. HEARTBEAT.md is already in your context \u2014 follow it strictly. Only run each nightly task once (check heartbeat-state.json). If all tasks are already done for today, reply exactly: NO_REPLY"}
+{"ts": 1787635670.915869, "role": "assistant", "content": "Heartbeat check blocked: email, calendar, and reminder integrations are not configured. Set those up in HEARTBEAT.md and I can start proactive checks.\n\nWhat do you need monitored nightly?"}

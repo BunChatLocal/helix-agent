@@ -1,0 +1,2 @@
+{"ts": 1793253617.443385, "role": "user", "content": "Sak LOAD-P01-00. Jeg er ny elev og skal aktivere kontoen min pa brukerkonto.afk.no. Hva er det forste jeg gjor? Svar kort."}
+{"ts": 1793253617.447421, "role": "assistant", "content": "Du trenger Microsoft Authenticator installert p\u00e5 telefonen f\u00f8r du starter. Ellers bare dette:\n\n1. G\u00e5 til https://brukerkonto.afk.no/\n2. Klikk **\u00abLogg inn med ID-porten\u00bb**.\n3. Velg innloggingsmetode (BankID, MinID, Buypass eller Commfides) og f\u00f8lg instruksjonene.\n\nEr du klar for neste steg?"}
