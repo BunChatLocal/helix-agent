@@ -4094,3 +4094,13 @@ async def staff_chat():
             headers={"Cache-Control": "no-store, must-revalidate"},
         )
     return HTMLResponse("<h1>Chat</h1><p>chat.html not found.</p>")
+
+
+# ─── AI Hub (owner-only proxy to a personal PC; not part of Zorken) ──────────
+# Off unless AIHUB_UPSTREAM, AIHUB_KEY and AIHUB_EMAILS are set. To remove it,
+# delete this block and web/aihub.py. See the docstring in web/aihub.py.
+from web import aihub as _aihub  # noqa: E402
+
+if _aihub.enabled():
+    _aihub.install(app, decode_token=_decode_token, console_kind=_console_kind,
+                   claims_email=_claims_email, jwt_secret=_get_jwt_secret)
