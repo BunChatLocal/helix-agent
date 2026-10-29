@@ -1,5 +1,22 @@
 # Helix
 
+## Full copy of this install
+
+Do this before the upstream quick start below. The runnable Zorken/Helix
+install, including `runtime-home/`, is on branch `cursor/staff-pupil-role-tiers`
+of https://github.com/BunChatLocal/helix-agent.git. Steps and why the
+restore matters: [README-WINDOWS.md](README-WINDOWS.md).
+
+```powershell
+git clone https://github.com/BunChatLocal/helix-agent.git
+cd helix-agent
+git lfs pull
+powershell -ExecutionPolicy Bypass -File scripts\restore-home.ps1
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+.\start.ps1
+```
+
 A personal AI agent harness powered by Claude Code. Give your AI assistant a name, a personality, persistent memory, and always-on access through Discord, Telegram, or the built-in web UI.
 
 Helix acts as a frontend for [Claude Code](https://docs.anthropic.com/claude-code) — all AI calls route through Claude's CLI using your existing subscription. No API keys needed.

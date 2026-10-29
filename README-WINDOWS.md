@@ -3,6 +3,33 @@
 This fork patches upstream Helix (Linux/macOS-only) to run natively on Windows,
 and isolates the agent's Claude Code from your personal one.
 
+## Exact copy from GitHub
+
+Branch `cursor/staff-pupil-role-tiers` on
+https://github.com/BunChatLocal/helix-agent.git is the full install.
+`runtime-home/` is this PC's Helix home: workspace, apps, Claude login,
+secrets vault, chats, and logs. Cloning the source and skipping the restore
+does not recreate that install.
+
+Git for Windows, Git LFS, and Python 3.10+ are required first. Keep the
+GitHub repository private. `runtime-home/` contains the Claude login and the
+vault key.
+
+```powershell
+git clone https://github.com/BunChatLocal/helix-agent.git
+cd helix-agent
+git lfs pull
+powershell -ExecutionPolicy Bypass -File scripts\restore-home.ps1
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+.\start.ps1
+```
+
+`git lfs pull` downloads the printer installer. `scripts\restore-home.ps1`
+copies `runtime-home/` to `%USERPROFILE%\.helix`. The virtualenv is not in
+git; it is created in the repo folder by the last two commands. Admin UI:
+http://127.0.0.1:18791
+
 ## Setup
 
 ```powershell
